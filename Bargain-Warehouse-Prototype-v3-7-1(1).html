@@ -1,0 +1,1198 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#111827" />
+  <title>Bargain Warehouse</title>
+  <style>
+:root {
+  --bg: #f5f7fb;
+  --card: #ffffff;
+  --text: #111827;
+  --muted: #6b7280;
+  --line: #e5e7eb;
+  --brand: #4f46e5;
+  --brand-dark: #3730a3;
+  --green: #15803d;
+  --red: #b91c1c;
+  --orange: #c2410c;
+  --shadow: 0 10px 30px rgba(17, 24, 39, .06);
+}
+* { box-sizing: border-box; }
+body { margin: 0; font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; background: var(--bg); color: var(--text); }
+button, input, select { font: inherit; }
+button { cursor: pointer; }
+.app-shell { max-width: 1180px; margin: 0 auto; min-height: 100vh; padding: 18px; }
+.topbar { display:flex; justify-content:space-between; gap:16px; align-items:center; padding: 6px 0 18px; }
+.topbar h1 { margin: 2px 0 0; font-size: 30px; }
+.top-actions { display:flex; gap:10px; align-items:center; }
+.top-actions select { min-width: 210px; }
+select, input { border:1px solid var(--line); background:#fff; border-radius:12px; min-height:48px; padding:0 14px; color:var(--text); }
+.icon-btn { width:48px; height:48px; border:1px solid var(--line); border-radius:12px; background:#fff; font-size:24px; }
+.eyebrow { font-size:12px; font-weight:800; letter-spacing:.09em; color:var(--muted); }
+.hero-card, .panel { background:var(--card); border:1px solid var(--line); border-radius:20px; box-shadow:var(--shadow); }
+.hero-card { padding:24px; display:flex; justify-content:space-between; align-items:flex-start; gap:24px; margin-bottom:18px; }
+.hero-card h2 { margin:5px 0 6px; font-size:28px; }
+.muted { color:var(--muted); }
+.status-pill { background:#eef2ff; color:var(--brand-dark); font-weight:800; border-radius:999px; padding:8px 12px; }
+.action-grid { display:grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap:14px; margin-bottom:18px; }
+.action-card { border:0; border-radius:20px; padding:22px; text-align:left; color:#fff; display:grid; grid-template-columns:58px 1fr auto; gap:16px; align-items:center; min-height:140px; box-shadow:var(--shadow); }
+.action-card.receive { background:linear-gradient(135deg,#2563eb,#4f46e5); }
+.action-card.transfer { background:linear-gradient(135deg,#0f766e,#0891b2); }
+.action-card.adjust { background:linear-gradient(135deg,#a16207,#ea580c); }
+.action-card.pick { background:linear-gradient(135deg,#6d28d9,#7c3aed); }
+.pick-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.pick-choice{border:1px solid var(--line);background:#fff;border-radius:18px;padding:20px;text-align:left;display:flex;justify-content:space-between;gap:18px;align-items:center}.pick-choice h3{margin:4px 0 6px;font-size:21px}.pick-choice:hover{border-color:#a78bfa}.pick-status{display:inline-flex;padding:6px 10px;border-radius:999px;background:#f5f3ff;color:#5b21b6;font-size:12px;font-weight:800}.order-summary-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0}.scan-feedback.pack{background:#f5f3ff;color:#5b21b6;border-color:#ddd6fe}@media(max-width:700px){.pick-choice-grid{grid-template-columns:1fr}.order-summary-grid{grid-template-columns:1fr 1fr}}
+.action-card h3 { margin:0 0 5px; font-size:22px; }
+.action-card p { margin:0; opacity:.86; }
+.action-card > span { font-size:34px; }
+.action-icon { width:58px; height:58px; display:grid; place-items:center; border-radius:16px; background:rgba(255,255,255,.16); font-size:30px; }
+.panel { padding:22px; margin-bottom:18px; }
+.panel.compact { padding-bottom:18px; }
+.section-head { display:flex; justify-content:space-between; align-items:center; gap:14px; margin-bottom:18px; }
+.section-head h2,.section-head h3 { margin:4px 0 0; }
+.scan-row { display:grid; grid-template-columns:1fr auto; gap:10px; }
+.scan-row.spaced { margin-top:18px; }
+.scan-input { font-size:18px; min-height:56px; }
+.primary,.success,.danger,.secondary { min-height:48px; border:0; border-radius:12px; padding:0 18px; font-weight:800; }
+.primary { background:var(--brand); color:#fff; }
+.success { background:var(--green); color:#fff; }
+.danger { background:var(--red); color:#fff; }
+.secondary { background:#eef2f7; color:var(--text); }
+button:disabled { opacity:.45; cursor:not-allowed; }
+.quick-list { margin-top:14px; display:grid; gap:8px; }
+.quick-po { background:#fff; border:1px solid var(--line); border-radius:14px; padding:14px 16px; text-align:left; display:grid; grid-template-columns:120px 1fr 160px; gap:12px; align-items:center; }
+.hidden { display:none !important; }
+.po-meta { display:flex; flex-wrap:wrap; gap:10px 16px; padding-bottom:14px; border-bottom:1px solid var(--line); margin-bottom:14px; }
+.po-meta strong { font-size:20px; }
+.line-list { display:grid; gap:10px; margin-top:14px; }
+.line-item { border:1px solid var(--line); border-radius:15px; padding:14px; display:grid; grid-template-columns:1fr 120px 120px auto; gap:12px; align-items:center; }
+.line-item .name { font-weight:800; }
+.qty-box { display:flex; align-items:center; gap:6px; }
+.qty-box input { width:78px; text-align:center; min-height:42px; }
+.qty-box button { width:38px; height:38px; border:1px solid var(--line); border-radius:10px; background:#fff; }
+.summary-bar { margin-top:18px; padding-top:16px; border-top:1px solid var(--line); display:flex; gap:24px; align-items:center; justify-content:flex-end; }
+.summary-bar > div { display:flex; flex-direction:column; min-width:70px; }
+.summary-bar strong { font-size:24px; }
+.two-col { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+.two-col label, .adjust-grid label { display:grid; gap:7px; font-weight:700; }
+.activity-list { display:grid; gap:8px; }
+.activity-item { display:grid; grid-template-columns:90px 1fr auto; gap:10px; align-items:center; padding:12px 0; border-top:1px solid var(--line); }
+.activity-item:first-child { border-top:0; }
+.activity-badge { font-size:12px; font-weight:800; border-radius:999px; padding:6px 8px; text-align:center; background:#eef2ff; color:var(--brand-dark); }
+.adjust-card { margin-top:18px; border:1px solid var(--line); border-radius:18px; padding:18px; }
+.big-number { font-size:42px; font-weight:900; letter-spacing:-.03em; }
+.adjust-grid { display:grid; grid-template-columns: 1fr 1fr; gap:12px; margin-top:14px; }
+.variance { border-radius:14px; padding:14px; background:#f9fafb; margin-top:12px; display:flex; justify-content:space-between; }
+.toast { position:fixed; left:50%; bottom:24px; transform:translateX(-50%) translateY(120px); background:#111827; color:#fff; padding:12px 16px; border-radius:12px; font-weight:700; transition:.2s ease; z-index:20; }
+.toast.show { transform:translateX(-50%) translateY(0); }
+@media (max-width: 760px) {
+  .app-shell { padding:12px; }
+  .topbar { align-items:flex-start; }
+  .topbar h1 { font-size:24px; }
+  .top-actions { width: 48%; }
+  .top-actions select { min-width:0; width:100%; }
+  .action-grid { grid-template-columns:1fr; }
+  .action-card { min-height:104px; padding:16px; grid-template-columns:52px 1fr auto; }
+  .action-card h3 { font-size:20px; }
+  .hero-card { padding:18px; }
+  .hero-card h2 { font-size:24px; }
+  .panel { padding:16px; border-radius:16px; }
+  .scan-row { grid-template-columns:1fr; }
+  .scan-row button { min-height:54px; }
+  .quick-po { grid-template-columns:1fr; gap:4px; }
+  .two-col, .adjust-grid { grid-template-columns:1fr; }
+  .line-item { grid-template-columns:1fr; }
+  .summary-bar { position:sticky; bottom:8px; background:#fff; border:1px solid var(--line); border-radius:14px; padding:12px; justify-content:space-between; box-shadow:var(--shadow); }
+  .activity-item { grid-template-columns:74px 1fr; }
+  .activity-item > :last-child { grid-column:2; }
+}
+
+
+  .login-shell{max-width:520px;margin:48px auto}.login-card{background:#fff;border:1px solid var(--line);border-radius:24px;padding:28px;box-shadow:var(--shadow)}
+  .pin-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin:18px 0}.pin-key{font-size:24px;font-weight:800;padding:16px;border:1px solid var(--line);border-radius:14px;background:#fff}.pin-display{text-align:center;font-size:28px;letter-spacing:10px;font-weight:800;padding:14px;background:#f9fafb;border-radius:14px;min-height:62px}.employee-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}.employee-chip{background:#fff;border:1px solid var(--line);border-radius:999px;padding:8px 12px;font-weight:800}.clocked{color:var(--green)}.clock-card{display:flex;justify-content:space-between;gap:16px;align-items:center}.permission-note{font-size:12px;color:var(--muted);margin-top:10px}.logout-btn{border:0;background:transparent;font-weight:800;color:var(--muted);cursor:pointer}
+
+  .receive-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.kpi{background:#f9fafb;border:1px solid var(--line);border-radius:14px;padding:12px}.kpi strong{display:block;font-size:22px;margin-top:3px}.receive-line{border:1px solid var(--line);border-radius:16px;padding:16px;display:grid;grid-template-columns:minmax(240px,1.5fr) repeat(4,minmax(90px,.6fr)) auto;gap:12px;align-items:center}.receive-line.complete{background:#f0fdf4;border-color:#bbf7d0}.receive-line.partial{background:#fffbeb;border-color:#fde68a}.metric small{display:block;color:var(--muted);font-weight:700;margin-bottom:4px}.metric strong{font-size:20px}.issue-btn{min-height:42px;border:1px solid #fed7aa;background:#fff7ed;color:#9a3412;border-radius:10px;padding:0 12px;font-weight:800}.issue-list{grid-column:1/-1;display:grid;gap:8px}.issue-chip{display:flex;gap:8px;align-items:center;flex-wrap:wrap;background:#fff7ed;border:1px solid #fed7aa;border-radius:12px;padding:10px 12px}.exception-panel{margin-top:14px;border:1px solid #fed7aa;background:#fffaf5;border-radius:16px;padding:16px}.exception-grid{display:grid;grid-template-columns:1fr 120px;gap:10px}.exception-grid textarea{grid-column:1/-1;border:1px solid var(--line);border-radius:12px;padding:12px;min-height:86px;font:inherit}.photo-box{margin-top:10px;border:1px dashed #cbd5e1;border-radius:12px;padding:12px;background:#fff}.photo-preview{max-width:160px;max-height:120px;border-radius:10px;margin-top:8px;display:block}.warning-box{background:#fff7ed;border:1px solid #fed7aa;border-radius:14px;padding:12px 14px;color:#9a3412;font-weight:700;margin-top:12px}.locked-location{background:#eef2ff;border:1px solid #c7d2fe;color:#3730a3;border-radius:12px;padding:10px 12px;font-weight:800}.approval-overlay{position:fixed;inset:0;background:rgba(17,24,39,.55);display:grid;place-items:center;padding:18px;z-index:40}.approval-card{width:min(460px,100%);background:#fff;border-radius:20px;padding:22px;box-shadow:0 24px 80px rgba(0,0,0,.22)}.approval-card input{width:100%;margin:12px 0}.receive-footer{position:sticky;bottom:8px;background:#fff;border:1px solid var(--line);border-radius:16px;padding:12px;display:flex;justify-content:space-between;align-items:center;gap:14px;box-shadow:var(--shadow);margin-top:18px}.receive-footer .totals{display:flex;gap:20px}.receive-footer strong{font-size:22px}.tiny{font-size:12px;color:var(--muted)}
+  @media(max-width:900px){.receive-line{grid-template-columns:1fr 1fr}.receive-line>div:first-child{grid-column:1/-1}.receive-line .issue-btn{grid-column:1/-1}.receive-kpis{grid-template-columns:1fr 1fr}.exception-grid{grid-template-columns:1fr}.exception-grid textarea{grid-column:1}.receive-footer{align-items:stretch;flex-direction:column}.receive-footer .totals{justify-content:space-between;width:100%}.receive-footer button{width:100%}}
+
+.completion-card{max-width:760px;margin:24px auto;background:#fff;border:1px solid var(--line);border-radius:18px;padding:24px;box-shadow:0 10px 30px rgba(15,23,42,.08)}
+.completion-card h2{margin:6px 0 8px}.completion-icon{width:56px;height:56px;border-radius:50%;display:grid;place-items:center;background:#dcfce7;color:#166534;font-size:30px;font-weight:900}
+.ticket-preview{margin-top:18px;border:1px solid var(--line);border-radius:14px;overflow:hidden}.ticket-preview .ticket-head{padding:16px;background:#f8fafc;border-bottom:1px solid var(--line)}
+.ticket-preview table{width:100%;border-collapse:collapse}.ticket-preview th,.ticket-preview td{padding:10px 12px;border-bottom:1px solid var(--line);text-align:left;font-size:14px}.ticket-preview th{background:#f8fafc;font-size:12px;text-transform:uppercase;letter-spacing:.04em}
+.completion-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:18px}.completion-actions button{flex:1;min-width:150px}.print-btn{background:#111827;color:white;border:0;border-radius:12px;min-height:48px;padding:0 18px;font-weight:800}.label-btn{background:#fff;color:#111827;border:1px solid #cbd5e1;border-radius:12px;min-height:48px;padding:0 18px;font-weight:800}
+@media(max-width:640px){.completion-card{margin:12px;padding:18px}.completion-actions{flex-direction:column}.completion-actions button{width:100%}}
+
+.transfer-choice-grid{display:grid;grid-template-columns:1fr 1fr;gap:14px}.transfer-choice{border:1px solid var(--line);border-radius:18px;background:#fff;padding:22px;text-align:left;min-height:170px;display:flex;flex-direction:column;justify-content:space-between}.transfer-choice h3{font-size:22px;margin:10px 0 6px}.transfer-choice .choice-icon{font-size:34px}.transfer-choice.primary-choice{border-color:#99f6e4;background:#f0fdfa}.transfer-choice.check-choice{border-color:#bfdbfe;background:#eff6ff}.transfer-header-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.match-line{border:1px solid var(--line);border-radius:16px;padding:16px;display:grid;grid-template-columns:minmax(240px,1.5fr) repeat(3,minmax(90px,.6fr));gap:12px;align-items:center}.match-line.good{background:#f0fdf4;border-color:#bbf7d0}.match-line.need{background:#fffbeb;border-color:#fde68a}.match-line.bad{background:#fef2f2;border-color:#fecaca}.scan-feedback{border-radius:14px;padding:14px;margin:12px 0;font-weight:800}.scan-feedback.ok{background:#f0fdf4;border:1px solid #bbf7d0;color:#166534}.scan-feedback.warn{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412}.scan-feedback.stop{background:#fef2f2;border:1px solid #fecaca;color:#991b1b}.problem-actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}.problem-actions button{flex:1;min-width:180px}.manager-only{background:#eff6ff;border:1px solid #bfdbfe;color:#1e40af;border-radius:14px;padding:12px 14px;font-weight:700}@media(max-width:760px){.transfer-choice-grid{grid-template-columns:1fr}.transfer-header-grid{grid-template-columns:1fr 1fr}.match-line{grid-template-columns:1fr 1fr}.match-line>div:first-child{grid-column:1/-1}}
+
+.admin-card{border-color:#ddd6fe;background:#faf5ff}.admin-card .action-icon{background:#ede9fe;color:#5b21b6}.dashboard-kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin:14px 0}.dash-kpi{border:1px solid var(--line);border-radius:16px;padding:16px;background:#fff}.dash-kpi strong{display:block;font-size:28px;margin-top:5px}.dash-kpi.loss strong{color:#b42318}.dash-kpi.add strong{color:#067647}.filter-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:10px;margin:14px 0}.warehouse-loss-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin:14px 0}.warehouse-loss-card{border:1px solid var(--line);border-radius:16px;padding:16px;background:#fff;text-align:left}.warehouse-loss-card h4{margin:0 0 8px}.warehouse-loss-card .loss-value{font-size:25px;font-weight:900;color:#b42318}.warehouse-loss-card .mini{display:flex;justify-content:space-between;gap:10px;margin-top:8px;font-size:12px;color:var(--muted)}.admin-table-wrap{overflow:auto;border:1px solid var(--line);border-radius:16px}.admin-table{width:100%;border-collapse:collapse;min-width:920px}.admin-table th,.admin-table td{padding:11px 12px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}.admin-table th{background:#f8fafc;font-size:11px;text-transform:uppercase;letter-spacing:.04em}.money-loss{color:#b42318;font-weight:800}.money-add{color:#067647;font-weight:800}.flag-badge{display:inline-block;padding:4px 7px;border-radius:999px;background:#fff7ed;color:#9a3412;font-size:11px;font-weight:800}.cost-box{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:12px}.cost-box>div{border:1px solid var(--line);border-radius:12px;padding:12px;background:#f8fafc}.cost-box strong{display:block;font-size:20px;margin-top:3px}@media(max-width:760px){.dashboard-kpis{grid-template-columns:1fr 1fr}.filter-grid{grid-template-columns:1fr 1fr}.warehouse-loss-grid{grid-template-columns:1fr}.cost-box{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">BARGAIN MOULDING</div>
+        <h1 id="pageTitle">Warehouse</h1>
+      </div>
+      <div class="top-actions">
+        <select id="locationSelect" aria-label="Current warehouse"></select>
+        <button class="icon-btn" id="homeBtn" title="Home">⌂</button>
+      </div>
+    </header>
+
+    <div id="employeeBar" class="employee-bar hidden"></div><main id="app"></main>
+  </div>
+
+  <template id="loginTemplate">
+    <section class="login-shell"><div class="login-card"><div class="eyebrow">EMPLOYEE TIME CLOCK</div><h2>Clock in to Bargain Warehouse</h2><p class="muted">Enter your employee PIN. Prototype PINs: 1234 warehouse, 2468 manager, 1111 driver.</p><div id="pinDisplay" class="pin-display">----</div><div class="pin-grid" id="pinGrid"></div><button id="pinClear" class="secondary">Clear</button><p class="permission-note">Prototype only — PINs are not secure credentials yet.</p></div></section>
+  </template>
+
+  <template id="clockTemplate">
+    <section class="login-shell"><div class="login-card"><div class="eyebrow">WELCOME</div><h2 id="clockEmployee"></h2><p class="muted">Choose where you are working today. Location verification can be recorded later without hard-blocking the employee.</p><label>Work location</label><select id="clockLocation" style="width:100%;margin:8px 0 18px"></select><button id="clockInBtn" class="primary" style="width:100%;padding:16px">CLOCK IN & OPEN WAREHOUSE</button></div></section>
+  </template>
+
+  <template id="homeTemplate">
+    <section class="hero-card">
+      <div>
+        <div class="eyebrow">CURRENT LOCATION</div>
+        <h2 id="homeLocation"></h2>
+        <p class="muted">Scan-first warehouse control from receiving through final pickup or truck load.</p>
+      </div>
+      <div class="status-pill">Prototype</div>
+    </section>
+
+    <section class="panel"><div class="clock-card"><div><div class="eyebrow">TIME CLOCK</div><h3 id="clockStatus">Clocked in</h3><p class="muted" id="clockDetail"></p></div><button id="clockOutBtn" class="secondary">Clock Out</button></div></section>
+
+    <section class="action-grid">
+      <button class="action-card receive" data-route="receive">
+        <div class="action-icon">▣</div>
+        <div>
+          <h3>Receive PO</h3>
+          <p>Receive incoming purchase orders</p>
+        </div>
+        <span>›</span>
+      </button>
+      <button class="action-card transfer" data-route="transfer">
+        <div class="action-icon">⇄</div>
+        <div>
+          <h3>Move Material</h3>
+          <p>Create warehouse transfers</p>
+        </div>
+        <span>›</span>
+      </button>
+      <button class="action-card adjust" data-route="adjust">
+        <div class="action-icon">±</div>
+        <div>
+          <h3>Fix Inventory</h3>
+          <p>Correct on-hand quantities</p>
+        </div>
+        <span>›</span>
+      </button>
+
+      <button class="action-card pick" data-route="pickpack">
+        <div class="action-icon">✓▣</div>
+        <div>
+          <h3>Will Call Pick &amp; Pack</h3>
+          <p>Pick and stage In Store / Will Call orders</p>
+        </div>
+        <span>›</span>
+      </button>
+      <button class="action-card transfer" data-route="fulfillment">
+        <div class="action-icon">🚚</div>
+        <div>
+          <h3>Load Delivery</h3>
+          <p>Final barcode check for delivery orders only</p>
+        </div>
+        <span>›</span>
+      </button>
+      <button class="action-card admin-card" id="adminDashboardBtn">
+        <div class="action-icon">▦</div>
+        <div>
+          <h3>Admin Dashboard</h3>
+          <p>Adjustments, loss and warehouse activity</p>
+        </div>
+        <span>›</span>
+      </button>
+    </section>
+
+    <section class="panel">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">ACTIVITY</div>
+          <h3>Recent warehouse actions</h3>
+        </div>
+      </div>
+      <div id="activityList" class="activity-list"></div>
+    </section>
+  </template>
+
+  <template id="receiveTemplate">
+    <section class="panel compact">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">RECEIVING</div>
+          <h2>Find a purchase order</h2>
+        </div>
+      </div>
+      <div class="scan-row">
+        <input id="poSearch" class="scan-input" placeholder="Scan or enter PO number" autocomplete="off" />
+        <button id="poSearchBtn" class="primary">Find PO</button>
+      </div>
+      <div class="quick-list">
+        <button class="quick-po" data-po="5485">
+          <strong>PO 5485</strong><span>J&amp;O Doors · Received Some</span><span>730 Windham Rd · 32 remaining</span>
+        </button>
+        <button class="quick-po" data-po="5505">
+          <strong>PO 5505</strong><span>Carter Millwork</span><span>336 Bayview</span>
+        </button>
+      </div>
+    </section>
+
+    <section id="receiveWork" class="panel hidden"></section>
+  </template>
+
+  <template id="transferHubTemplate">
+    <section class="panel">
+      <div class="section-head"><div><div class="eyebrow">TRANSFERS</div><h2>What are you doing?</h2><p class="muted" style="margin:6px 0 0">Create a new transfer, or scan paperwork for a transfer already written in Qoblex.</p></div></div>
+      <div class="transfer-choice-grid">
+        <button class="transfer-choice primary-choice" id="newTransferBtn"><div><div class="choice-icon">⇄</div><h3>Create Transfer</h3><p class="muted">Move material from this warehouse to another location.</p></div><strong>Start ›</strong></button>
+        <button class="transfer-choice check-choice" id="checkTransferBtn"><div><div class="choice-icon">▣✓</div><h3>Check Transfer</h3><p class="muted">Scan transfer paperwork, then scan every piece to make sure it matches.</p></div><strong>Scan paperwork ›</strong></button>
+      </div>
+      <div id="managerTransferNote" class="manager-only" style="margin-top:14px">Check Transfer is a warehouse-manager workflow.</div>
+    </section>
+  </template>
+
+  <template id="transferCreateTemplate">
+    <section class="panel">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">CREATE TRANSFER</div>
+          <h2>Move material</h2>
+          <p class="muted" style="margin:6px 0 0">Scan each piece as it is loaded. Your clocked-in warehouse is the Move From location.</p>
+        </div>
+      </div>
+      <div class="two-col">
+        <label>Move From<div id="transferFromLocked" class="locked-location"></div></label>
+        <label>Move To<select id="transferTo"></select></label>
+      </div>
+      <div class="scan-row spaced">
+        <input id="transferSku" class="scan-input" placeholder="Scan material barcode — each scan = 1 piece" autocomplete="off" />
+        <button id="transferAdd" class="primary">Add Scan</button>
+      </div>
+      <div class="warning-box" style="margin-top:12px">Only material physically leaving this warehouse should be scanned. The system will stop quantities above available inventory.</div>
+      <div id="transferItems" class="line-list"></div>
+      <label style="display:grid;gap:7px;margin-top:16px;font-weight:700">Transfer note <span class="tiny">optional</span><input id="transferNote" placeholder="Example: For Riverhead stock replenishment" /></label>
+      <div class="receive-footer">
+        <div class="totals"><div><span class="muted">Different Items</span><strong id="transferCount">0</strong></div><div><span class="muted">Pieces Moving</span><strong id="transferUnits">0</strong></div></div>
+        <button id="createTransfer" class="success" disabled>Finish Transfer</button>
+      </div>
+    </section>
+  </template>
+
+  <template id="transferCheckTemplate">
+    <section class="panel compact">
+      <div class="section-head"><div><div class="eyebrow">CHECK TRANSFER</div><h2>Scan the transfer paperwork</h2><p class="muted" style="margin:6px 0 0">The barcode pulls up the transfer that was already created in Qoblex.</p></div></div>
+      <div class="scan-row">
+        <input id="transferPaperScan" class="scan-input" placeholder="Scan transfer barcode or enter transfer number" autocomplete="off" />
+        <button id="findTransferBtn" class="primary">Find Transfer</button>
+      </div>
+      <div class="quick-list">
+        <button class="quick-po" data-transfer="TR-000128988"><strong>TR-000128988</strong><span>336 Bayview → Bargain Moulding (Bohemia)</span><span>9 pieces</span></button>
+      </div>
+    </section>
+    <section id="transferCheckWork" class="panel hidden"></section>
+  </template>
+
+
+  <template id="pickPackHubTemplate">
+    <section class="panel">
+      <div class="section-head"><div><div class="eyebrow">WILL CALL PICK &amp; PACK</div><h2>What are you doing?</h2><p class="muted" style="margin:6px 0 0"><strong>In Store = Will Call.</strong> Only Will Call orders belong here. Pick and stage them for customer pickup.</p></div></div>
+      <div class="pick-choice-grid">
+        <button class="pick-choice" id="pickOrderBtn"><div><div class="choice-icon">✓</div><h3>Pick Will Call</h3><p class="muted">Pull an In Store order and scan every piece for customer pickup.</p></div><strong>Start ›</strong></button>
+        <button class="pick-choice" id="packOrderBtn"><div><div class="choice-icon">▣</div><h3>Stage Will Call</h3><p class="muted">Re-scan the picked order before staging it for customer pickup.</p></div><strong>Start ›</strong></button>
+      </div>
+    </section>
+  </template>
+
+  <template id="pickTemplate">
+    <section class="panel compact">
+      <div class="section-head"><div><div class="eyebrow">PICK WILL CALL</div><h2>Scan the Will Call paperwork</h2><p class="muted" style="margin:6px 0 0">Only Shopify orders with delivery method <strong>In Store</strong> can be picked here.</p></div></div>
+      <div class="scan-row"><input id="pickPaperScan" class="scan-input" placeholder="Scan ticket barcode or enter order number" autocomplete="off"/><button id="findPickBtn" class="primary">Find Order</button></div>
+      <div class="quick-list"><button class="quick-po" data-pick="ORD-10501"><strong>ORD-10501</strong><span>Jones Residence · In Store / Will Call</span><span>336 Bayview · 7 pieces</span></button></div>
+    </section>
+    <section id="pickWork" class="panel hidden"></section>
+  </template>
+
+  <template id="packTemplate">
+    <section class="panel compact">
+      <div class="section-head"><div><div class="eyebrow">STAGE WILL CALL</div><h2>Scan a completed Will Call pick</h2><p class="muted" style="margin:6px 0 0">This is the second barcode check before the order is staged for customer pickup.</p></div></div>
+      <div class="scan-row"><input id="packPaperScan" class="scan-input" placeholder="Scan pick ticket barcode or enter order number" autocomplete="off"/><button id="findPackBtn" class="primary">Find Pick</button></div>
+      <div class="quick-list"><button class="quick-po" data-pack="ORD-10501"><strong>ORD-10501</strong><span>Jones Residence · In Store / Will Call</span><span>336 Bayview · 7 pieces</span></button></div>
+    </section>
+    <section id="packWork" class="panel hidden"></section>
+  </template>
+
+
+  <template id="fulfillmentHubTemplate">
+    <section class="panel">
+      <div class="section-head"><div><div class="eyebrow">FINAL WAREHOUSE CHECK</div><h2>Will Call or truck load?</h2><p class="muted" style="margin:6px 0 0">Shopify delivery method controls the lane: <strong>In Store = Will Call</strong>. Anything else = Delivery. Blank = Needs Review.</p></div></div>
+      <div class="pick-choice-grid">
+        <button class="pick-choice" id="willCallBtn"><div><div class="choice-icon">🏬</div><h3>Will Call</h3><p class="muted">Scan an In Store order and verify every piece before customer pickup.</p></div><strong>Start ›</strong></button>
+        <button class="pick-choice" id="finalLoadBtn"><div><div class="choice-icon">🚚</div><h3>Final Load Check</h3><p class="muted">Scan a delivery order and verify every piece before it goes on the truck.</p></div><strong>Start ›</strong></button>
+      </div>
+    </section>
+  </template>
+
+  <template id="willCallTemplate">
+    <section class="panel compact">
+      <div class="section-head"><div><div class="eyebrow">WILL CALL</div><h2>Scan the customer pickup paperwork</h2><p class="muted" style="margin:6px 0 0">Only orders with Shopify delivery method <strong>In Store</strong> belong here.</p></div></div>
+      <div class="scan-row"><input id="willPaperScan" class="scan-input" placeholder="Scan order barcode or enter order number" autocomplete="off"/><button id="findWillBtn" class="primary">Find Order</button></div>
+      <div class="quick-list"><button class="quick-po" data-will="ORD-10501"><strong>ORD-10501</strong><span>Jones Residence · In Store</span><span>336 Bayview · 7 pieces</span></button></div>
+    </section>
+    <section id="willWork" class="panel hidden"></section>
+  </template>
+
+  <template id="loadTemplate">
+    <section class="panel compact">
+      <div class="section-head"><div><div class="eyebrow">LOAD DELIVERY</div><h2>Scan the delivery paperwork</h2><p class="muted" style="margin:6px 0 0">Delivery orders only. <strong>In Store</strong> orders belong in Will Call Pick &amp; Pack. Blank delivery methods are held for review.</p></div></div>
+      <div class="scan-row"><input id="loadPaperScan" class="scan-input" placeholder="Scan order barcode or enter order number" autocomplete="off"/><button id="findLoadBtn" class="primary">Find Order</button></div>
+      <div class="quick-list"><button class="quick-po" data-load="ORD-10482"><strong>ORD-10482</strong><span>Smith Residence · Local Delivery</span><span>336 Bayview · 12 pieces</span></button><button class="quick-po" data-load="ORD-10502"><strong>ORD-10502</strong><span>Needs Review · delivery method blank</span><span>336 Bayview</span></button></div>
+    </section>
+    <section id="loadWork" class="panel hidden"></section>
+  </template>
+
+  <template id="adjustTemplate">
+    <section class="panel">
+      <div class="section-head">
+        <div>
+          <div class="eyebrow">STOCK ADJUSTMENT</div>
+          <h2>Fix inventory</h2>
+        </div>
+      </div>
+      <div class="scan-row">
+        <input id="adjustSku" class="scan-input" placeholder="Scan barcode or enter SKU" autocomplete="off" />
+        <button id="adjustFind" class="primary">Find item</button>
+      </div>
+      <div id="adjustWork" class="hidden"></div>
+    </section>
+  </template>
+
+  <template id="adminTemplate">
+    <section class="hero-card">
+      <div><div class="eyebrow">MANAGER / ADMIN</div><h2>Inventory Adjustment Dashboard</h2><p class="muted">See what is being added, removed and written off by warehouse.</p></div>
+      <div class="status-pill">Cost View</div>
+    </section>
+    <section class="panel">
+      <div class="filter-grid">
+        <label>Time period<select id="dashPeriod"><option value="today">Today</option><option value="week" selected>This Week</option><option value="month">This Month</option><option value="all">All Prototype Data</option></select></label>
+        <label>Warehouse<select id="dashWarehouse"></select></label>
+        <label>Reason<select id="dashReason"><option value="all">All Reasons</option></select></label>
+        <label>SKU / employee<input id="dashSearch" placeholder="Search SKU or employee" /></label>
+      </div>
+      <div id="dashboardKpis" class="dashboard-kpis"></div>
+    </section>
+    <section class="panel">
+      <div class="section-head"><div><div class="eyebrow">AT A GLANCE</div><h3>Loss by warehouse</h3></div></div>
+      <div id="warehouseLossGrid" class="warehouse-loss-grid"></div>
+    </section>
+    <section class="panel">
+      <div class="section-head"><div><div class="eyebrow">ADJUSTMENTS</div><h3>Detailed activity</h3></div><button id="printAdjustReport" class="print-btn">🖨 Print Report</button></div>
+      <div id="adjustmentTable" class="admin-table-wrap"></div>
+    </section>
+  </template>
+
+  <div id="toast" class="toast" role="status"></div>
+  <script>
+const warehouses = [
+  '1133 Old Country (Riverhead)',
+  '336 Bayview',
+  '730 Windham Rd',
+  'Annex Warehouse',
+  'Bargain Moulding (Bohemia)',
+  'Outpost - Ronkonkoma'
+];
+
+const products = {
+  '65780648': { sku: 'STEP35', name: 'STEP35 Flex Moulding', onHand: 61, barcode: '65780648', cost: 46.75 },
+  'STEP35': { sku: 'STEP35', name: 'STEP35 Flex Moulding', onHand: 61, barcode: '65780648', cost: 46.75 },
+  '8423PRF': { sku: '8423PRF', name: 'SHOE - 1/2 X 3/4 OG 8423PRF - PRF', onHand: 2369, barcode: '8423PRF', cost: 1.35 },
+  'SLAB18': { sku: 'SLAB18', name: '80" 1-3/8 2 PANEL SLAB - 18"', onHand: 8, barcode: 'SLAB18', cost: 83.00 },
+  'PW3262': { sku: 'PW3262', name: '3-1/4" Primed Casing', onHand: 487, barcode: 'PW3262', cost: 8.42 },
+  'WM163': { sku: 'WM163', name: 'Primed Base Moulding', onHand: 320, barcode: 'WM163', cost: 4.88 },
+  'WM47': { sku: 'WM47', name: 'Primed Casing', onHand: 210, barcode: 'WM47', cost: 5.15 }
+};
+
+const purchaseOrders = {
+  '5485': {
+    supplier: 'J&O Doors', shipTo: '730 Windham Rd', status: 'Received Some', supplierRef: '67325',
+    lines: [
+      { id: 1, name: '80\" 1-3/8 2 PANEL SLAB - 18\"', sku: '2PSR18', barcode: '73504692', ordered: 128, received: 128 },
+      { id: 2, name: '80\" 1-3/8 2 PANEL SLAB - 28\"', sku: '2PSR28', barcode: '50030132', ordered: 128, received: 128 },
+      { id: 3, name: '80\" 1-3/8 2 PANEL SLAB - 32\"', sku: '2PSR32', barcode: '87983034', ordered: 96, received: 64 }
+    ]
+  },
+  '5505': {
+    supplier: 'Carter Millwork', shipTo: '336 Bayview', status: 'Approved', supplierRef: '0250864',
+    lines: [
+      { id: 1, name: 'STEP35 36 IN', sku: 'STEP35-36', barcode: '65780648', ordered: 1, received: 0 },
+      { id: 2, name: 'STEP35 9FT', sku: 'STEP35-9FT', barcode: '65780648', ordered: 2, received: 0 }
+    ]
+  }
+};
+
+const backendTransfers = {
+  'TR-000128988': {
+    ref:'TR-000128988', from:'336 Bayview', to:'Bargain Moulding (Bohemia)', status:'Ready to Check', createdBy:'Back Office',
+    lines:[
+      {sku:'PW3262', name:'3-1/4" Primed Casing', barcode:'PW3262', expected:4},
+      {sku:'WM163', name:'Primed Base Moulding', barcode:'WM163', expected:3},
+      {sku:'WM47', name:'Primed Casing', barcode:'WM47', expected:2}
+    ]
+  }
+};
+
+
+const warehouseOrders = {
+  'ORD-10482': {
+    ref:'ORD-10482', ticketBarcode:'PICK:ORD-10482', customer:'Smith Residence', job:'Kitchen / Trim Package', warehouse:'336 Bayview', status:'Ready to Pick', deliveryMethod:'Local Delivery',
+    lines:[
+      {sku:'PW3262',name:'3-1/4" Primed Casing',barcode:'PW3262',expected:6},
+      {sku:'WM163',name:'Primed Base Moulding',barcode:'WM163',expected:4},
+      {sku:'WM47',name:'Primed Casing',barcode:'WM47',expected:2}
+    ]
+  }
+,
+  'ORD-10501': {
+    ref:'ORD-10501', ticketBarcode:'WILL:ORD-10501', customer:'Jones Residence', job:'Front Counter Pickup', warehouse:'336 Bayview', status:'Ready to Pick', deliveryMethod:'In Store',
+    lines:[
+      {sku:'PW3262',name:'3-1/4\" Primed Casing',barcode:'PW3262',expected:4},
+      {sku:'WM47',name:'Primed Casing',barcode:'WM47',expected:3}
+    ]
+  },
+  'ORD-10502': {
+    ref:'ORD-10502', ticketBarcode:'ORD-10502', customer:'Review Customer', job:'Delivery Method Missing', warehouse:'336 Bayview', status:'Packed / Staged', deliveryMethod:'',
+    lines:[{sku:'WM163',name:'Primed Base Moulding',barcode:'WM163',expected:2}]
+  }
+};
+const completedPicks = {};
+
+const employees = {
+  '1234': {name:'Warehouse Employee', role:'Warehouse', permissions:['receive','transfer','adjust','pickpack','fulfillment']},
+  '2468': {name:'Warehouse Manager', role:'Manager', permissions:['receive','transfer','adjust','pickpack','fulfillment','admin']},
+  '1111': {name:'Delivery Driver', role:'Driver', permissions:['transfer']}
+};
+
+const now = new Date();
+function daysAgo(n,h=10,m=0){ const d=new Date(now); d.setDate(d.getDate()-n); d.setHours(h,m,0,0); return d; }
+const adjustmentLog = [
+  {ref:'ADJ-820727',date:daysAgo(0,8,12),warehouse:'336 Bayview',employee:'Warehouse Employee',sku:'8423PRF',name:'SHOE - 1/2 X 3/4 OG 8423PRF - PRF',oldQty:2369,newQty:2354,difference:-15,reason:'Damaged',unitCost:1.35,approvedBy:null},
+  {ref:'ADJ-820728',date:daysAgo(0,9,5),warehouse:'Bargain Moulding (Bohemia)',employee:'Warehouse Manager',sku:'PW3262',name:'3-1/4" Primed Casing',oldQty:487,newQty:462,difference:-25,reason:'Damaged',unitCost:8.42,approvedBy:'Warehouse Manager'},
+  {ref:'ADJ-820729',date:daysAgo(0,10,45),warehouse:'336 Bayview',employee:'Warehouse Employee',sku:'WM163',name:'Primed Base Moulding',oldQty:114,newQty:120,difference:6,reason:'Physical Count Correction',unitCost:4.88,approvedBy:null},
+  {ref:'ADJ-820730',date:daysAgo(1,14,10),warehouse:'730 Windham Rd',employee:'Warehouse Manager',sku:'SLAB18',name:'80" 1-3/8 2 PANEL SLAB - 18"',oldQty:12,newQty:9,difference:-3,reason:'Damaged',unitCost:83.00,approvedBy:'Warehouse Manager'},
+  {ref:'ADJ-820731',date:daysAgo(1,15,22),warehouse:'1133 Old Country (Riverhead)',employee:'Warehouse Employee',sku:'WM47',name:'Primed Casing',oldQty:210,newQty:202,difference:-8,reason:'Missing',unitCost:5.15,approvedBy:null},
+  {ref:'ADJ-820732',date:daysAgo(2,11,35),warehouse:'Annex Warehouse',employee:'Warehouse Manager',sku:'PW3262',name:'3-1/4" Primed Casing',oldQty:250,newQty:270,difference:20,reason:'Receiving Error',unitCost:8.42,approvedBy:'Warehouse Manager'},
+  {ref:'ADJ-820733',date:daysAgo(3,9,40),warehouse:'Outpost - Ronkonkoma',employee:'Warehouse Employee',sku:'8423PRF',name:'SHOE - 1/2 X 3/4 OG 8423PRF - PRF',oldQty:810,newQty:760,difference:-50,reason:'Scrap',unitCost:1.35,approvedBy:null},
+  {ref:'ADJ-820734',date:daysAgo(4,13,15),warehouse:'Bargain Moulding (Bohemia)',employee:'Warehouse Manager',sku:'STEP35',name:'STEP35 Flex Moulding',oldQty:61,newQty:55,difference:-6,reason:'Missing',unitCost:46.75,approvedBy:'Warehouse Manager'}
+];
+
+let state = {
+  route: 'login',
+  employee: null,
+  clockedIn: false,
+  clockInTime: null,
+  location: '336 Bayview',
+  activity: [
+    { type: 'TRANSFER', text: '1 unit moved from 336 Bayview to Bohemia', ref: 'TR-000128988' },
+    { type: 'ADJUST', text: '8423PRF corrected from 2,369 to 2,354', ref: 'ADJ-820727' },
+    { type: 'RECEIVE', text: 'PO 5505 ready for receiving', ref: 'PO-5505' }
+  ],
+  transferItems: []
+};
+
+const app = document.getElementById('app');
+const pageTitle = document.getElementById('pageTitle');
+const locationSelect = document.getElementById('locationSelect');
+const homeBtn = document.getElementById('homeBtn');
+const toast = document.getElementById('toast');
+
+function init() {
+  locationSelect.innerHTML = warehouses.map(w => `<option ${w===state.location?'selected':''}>${w}</option>`).join('');
+  locationSelect.addEventListener('change', e => { state.location = e.target.value; render(); });
+  homeBtn.addEventListener('click', () => { if(state.clockedIn) go('home'); });
+  render();
+}
+
+function go(route) { state.route = route; render(); window.scrollTo({top:0, behavior:'smooth'}); }
+
+function cloneTemplate(id) { return document.getElementById(id).content.cloneNode(true); }
+
+function render() {
+  app.innerHTML = '';
+  const bar=document.getElementById('employeeBar');
+  if(state.employee){bar.classList.remove('hidden');bar.innerHTML=`<span class="employee-chip">${state.employee.name}</span><span class="employee-chip">${state.employee.role}</span>${state.clockedIn?`<span class="employee-chip clocked">● CLOCKED IN · ${state.location}</span>`:''}<button class="logout-btn" id="logoutBtn">Sign out</button>`;setTimeout(()=>{const b=document.getElementById('logoutBtn');if(b)b.onclick=logout},0)}else bar.classList.add('hidden');
+  locationSelect.style.display=state.clockedIn?'block':'none'; homeBtn.style.display=state.clockedIn?'block':'none';
+  if (state.route === 'login') return renderLogin();
+  if (state.route === 'clock') return renderClock();
+  if (state.route === 'home') renderHome();
+  if (state.route === 'receive') renderReceive();
+  if (state.route === 'transfer') renderTransferHub();
+  if (state.route === 'transferCreate') renderTransferCreate();
+  if (state.route === 'transferCheck') renderTransferCheck();
+  if (state.route === 'adjust') renderAdjust();
+  if (state.route === 'pickpack') renderPickPackHub();
+  if (state.route === 'pick') renderPick();
+  if (state.route === 'pack') renderPack();
+  if (state.route === 'fulfillment') renderLoadCheck();
+  if (state.route === 'willcall') renderWillCall();
+  if (state.route === 'loadcheck') renderLoadCheck();
+  if (state.route === 'admin') renderAdmin();
+}
+
+function renderLogin(){pageTitle.textContent='Employee Login';app.appendChild(cloneTemplate('loginTemplate'));let pin='';const d=document.getElementById('pinDisplay');const draw=()=>d.textContent=pin?('•'.repeat(pin.length)):'----';const grid=document.getElementById('pinGrid');[1,2,3,4,5,6,7,8,9,0].forEach(n=>{const b=document.createElement('button');b.className='pin-key';b.textContent=n;b.onclick=()=>{if(pin.length<4){pin+=n;draw();if(pin.length===4){const emp=employees[pin];if(emp){state.employee={...emp};state.route='clock';render()}else{notify('PIN not recognized');pin='';setTimeout(draw,250)}}}};grid.appendChild(b)});document.getElementById('pinClear').onclick=()=>{pin='';draw()}}
+function renderClock(){pageTitle.textContent='Time Clock';app.appendChild(cloneTemplate('clockTemplate'));document.getElementById('clockEmployee').textContent=state.employee.name;const sel=document.getElementById('clockLocation');sel.innerHTML=warehouses.map(w=>`<option ${w===state.location?'selected':''}>${w}</option>`).join('');document.getElementById('clockInBtn').onclick=()=>{state.location=sel.value;locationSelect.value=state.location;state.clockedIn=true;state.clockInTime=new Date();state.route='home';render();notify('Clocked in')}}
+function logout(){state.employee=null;state.clockedIn=false;state.clockInTime=null;state.route='login';render()}
+function clockOut(){state.clockedIn=false;state.clockInTime=null;state.route='clock';render();notify('Clocked out')}
+
+function renderHome() {
+  if(!state.clockedIn){state.route='clock';return render()}
+  pageTitle.textContent = 'Warehouse';
+  app.appendChild(cloneTemplate('homeTemplate'));
+  document.getElementById('homeLocation').textContent = state.location;
+  document.getElementById('clockStatus').textContent=`${state.employee.name} · CLOCKED IN`;
+  document.getElementById('clockDetail').textContent=`${state.location} · since ${state.clockInTime.toLocaleTimeString([], {hour:'numeric',minute:'2-digit'})}`;
+  document.getElementById('clockOutBtn').onclick=clockOut;
+  document.querySelectorAll('[data-route]').forEach(btn => {if(!state.employee.permissions.includes(btn.dataset.route)){btn.style.display='none'}else btn.addEventListener('click', () => go(btn.dataset.route))});
+  const adminBtn=document.getElementById('adminDashboardBtn'); if(adminBtn){ if(!state.employee.permissions.includes('admin')) adminBtn.style.display='none'; else adminBtn.onclick=()=>go('admin'); }
+  const list = document.getElementById('activityList');
+  list.innerHTML = state.activity.map(a => `<div class="activity-item"><div class="activity-badge">${a.type}</div><div>${a.text}</div><strong>${a.ref}</strong></div>`).join('');
+}
+
+function renderReceive() {
+  pageTitle.textContent = 'Receive PO';
+  app.appendChild(cloneTemplate('receiveTemplate'));
+  const search = document.getElementById('poSearch');
+  const find = () => showPO(search.value.trim());
+  document.getElementById('poSearchBtn').addEventListener('click', find);
+  search.addEventListener('keydown', e => { if(e.key==='Enter') find(); });
+  document.querySelectorAll('.quick-po').forEach(btn => btn.addEventListener('click', () => showPO(btn.dataset.po)));
+}
+
+function showPO(num) {
+  const po = purchaseOrders[num];
+  if(!po) return notify('PO not found in prototype');
+  const work = document.getElementById('receiveWork');
+  work.classList.remove('hidden');
+  po.lines.forEach(l => { l.now = 0; l.issues = []; });
+
+  const orderedTotal=()=>po.lines.reduce((s,l)=>s+l.ordered,0);
+  const receivedTotal=()=>po.lines.reduce((s,l)=>s+l.received,0);
+  const remainingTotal=()=>po.lines.reduce((s,l)=>s+Math.max(0,l.ordered-l.received),0);
+  const nowTotal=()=>po.lines.reduce((s,l)=>s+l.now,0);
+
+  work.innerHTML = `
+    <div class="po-meta">
+      <strong>PO ${num}</strong><span>${po.supplier}</span><span>Supplier Ref ${po.supplierRef||'—'}</span><span class="status-pill">${po.status}</span>
+    </div>
+    <div class="locked-location">📍 Move To locked to PO: ${po.shipTo}</div>
+    <div class="receive-kpis">
+      <div class="kpi"><span class="muted">Ordered</span><strong>${orderedTotal()}</strong><span class="tiny">pieces</span></div>
+      <div class="kpi"><span class="muted">Previously received</span><strong id="kpiReceived">${receivedTotal()}</strong><span class="tiny">pieces</span></div>
+      <div class="kpi"><span class="muted">Remaining</span><strong id="kpiRemaining">${remainingTotal()}</strong><span class="tiny">pieces</span></div>
+      <div class="kpi"><span class="muted">This receipt</span><strong id="kpiNow">0</strong><span class="tiny">good pieces</span></div>
+    </div>
+    <div class="scan-row">
+      <input id="receiveScan" class="scan-input" placeholder="Scan item barcode — each scan = 1 piece" autocomplete="off" />
+      <button id="receiveScanBtn" class="primary">Add scan</button>
+    </div>
+    <div class="warning-box">Receive the good material. If there is a problem with the delivery, report it below. Extra pieces require manager approval.</div>
+    <div id="receiveLines" class="line-list"></div>
+    <div id="exceptionEditor"></div>
+    <div class="receive-footer">
+      <div class="totals"><div><span class="muted">Good Pieces This Receipt</span><strong id="receiveTotal">0</strong></div><div><span class="muted">Problems</span><strong id="exceptionCount">0</strong></div></div>
+      <button id="confirmReceipt" class="success">Finish Receiving</button>
+    </div>`;
+
+  function requestOverageApproval(line, requestedQty, afterApprove){
+    if(state.employee.role==='Manager') { line.overageApproved=true; notify('Manager approval applied for extra pieces'); return afterApprove(); }
+    const overlay=document.createElement('div'); overlay.className='approval-overlay';
+    overlay.innerHTML=`<div class="approval-card"><div class="eyebrow">MANAGER APPROVAL</div><h3>Extra pieces?</h3><p class="muted">${line.name}</p><p>Remaining on PO: <strong>${Math.max(0,line.ordered-line.received)}</strong> · Requested this receipt: <strong>${requestedQty}</strong></p><input id="managerPin" type="password" inputmode="numeric" maxlength="4" placeholder="Manager PIN"/><div style="display:flex;gap:10px"><button id="cancelApproval" class="secondary" style="flex:1">Cancel</button><button id="approveOverage" class="danger" style="flex:1">Approve Extra Pieces</button></div><p class="permission-note">Prototype manager PIN: 2468</p></div>`;
+    document.body.appendChild(overlay);
+    overlay.querySelector('#cancelApproval').onclick=()=>overlay.remove();
+    overlay.querySelector('#approveOverage').onclick=()=>{ if(overlay.querySelector('#managerPin').value==='2468'){line.overageApproved=true;overlay.remove();notify('Extra pieces approved');afterApprove();} else notify('Manager PIN not recognized'); };
+    setTimeout(()=>overlay.querySelector('#managerPin').focus(),50);
+  }
+
+  function setQty(line,newQty){
+    newQty=Math.max(0,Number(newQty)||0);
+    const remaining=Math.max(0,line.ordered-line.received);
+    if(newQty>remaining && !line.overageApproved) return requestOverageApproval(line,newQty,()=>{line.now=newQty;draw();});
+    line.now=newQty; draw();
+  }
+
+  function addIssue(line){
+    const editor=document.getElementById('exceptionEditor');
+    editor.innerHTML=`<div class="exception-panel"><div class="eyebrow">DELIVERY PROBLEM</div><h3>${line.name}</h3><div class="exception-grid"><select id="issueType"><option>Short</option><option>Damaged</option><option>Wrong Item</option><option>Other</option></select><input id="issueQty" type="number" min="1" value="1" inputmode="numeric" placeholder="Qty"><textarea id="issueNote" placeholder="Optional note — what happened?"></textarea></div><div class="photo-box"><strong>Photo (optional)</strong><div class="tiny">On iPhone this can open the camera.</div><input id="issuePhoto" type="file" accept="image/*" capture="environment"><img id="photoPreview" class="photo-preview hidden" alt="Problem photo preview"></div><div style="display:flex;gap:10px;margin-top:12px"><button id="cancelIssue" class="secondary">Cancel</button><button id="saveIssue" class="primary">Save Problem</button></div></div>`;
+    const fileInput=document.getElementById('issuePhoto');
+    fileInput.onchange=()=>{const f=fileInput.files[0];const img=document.getElementById('photoPreview');if(f){img.src=URL.createObjectURL(f);img.classList.remove('hidden')}};
+    document.getElementById('cancelIssue').onclick=()=>editor.innerHTML='';
+    document.getElementById('saveIssue').onclick=()=>{const qty=Math.max(1,Number(document.getElementById('issueQty').value)||1);const f=fileInput.files[0];line.issues.push({type:document.getElementById('issueType').value,qty,note:document.getElementById('issueNote').value.trim(),photo:f?f.name:null});editor.innerHTML='';notify('Problem saved');draw();};
+    editor.scrollIntoView({behavior:'smooth',block:'center'});
+  }
+
+  function draw(){
+    const list=document.getElementById('receiveLines');
+    list.innerHTML=po.lines.map(l=>{const remaining=Math.max(0,l.ordered-l.received);const cls=remaining===0?'complete':l.received>0?'partial':'';return `<div class="receive-line ${cls}">
+      <div><div class="name">${l.name}</div><div class="muted">SKU ${l.sku} · Barcode ${l.barcode}</div>${remaining===0?'<div class="tiny clocked">✓ PO line already complete</div>':''}</div>
+      <div class="metric"><small>Ordered</small><strong>${l.ordered}</strong></div>
+      <div class="metric"><small>Received</small><strong>${l.received}</strong></div>
+      <div class="metric"><small>Remaining</small><strong>${remaining}</strong></div>
+      <div><small class="muted">Good now</small><div class="qty-box"><button data-minus="${l.id}">−</button><input data-qty="${l.id}" value="${l.now}" inputmode="numeric"><button data-plus="${l.id}">+</button></div></div>
+      <button class="issue-btn" data-issue="${l.id}">⚠ Report a Problem</button>
+      ${l.issues.length?`<div class="issue-list">${l.issues.map((x,idx)=>`<div class="issue-chip"><strong>${x.type}</strong><span>Qty ${x.qty}</span>${x.note?`<span>${x.note}</span>`:''}${x.photo?`<span>📷 ${x.photo}</span>`:''}<button class="secondary" data-delissue="${l.id}:${idx}" style="min-height:32px;padding:0 8px">Remove</button></div>`).join('')}</div>`:''}
+    </div>`}).join('');
+    document.getElementById('receiveTotal').textContent=nowTotal();document.getElementById('kpiNow').textContent=nowTotal();document.getElementById('exceptionCount').textContent=po.lines.reduce((s,l)=>s+l.issues.length,0);
+    document.querySelectorAll('[data-plus]').forEach(b=>b.onclick=()=>{const l=po.lines.find(x=>x.id==b.dataset.plus);setQty(l,l.now+1)});
+    document.querySelectorAll('[data-minus]').forEach(b=>b.onclick=()=>{const l=po.lines.find(x=>x.id==b.dataset.minus);setQty(l,Math.max(0,l.now-1))});
+    document.querySelectorAll('[data-qty]').forEach(i=>i.onchange=()=>{const l=po.lines.find(x=>x.id==i.dataset.qty);setQty(l,i.value)});
+    document.querySelectorAll('[data-issue]').forEach(b=>b.onclick=()=>addIssue(po.lines.find(x=>x.id==b.dataset.issue)));
+    document.querySelectorAll('[data-delissue]').forEach(b=>b.onclick=()=>{const [id,idx]=b.dataset.delissue.split(':');const l=po.lines.find(x=>x.id==id);l.issues.splice(Number(idx),1);draw()});
+  }
+  draw();
+
+  const scanInput=document.getElementById('receiveScan');
+  const scan=()=>{const code=scanInput.value.trim();const line=po.lines.find(l=>l.barcode===code||l.sku===code);if(!line){notify('Barcode is not on this PO');scanInput.select();return;}const next=line.now+1;const remaining=Math.max(0,line.ordered-line.received);if(next>remaining&&!line.overageApproved){requestOverageApproval(line,next,()=>{line.now=next;draw();});}else{line.now=next;notify(`${line.sku} +1`);draw();}scanInput.value='';scanInput.focus();};
+  document.getElementById('receiveScanBtn').onclick=scan; scanInput.onkeydown=e=>{if(e.key==='Enter')scan()};
+
+  document.getElementById('confirmReceipt').onclick=()=>{
+    const total=nowTotal();const issueCount=po.lines.reduce((s,l)=>s+l.issues.length,0);
+    if(!total&&!issueCount)return notify('Nothing to finish');
+    const txLines=po.lines.filter(l=>l.now>0||l.issues.length).map(l=>({sku:l.sku,name:l.name,qty:l.now,problems:l.issues.map(x=>({...x}))}));
+    po.lines.forEach(l=>{l.received+=l.now;l.now=0;l.issues=[];});
+    po.status=receivedTotal()>=orderedTotal()?'Received':'Received Some';
+    const ref=`RCV-${num}-${String(Date.now()).slice(-5)}`;
+    const tx={type:'Receiving',ref,po:num,supplier:po.supplier,location:po.shipTo,employee:state.employee?.name||'Employee',date:new Date(),lines:txLines,total,issueCount,status:po.status};
+    state.activity.unshift({type:'RECEIVE',text:`${total} good pieces received on PO ${num} into ${po.shipTo}${issueCount?` · ${issueCount} problem${issueCount>1?'s':''}`:''}`,ref});
+    showCompletion(tx,'receive');
+  };
+  work.scrollIntoView({behavior:'smooth',block:'start'}); setTimeout(()=>scanInput.focus(),200);
+}
+
+function findProductByScan(key) {
+  const q=String(key||'').trim().toUpperCase();
+  return Object.values(products).find(p => String(p.sku).toUpperCase()===q || String(p.barcode||'').toUpperCase()===q);
+}
+
+function renderTransferHub() {
+  pageTitle.textContent = 'Transfers';
+  app.appendChild(cloneTemplate('transferHubTemplate'));
+  document.getElementById('newTransferBtn').onclick=()=>go('transferCreate');
+  const check=document.getElementById('checkTransferBtn');
+  const note=document.getElementById('managerTransferNote');
+  if(state.employee?.role==='Manager'){check.onclick=()=>go('transferCheck');note.textContent='Manager access enabled — scan existing transfer paperwork and verify every piece.';}
+  else {check.disabled=true;note.textContent='Check Transfer is available to warehouse managers.';}
+}
+
+function renderTransferCreate() {
+  pageTitle.textContent = 'Create Transfer';
+  app.appendChild(cloneTemplate('transferCreateTemplate'));
+  const from = state.location;
+  document.getElementById('transferFromLocked').textContent = '📍 ' + from;
+  const to = document.getElementById('transferTo');
+  to.innerHTML = warehouses.filter(w=>w!==from).map(w=>`<option>${w}</option>`).join('');
+  const input = document.getElementById('transferSku');
+  const add = () => {
+    const p=findProductByScan(input.value);
+    if(!p) { notify('Material not found'); input.select(); return; }
+    const existing=state.transferItems.find(x=>x.sku===p.sku);
+    const current=existing?existing.qty:0;
+    if(current+1>p.onHand){ notify(`Only ${p.onHand} pieces available at ${from}`); input.value=''; input.focus(); return; }
+    if(existing) existing.qty++; else state.transferItems.push({...p, qty:1});
+    input.value=''; drawTransfer(); input.focus();
+  };
+  document.getElementById('transferAdd').onclick=add;
+  input.onkeydown=e=>{ if(e.key==='Enter') add(); };
+  document.getElementById('createTransfer').onclick=()=>{
+    if(!state.transferItems.length) return;
+    if(!to.value) return notify('Choose where the material is moving to');
+    const items=state.transferItems.map(i=>({...i}));
+    const invalid=items.find(i=>i.qty>i.onHand);
+    if(invalid) return notify(`${invalid.sku} is above available inventory`);
+    const units=items.reduce((sum,i)=>sum+i.qty,0);
+    const ref='TR-'+String(Math.floor(Math.random()*900000+100000));
+    const note=document.getElementById('transferNote').value.trim();
+    const tx={type:'Transfer',ref,from,to:to.value,location:from,employee:state.employee?.name||'Employee',date:new Date(),lines:items,total:units,note,status:'Ready to Move'};
+    state.activity.unshift({type:'TRANSFER', text:`${units} pieces moving from ${from} to ${to.value}`, ref});
+    state.transferItems=[]; showCompletion(tx,'transfer');
+  };
+  drawTransfer();
+  setTimeout(()=>input.focus(),150);
+}
+
+function drawTransfer() {
+  const list=document.getElementById('transferItems'); if(!list) return;
+  list.innerHTML=state.transferItems.length ? state.transferItems.map((i,idx)=>{
+    const after=Math.max(0,i.onHand-i.qty);
+    return `<div class="receive-line ${i.qty>0?'partial':''}">
+      <div><div class="eyebrow">${esc(i.sku)}</div><div class="name">${esc(i.name)}</div><div class="tiny">Barcode ${esc(i.barcode||i.sku)}</div></div>
+      <div class="metric"><small>Available</small><strong>${i.onHand.toLocaleString()}</strong></div>
+      <div class="metric"><small>Moving</small><strong>${i.qty.toLocaleString()}</strong></div>
+      <div class="metric"><small>Left Here</small><strong>${after.toLocaleString()}</strong></div>
+      <div class="qty-box"><button data-tminus="${idx}">−</button><input data-tqty="${idx}" value="${i.qty}" inputmode="numeric"><button data-tplus="${idx}">+</button></div>
+      <button class="secondary" data-remove="${idx}">Remove</button>
+    </div>`;
+  }).join('') : '<div style="padding:24px;text-align:center;border:1px dashed #cbd5e1;border-radius:14px"><strong>No material scanned yet</strong><p class="muted" style="margin-bottom:0">Scan the first piece to start this transfer.</p></div>';
+  const count=state.transferItems.length;
+  const units=state.transferItems.reduce((sum,i)=>sum+i.qty,0);
+  document.getElementById('transferCount').textContent=count;
+  document.getElementById('transferUnits').textContent=units;
+  document.getElementById('createTransfer').disabled=!count;
+  document.querySelectorAll('[data-tplus]').forEach(b=>b.onclick=()=>{const i=state.transferItems[Number(b.dataset.tplus)];if(i.qty>=i.onHand)return notify(`Only ${i.onHand} pieces available`);i.qty++;drawTransfer();});
+  document.querySelectorAll('[data-tminus]').forEach(b=>b.onclick=()=>{const i=state.transferItems[Number(b.dataset.tminus)];if(i.qty>1)i.qty--;drawTransfer();});
+  document.querySelectorAll('[data-remove]').forEach(b=>b.onclick=()=>{state.transferItems.splice(Number(b.dataset.remove),1);drawTransfer();});
+  document.querySelectorAll('[data-tqty]').forEach(inp=>inp.onchange=()=>{const i=state.transferItems[Number(inp.dataset.tqty)];let q=Math.max(1,Number(inp.value)||1);if(q>i.onHand){q=i.onHand;notify(`Set to available quantity: ${i.onHand}`);}i.qty=q;drawTransfer();});
+}
+
+function normalizeTransferRef(value){
+  let v=String(value||'').trim().toUpperCase();
+  if(v.startsWith('TR:')) v=v.slice(3);
+  return v;
+}
+
+function renderTransferCheck(){
+  pageTitle.textContent='Check Transfer';
+  if(state.employee?.role!=='Manager'){app.innerHTML='<section class="panel"><div class="manager-only">Warehouse manager access required.</div></section>';return;}
+  app.appendChild(cloneTemplate('transferCheckTemplate'));
+  const input=document.getElementById('transferPaperScan');
+  const find=()=>showTransferCheck(normalizeTransferRef(input.value));
+  document.getElementById('findTransferBtn').onclick=find;
+  input.onkeydown=e=>{if(e.key==='Enter')find();};
+  document.querySelectorAll('[data-transfer]').forEach(b=>b.onclick=()=>showTransferCheck(b.dataset.transfer));
+  setTimeout(()=>input.focus(),120);
+}
+
+function showTransferCheck(ref){
+  const base=backendTransfers[normalizeTransferRef(ref)];
+  if(!base) return notify('Transfer not found in prototype');
+  const tx={...base,lines:base.lines.map(l=>({...l,scanned:0})),problems:[]};
+  const work=document.getElementById('transferCheckWork');
+  work.classList.remove('hidden');
+  const expectedTotal=tx.lines.reduce((s,l)=>s+l.expected,0);
+  work.innerHTML=`
+    <div class="po-meta"><strong>${esc(tx.ref)}</strong><span>${esc(tx.from)} → ${esc(tx.to)}</span><span class="status-pill">${esc(tx.status)}</span><span>Written by ${esc(tx.createdBy)}</span></div>
+    <div class="transfer-header-grid">
+      <div class="kpi"><span class="muted">Item Lines</span><strong>${tx.lines.length}</strong></div>
+      <div class="kpi"><span class="muted">Expected Pieces</span><strong>${expectedTotal}</strong></div>
+      <div class="kpi"><span class="muted">Scanned</span><strong id="checkScanned">0</strong></div>
+      <div class="kpi"><span class="muted">Still Needed</span><strong id="checkRemaining">${expectedTotal}</strong></div>
+    </div>
+    <div class="scan-row">
+      <input id="checkItemScan" class="scan-input" placeholder="Scan material barcode — each scan = 1 piece" autocomplete="off" />
+      <button id="checkItemBtn" class="primary">Check Piece</button>
+    </div>
+    <div id="scanFeedback" class="scan-feedback warn">Scan the first piece on the paperwork.</div>
+    <div id="checkLines" class="line-list"></div>
+    <div class="receive-footer">
+      <div class="totals"><div><span class="muted">Lines Complete</span><strong id="checkComplete">0/${tx.lines.length}</strong></div><div><span class="muted">Problems</span><strong id="checkProblems">0</strong></div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button id="finishWithProblem" class="danger">Finish With Problem</button><button id="finishCheck" class="success" disabled>Finish Transfer Check</button></div>
+    </div>`;
+  const scan=document.getElementById('checkItemScan');
+  const feedback=document.getElementById('scanFeedback');
+  const scanPiece=()=>{
+    const q=String(scan.value||'').trim().toUpperCase();
+    if(!q) return;
+    const line=tx.lines.find(l=>String(l.sku).toUpperCase()===q||String(l.barcode).toUpperCase()===q);
+    if(!line){
+      feedback.className='scan-feedback stop';
+      feedback.innerHTML=`⛔ NOT ON THIS TRANSFER — <strong>${esc(q)}</strong>. Do not load this material.`;
+      tx.problems.push({type:'Wrong Item',value:q,time:new Date()});
+      scan.value=''; drawCheck(); scan.focus(); return;
+    }
+    if(line.scanned>=line.expected){
+      feedback.className='scan-feedback stop';
+      feedback.innerHTML=`⚠️ EXTRA PIECE — ${esc(line.sku)} calls for <strong>${line.expected}</strong>. You already scanned ${line.scanned}.`;
+      tx.problems.push({type:'Extra Piece',value:line.sku,time:new Date()});
+      scan.value=''; drawCheck(); scan.focus(); return;
+    }
+    line.scanned++;
+    feedback.className='scan-feedback ok';
+    feedback.innerHTML=`✓ Correct item — <strong>${esc(line.sku)}</strong> ${line.scanned}/${line.expected} scanned.`;
+    scan.value=''; drawCheck(); scan.focus();
+  };
+  document.getElementById('checkItemBtn').onclick=scanPiece;
+  scan.onkeydown=e=>{if(e.key==='Enter')scanPiece();};
+  document.getElementById('finishWithProblem').onclick=()=>finishCheckedTransfer(tx,true);
+  document.getElementById('finishCheck').onclick=()=>finishCheckedTransfer(tx,false);
+  function drawCheck(){
+    const list=document.getElementById('checkLines');
+    list.innerHTML=tx.lines.map(l=>{
+      const remain=l.expected-l.scanned;
+      const cls=remain===0?'good':l.scanned>0?'need':'';
+      return `<div class="match-line ${cls}"><div><div class="eyebrow">${esc(l.sku)}</div><div class="name">${esc(l.name)}</div><div class="tiny">Barcode ${esc(l.barcode)}</div></div><div class="metric"><small>Expected</small><strong>${l.expected}</strong></div><div class="metric"><small>Scanned</small><strong>${l.scanned}</strong></div><div class="metric"><small>${remain===0?'Status':'Still Needed'}</small><strong>${remain===0?'✓ Complete':remain}</strong></div></div>`;
+    }).join('');
+    const scanned=tx.lines.reduce((s,l)=>s+l.scanned,0), remaining=expectedTotal-scanned, complete=tx.lines.filter(l=>l.scanned===l.expected).length;
+    document.getElementById('checkScanned').textContent=scanned;
+    document.getElementById('checkRemaining').textContent=remaining;
+    document.getElementById('checkComplete').textContent=`${complete}/${tx.lines.length}`;
+    document.getElementById('checkProblems').textContent=tx.problems.length;
+    document.getElementById('finishCheck').disabled=remaining!==0;
+  }
+  drawCheck();
+  work.scrollIntoView({behavior:'smooth',block:'start'}); setTimeout(()=>scan.focus(),180);
+}
+
+function finishCheckedTransfer(tx,withProblem){
+  const expected=tx.lines.reduce((s,l)=>s+l.expected,0), scanned=tx.lines.reduce((s,l)=>s+l.scanned,0), missing=expected-scanned;
+  if(!withProblem && missing>0) return notify(`${missing} pieces still need to be scanned`);
+  if(withProblem && missing===0 && !tx.problems.length) return notify('Everything matches — use Finish Transfer Check');
+  let note='';
+  if(withProblem){note=window.prompt('What is wrong with this transfer? Example: 2 pieces short, damaged, wrong item.')||''; if(!note.trim()) return notify('Add a problem note before finishing');}
+  const completed={type:'Transfer Check',ref:tx.ref,from:tx.from,to:tx.to,location:tx.from,employee:state.employee?.name||'Manager',date:new Date(),lines:tx.lines.map(l=>({sku:l.sku,name:l.name,qty:l.scanned,expected:l.expected})),total:scanned,expectedTotal:expected,missing,problems:tx.problems,note,status:withProblem?'Checked With Problem':'Checked — Matches'};
+  state.activity.unshift({type:'TRANSFER',text:`${tx.ref} checked by ${completed.employee} · ${withProblem?'problem reported':'all pieces match'}`,ref:tx.ref});
+  showTransferCheckCompletion(completed);
+}
+
+function showTransferCheckCompletion(tx){
+  pageTitle.textContent='Transfer Check Complete';
+  const rows=tx.lines.map(l=>`<tr><td><strong>${esc(l.sku)}</strong><br><span class="muted">${esc(l.name)}</span></td><td>${l.expected}</td><td>${l.qty}</td><td>${l.expected-l.qty}</td></tr>`).join('');
+  app.innerHTML=`<section class="completion-card"><div class="completion-icon">✓</div><div class="eyebrow" style="margin-top:14px">${tx.status==='Checked — Matches'?'TRANSFER MATCHED':'PROBLEM REPORTED'}</div><h2>${esc(tx.ref)}</h2><p class="muted">Checked by ${esc(tx.employee)} · ${fmtDate(tx.date)}</p><div class="ticket-preview"><div class="ticket-head"><div><strong>Move From:</strong> ${esc(tx.from)}</div><div><strong>Move To:</strong> ${esc(tx.to)}</div><div><strong>Status:</strong> ${esc(tx.status)}</div>${tx.note?`<div><strong>Problem:</strong> ${esc(tx.note)}</div>`:''}</div><table><thead><tr><th>Material</th><th>Expected</th><th>Scanned</th><th>Missing</th></tr></thead><tbody>${rows}</tbody></table></div><div class="completion-actions"><button id="printCheck" class="print-btn">🖨 Print</button><button id="doneCheck" class="primary">Done</button></div></section>`;
+  document.getElementById('printCheck').onclick=()=>printTransferCheck(tx);
+  document.getElementById('doneCheck').onclick=()=>go('transferCheck');
+}
+
+function printTransferCheck(tx){
+  let body=`<h1>Bargain Moulding — Transfer Check</h1><div class="muted">${esc(tx.ref)} · ${fmtDate(tx.date)}</div><div class="meta"><div><strong>Checked By</strong><br>${esc(tx.employee)}</div><div><strong>Status</strong><br>${esc(tx.status)}</div><div><strong>Move From</strong><br>${esc(tx.from)}</div><div><strong>Move To</strong><br>${esc(tx.to)}</div><div><strong>Expected Pieces</strong><br>${tx.expectedTotal}</div><div><strong>Scanned Pieces</strong><br>${tx.total}</div>${tx.note?`<div><strong>Problem Note</strong><br>${esc(tx.note)}</div>`:''}</div><table><thead><tr><th>SKU</th><th>Description</th><th>Expected</th><th>Scanned</th><th>Missing</th></tr></thead><tbody>${tx.lines.map(l=>`<tr><td>${esc(l.sku)}</td><td>${esc(l.name)}</td><td>${l.expected}</td><td>${l.qty}</td><td>${l.expected-l.qty}</td></tr>`).join('')}</tbody></table><div class="sig"><div class="line">Warehouse Manager Signature</div><div class="line">Receiver / Driver</div></div>`;
+  printWindow(`Transfer Check ${tx.ref}`,body);
+}
+
+
+function normalizeOrderRef(value){
+  let v=String(value||'').trim().toUpperCase();
+  if(v.startsWith('PICK:')) v=v.slice(5);
+  if(v.startsWith('PACK:')) v=v.slice(5);
+  if(v.startsWith('WILL:')) v=v.slice(5);
+  return v;
+}
+
+function renderPickPackHub(){
+  pageTitle.textContent='Will Call Pick & Pack';
+  app.appendChild(cloneTemplate('pickPackHubTemplate'));
+  document.getElementById('pickOrderBtn').onclick=()=>go('pick');
+  document.getElementById('packOrderBtn').onclick=()=>go('pack');
+}
+
+function renderPick(){
+  pageTitle.textContent='Pick Will Call';
+  app.appendChild(cloneTemplate('pickTemplate'));
+  const input=document.getElementById('pickPaperScan');
+  const find=()=>showPick(normalizeOrderRef(input.value));
+  document.getElementById('findPickBtn').onclick=find;
+  input.onkeydown=e=>{if(e.key==='Enter')find();};
+  document.querySelectorAll('[data-pick]').forEach(b=>b.onclick=()=>showPick(b.dataset.pick));
+  setTimeout(()=>input.focus(),120);
+}
+
+function showPick(ref){
+  const base=warehouseOrders[normalizeOrderRef(ref)];
+  if(!base) return notify('Order not found in prototype');
+  const cls=fulfillmentClass(base);
+  if(cls==='review') return notify('Delivery method is blank — this order needs review before it can be picked.');
+  if(cls!=='willcall') return notify(`This is a DELIVERY order (${base.deliveryMethod}). Use Load Delivery, not Will Call Pick & Pack.`);
+  if(base.warehouse!==state.location) notify(`Heads up: this order is assigned to ${base.warehouse}`);
+  const tx={...base,lines:base.lines.map(l=>({...l,scanned:0})),problems:[]};
+  const work=document.getElementById('pickWork');
+  work.classList.remove('hidden');
+  buildVerifyWork(work,tx,'pick');
+}
+
+function renderPack(){
+  pageTitle.textContent='Stage Will Call';
+  app.appendChild(cloneTemplate('packTemplate'));
+  const input=document.getElementById('packPaperScan');
+  const find=()=>showPack(normalizeOrderRef(input.value));
+  document.getElementById('findPackBtn').onclick=find;
+  input.onkeydown=e=>{if(e.key==='Enter')find();};
+  document.querySelectorAll('[data-pack]').forEach(b=>b.onclick=()=>showPack(b.dataset.pack));
+  setTimeout(()=>input.focus(),120);
+}
+
+function showPack(ref){
+  const base=completedPicks[normalizeOrderRef(ref)] || warehouseOrders[normalizeOrderRef(ref)];
+  if(!base) return notify('Pick ticket not found in prototype');
+  const cls=fulfillmentClass(base);
+  if(cls==='review') return notify('Delivery method is blank — this order needs review before it can be staged.');
+  if(cls!=='willcall') return notify(`This is a DELIVERY order (${base.deliveryMethod}). Use Load Delivery, not Will Call Pick & Pack.`);
+  const tx={...base,status:'Ready to Stage',lines:base.lines.map(l=>({...l,expected:Number(l.expected||l.qty||0),scanned:0})),problems:[]};
+  const work=document.getElementById('packWork');
+  work.classList.remove('hidden');
+  buildVerifyWork(work,tx,'pack');
+}
+
+function buildVerifyWork(work,tx,mode){
+  const isPick=mode==='pick';
+  const expectedTotal=tx.lines.reduce((s,l)=>s+l.expected,0);
+  const title=isPick?'PICKING WILL CALL':'STAGING WILL CALL';
+  const action=isPick?'Finish Pick':'Finish Staging';
+  work.innerHTML=`
+    <div class="po-meta"><strong>${esc(tx.ref)}</strong><span>${esc(tx.customer||'Customer')}</span><span>${esc(tx.job||'')}</span><span class="pick-status">${esc(tx.status||'Ready')}</span></div>
+    <div class="locked-location">📍 Warehouse: ${esc(tx.warehouse||state.location)}</div>
+    <div class="order-summary-grid">
+      <div class="kpi"><span class="muted">Item Lines</span><strong>${tx.lines.length}</strong></div>
+      <div class="kpi"><span class="muted">Expected Pieces</span><strong>${expectedTotal}</strong></div>
+      <div class="kpi"><span class="muted">Scanned</span><strong id="verifyScanned">0</strong></div>
+      <div class="kpi"><span class="muted">Still Needed</span><strong id="verifyRemaining">${expectedTotal}</strong></div>
+    </div>
+    <div class="scan-row"><input id="verifyItemScan" class="scan-input" placeholder="Scan material barcode — each scan = 1 piece" autocomplete="off"/><button id="verifyItemBtn" class="primary">Check Piece</button></div>
+    <div id="verifyFeedback" class="scan-feedback ${isPick?'warn':'pack'}">${isPick?'Scan the first piece you pull for Will Call.':'Re-scan the first piece being staged for customer pickup.'}</div>
+    <div id="verifyLines" class="line-list"></div>
+    <div class="receive-footer">
+      <div class="totals"><div><span class="muted">Lines Complete</span><strong id="verifyComplete">0/${tx.lines.length}</strong></div><div><span class="muted">Problems Caught</span><strong id="verifyProblems">0</strong></div></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button id="verifyProblem" class="danger">Finish With Problem</button><button id="verifyFinish" class="success" disabled>${action}</button></div>
+    </div>`;
+  const scan=document.getElementById('verifyItemScan');
+  const feedback=document.getElementById('verifyFeedback');
+  const scanPiece=()=>{
+    const q=String(scan.value||'').trim().toUpperCase(); if(!q)return;
+    const line=tx.lines.find(l=>String(l.sku).toUpperCase()===q||String(l.barcode).toUpperCase()===q);
+    if(!line){feedback.className='scan-feedback stop';feedback.innerHTML=`⛔ NOT ON THIS ORDER — <strong>${esc(q)}</strong>. ${isPick?'Do not pick this material.':'Do not stage this material.'}`;tx.problems.push({type:'Wrong Item',value:q,time:new Date()});scan.value='';draw();scan.focus();return;}
+    if(line.scanned>=line.expected){feedback.className='scan-feedback stop';feedback.innerHTML=`⚠️ EXTRA PIECE — ${esc(line.sku)} calls for <strong>${line.expected}</strong>. You already scanned ${line.scanned}.`;tx.problems.push({type:'Extra Piece',value:line.sku,time:new Date()});scan.value='';draw();scan.focus();return;}
+    line.scanned++;feedback.className='scan-feedback ok';feedback.innerHTML=`✓ Correct item — <strong>${esc(line.sku)}</strong> ${line.scanned}/${line.expected} scanned.`;scan.value='';draw();scan.focus();
+  };
+  document.getElementById('verifyItemBtn').onclick=scanPiece;
+  scan.onkeydown=e=>{if(e.key==='Enter')scanPiece();};
+  document.getElementById('verifyFinish').onclick=()=>finishVerify(tx,mode,false);
+  document.getElementById('verifyProblem').onclick=()=>finishVerify(tx,mode,true);
+  function draw(){
+    document.getElementById('verifyLines').innerHTML=tx.lines.map(l=>{const rem=l.expected-l.scanned;return `<div class="match-line ${rem===0?'good':l.scanned>0?'need':''}"><div><div class="eyebrow">${esc(l.sku)}</div><div class="name">${esc(l.name)}</div><div class="tiny">Barcode ${esc(l.barcode)}</div></div><div class="metric"><small>Expected</small><strong>${l.expected}</strong></div><div class="metric"><small>Scanned</small><strong>${l.scanned}</strong></div><div class="metric"><small>${rem===0?'Status':'Still Needed'}</small><strong>${rem===0?'✓ Complete':rem}</strong></div></div>`}).join('');
+    const scanned=tx.lines.reduce((s,l)=>s+l.scanned,0),remaining=expectedTotal-scanned,complete=tx.lines.filter(l=>l.scanned===l.expected).length;
+    document.getElementById('verifyScanned').textContent=scanned;document.getElementById('verifyRemaining').textContent=remaining;document.getElementById('verifyComplete').textContent=`${complete}/${tx.lines.length}`;document.getElementById('verifyProblems').textContent=tx.problems.length;document.getElementById('verifyFinish').disabled=remaining!==0;
+  }
+  draw();work.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>scan.focus(),150);
+}
+
+function finishVerify(tx,mode,withProblem){
+  const expected=tx.lines.reduce((s,l)=>s+l.expected,0),scanned=tx.lines.reduce((s,l)=>s+l.scanned,0),missing=expected-scanned;
+  if(!withProblem&&missing>0)return notify(`${missing} pieces still need to be scanned`);
+  if(withProblem&&missing===0&&!tx.problems.length)return notify('Everything matches — use the normal Finish button');
+  let note=''; if(withProblem){note=window.prompt('What is wrong? Example: 2 pieces short, damaged, wrong item.')||'';if(!note.trim())return notify('Add a problem note before finishing');}
+  const ref=(mode==='pick'?'PICK-':'PACK-')+tx.ref.replace(/^ORD-/,'');
+  const completed={type:mode==='pick'?'Pick':'Pack',ref,order:tx.ref,customer:tx.customer,job:tx.job,location:tx.warehouse||state.location,warehouse:tx.warehouse||state.location,employee:state.employee?.name||'Employee',date:new Date(),lines:tx.lines.map(l=>({sku:l.sku,name:l.name,qty:l.scanned,expected:l.expected,barcode:l.barcode})),total:scanned,expectedTotal:expected,missing,problems:tx.problems,note,status:withProblem?(mode==='pick'?'Picked With Problem':'Staged With Problem'):(mode==='pick'?'Pick Complete':'Ready for Will Call')};
+  if(mode==='pick') completedPicks[tx.ref]={...tx,lines:tx.lines.map(l=>({...l,qty:l.scanned,expected:l.expected})),status:'Pick Complete'};
+  state.activity.unshift({type:mode==='pick'?'PICK':'PACK',text:`${tx.ref} ${mode==='pick'?'picked for Will Call':'staged for Will Call'} by ${completed.employee}${withProblem?' · problem reported':' · all pieces match'}`,ref});
+  showPickPackCompletion(completed,mode);
+}
+
+function showPickPackCompletion(tx,mode){
+  pageTitle.textContent=mode==='pick'?'Will Call Pick Complete':'Will Call Staged';
+  const rows=tx.lines.map(l=>`<tr><td><strong>${esc(l.sku)}</strong><br><span class="muted">${esc(l.name)}</span></td><td>${l.expected}</td><td>${l.qty}</td><td>${l.expected-l.qty}</td></tr>`).join('');
+  app.innerHTML=`<section class="completion-card"><div class="completion-icon">✓</div><div class="eyebrow" style="margin-top:14px">${esc(tx.status.toUpperCase())}</div><h2>${esc(tx.order)}</h2><p class="muted">${esc(tx.customer||'')} · ${esc(tx.employee)} · ${fmtDate(tx.date)}</p><div class="ticket-preview"><div class="ticket-head"><div><strong>Warehouse:</strong> ${esc(tx.location)}</div><div><strong>Expected:</strong> ${tx.expectedTotal} pieces</div><div><strong>Scanned:</strong> ${tx.total} pieces</div>${tx.note?`<div><strong>Problem Note:</strong> ${esc(tx.note)}</div>`:''}</div><table><thead><tr><th>Material</th><th>Expected</th><th>Scanned</th><th>Missing</th></tr></thead><tbody>${rows}</tbody></table></div><div class="completion-actions"><button id="printPickPack" class="print-btn">🖨 Print</button><button id="donePickPack" class="primary">Done</button></div></section>`;
+  document.getElementById('printPickPack').onclick=()=>printPickPack(tx,mode);
+  document.getElementById('donePickPack').onclick=()=>go('pickpack');
+}
+
+function printPickPack(tx,mode){
+  let body=`<h1>Bargain Moulding — ${mode==='pick'?'Will Call Pick':'Will Call Stage'} Ticket</h1><div class="muted">${esc(tx.ref)} · ${fmtDate(tx.date)}</div><div class="meta"><div><strong>Order</strong><br>${esc(tx.order)}</div><div><strong>Customer</strong><br>${esc(tx.customer||'')}</div><div><strong>Warehouse</strong><br>${esc(tx.location)}</div><div><strong>Employee</strong><br>${esc(tx.employee)}</div><div><strong>Status</strong><br>${esc(tx.status)}</div><div><strong>Pieces</strong><br>${tx.total}/${tx.expectedTotal}</div>${tx.note?`<div><strong>Problem Note</strong><br>${esc(tx.note)}</div>`:''}</div><table><thead><tr><th>SKU</th><th>Description</th><th>Expected</th><th>Scanned</th><th>Missing</th></tr></thead><tbody>${tx.lines.map(l=>`<tr><td>${esc(l.sku)}</td><td>${esc(l.name)}</td><td>${l.expected}</td><td>${l.qty}</td><td>${l.expected-l.qty}</td></tr>`).join('')}</tbody></table><div class="sig"><div class="line">Picker / Stager</div><div class="line">Will Call / Counter Check</div></div>`;
+  printWindow(`${mode==='pick'?'Pick':'Pack'} ${tx.order}`,body);
+}
+
+
+function normalizeFulfillmentRef(value){
+  let v=String(value||'').trim().toUpperCase();
+  ['WILL:','LOAD:','PICK:','PACK:'].forEach(p=>{if(v.startsWith(p))v=v.slice(p.length)});
+  return v;
+}
+function fulfillmentClass(order){
+  if(!order || !String(order.deliveryMethod||'').trim()) return 'review';
+  return String(order.deliveryMethod).trim().toLowerCase()==='in store' ? 'willcall' : 'delivery';
+}
+function renderFulfillmentHub(){
+  renderLoadCheck();
+}
+function renderWillCall(){
+  pageTitle.textContent='Will Call'; app.appendChild(cloneTemplate('willCallTemplate'));
+  const input=document.getElementById('willPaperScan');
+  const find=()=>showFinalVerify(normalizeFulfillmentRef(input.value),'willcall');
+  document.getElementById('findWillBtn').onclick=find; input.onkeydown=e=>{if(e.key==='Enter')find();};
+  document.querySelectorAll('[data-will]').forEach(b=>b.onclick=()=>showFinalVerify(b.dataset.will,'willcall'));
+  setTimeout(()=>input.focus(),120);
+}
+function renderLoadCheck(){
+  pageTitle.textContent='Load Delivery'; app.appendChild(cloneTemplate('loadTemplate'));
+  const input=document.getElementById('loadPaperScan');
+  const find=()=>showFinalVerify(normalizeFulfillmentRef(input.value),'load');
+  document.getElementById('findLoadBtn').onclick=find; input.onkeydown=e=>{if(e.key==='Enter')find();};
+  document.querySelectorAll('[data-load]').forEach(b=>b.onclick=()=>showFinalVerify(b.dataset.load,'load'));
+  setTimeout(()=>input.focus(),120);
+}
+function showFinalVerify(ref,mode){
+  const base=completedPicks[ref] || warehouseOrders[ref];
+  if(!base) return notify('Order not found in prototype');
+  const cls=fulfillmentClass(base);
+  if(cls==='review') return notify('NEEDS REVIEW — Shopify delivery method is blank. Fix the order before loading or pickup.');
+  if(mode==='willcall' && cls!=='willcall') return notify(`This is a DELIVERY order (${base.deliveryMethod}). Use Final Load Check.`);
+  if(mode==='load' && cls!=='delivery') return notify('This is an IN STORE / WILL CALL order. Use Will Call.');
+  const tx={...base,lines:base.lines.map(l=>({...l,expected:Number(l.expected||l.qty||0),scanned:0})),problems:[]};
+  const work=document.getElementById(mode==='willcall'?'willWork':'loadWork'); work.classList.remove('hidden');
+  buildFinalVerifyWork(work,tx,mode);
+}
+function buildFinalVerifyWork(work,tx,mode){
+  const isWill=mode==='willcall', total=tx.lines.reduce((s,l)=>s+l.expected,0);
+  work.innerHTML=`<div class="po-meta"><strong>${esc(tx.ref)}</strong><span>${esc(tx.customer||'Customer')}</span><span>${esc(tx.job||'')}</span><span class="pick-status">${isWill?'WILL CALL':'DELIVERY'}</span></div>
+    <div class="locked-location">📍 ${esc(tx.warehouse||state.location)} · Shopify method: <strong>${esc(tx.deliveryMethod)}</strong></div>
+    <div class="order-summary-grid"><div class="kpi"><span class="muted">Expected Pieces</span><strong>${total}</strong></div><div class="kpi"><span class="muted">Scanned</span><strong id="finalScanned">0</strong></div><div class="kpi"><span class="muted">Still Needed</span><strong id="finalRemaining">${total}</strong></div><div class="kpi"><span class="muted">Problems Caught</span><strong id="finalProblems">0</strong></div></div>
+    <div class="scan-row"><input id="finalItemScan" class="scan-input" placeholder="Scan material barcode — each scan = 1 piece" autocomplete="off"/><button id="finalItemBtn" class="primary">Check Piece</button></div>
+    <div id="finalFeedback" class="scan-feedback ${isWill?'warn':'pack'}">${isWill?'Scan every piece before releasing it to the customer.':'Scan every piece as it goes onto the truck.'}</div>
+    <div id="finalLines" class="line-list"></div>
+    <div class="receive-footer"><div class="totals"><div><span class="muted">Lines Complete</span><strong id="finalComplete">0/${tx.lines.length}</strong></div></div><div style="display:flex;gap:10px;flex-wrap:wrap"><button id="finalProblem" class="danger">Finish With Problem</button><button id="finalFinish" class="success" disabled>${isWill?'Finish Will Call':'Finish Load Check'}</button></div></div>`;
+  const scan=document.getElementById('finalItemScan'), feedback=document.getElementById('finalFeedback');
+  const scanPiece=()=>{const q=String(scan.value||'').trim().toUpperCase(); if(!q)return; const l=tx.lines.find(x=>String(x.sku).toUpperCase()===q||String(x.barcode).toUpperCase()===q);
+    if(!l){feedback.className='scan-feedback stop';feedback.innerHTML=`⛔ NOT ON THIS ORDER — <strong>${esc(q)}</strong>. Do not ${isWill?'release':'load'} this material.`;tx.problems.push({type:'Wrong Item',value:q,time:new Date()});scan.value='';draw();scan.focus();return;}
+    if(l.scanned>=l.expected){feedback.className='scan-feedback stop';feedback.innerHTML=`⚠️ EXTRA PIECE — ${esc(l.sku)} calls for <strong>${l.expected}</strong>. You already scanned ${l.scanned}.`;tx.problems.push({type:'Extra Piece',value:l.sku,time:new Date()});scan.value='';draw();scan.focus();return;}
+    l.scanned++;feedback.className='scan-feedback ok';feedback.innerHTML=`✓ Correct item — <strong>${esc(l.sku)}</strong> ${l.scanned}/${l.expected} scanned.`;scan.value='';draw();scan.focus();};
+  document.getElementById('finalItemBtn').onclick=scanPiece; scan.onkeydown=e=>{if(e.key==='Enter')scanPiece();};
+  document.getElementById('finalFinish').onclick=()=>finishFinalVerify(tx,mode,false); document.getElementById('finalProblem').onclick=()=>finishFinalVerify(tx,mode,true);
+  function draw(){document.getElementById('finalLines').innerHTML=tx.lines.map(l=>{const rem=l.expected-l.scanned;return `<div class="match-line ${rem===0?'good':l.scanned>0?'need':''}"><div><div class="eyebrow">${esc(l.sku)}</div><div class="name">${esc(l.name)}</div><div class="tiny">Barcode ${esc(l.barcode)}</div></div><div class="metric"><small>Expected</small><strong>${l.expected}</strong></div><div class="metric"><small>Scanned</small><strong>${l.scanned}</strong></div><div class="metric"><small>${rem===0?'Status':'Still Needed'}</small><strong>${rem===0?'✓ Complete':rem}</strong></div></div>`}).join(''); const scanned=tx.lines.reduce((s,l)=>s+l.scanned,0),rem=total-scanned,comp=tx.lines.filter(l=>l.scanned===l.expected).length;document.getElementById('finalScanned').textContent=scanned;document.getElementById('finalRemaining').textContent=rem;document.getElementById('finalProblems').textContent=tx.problems.length;document.getElementById('finalComplete').textContent=`${comp}/${tx.lines.length}`;document.getElementById('finalFinish').disabled=rem!==0;}
+  draw();work.scrollIntoView({behavior:'smooth',block:'start'});setTimeout(()=>scan.focus(),150);
+}
+function finishFinalVerify(tx,mode,withProblem){
+  const expected=tx.lines.reduce((s,l)=>s+l.expected,0),scanned=tx.lines.reduce((s,l)=>s+l.scanned,0),missing=expected-scanned;
+  if(!withProblem&&missing>0)return notify(`${missing} pieces still need to be scanned`); let note='';
+  if(withProblem){note=window.prompt('What is wrong? Example: 2 pieces short, damaged, wrong item.')||'';if(!note.trim())return notify('Add a problem note before finishing');}
+  const isWill=mode==='willcall'; const completed={type:isWill?'Will Call':'Load Check',ref:tx.ref,customer:tx.customer,job:tx.job,location:tx.warehouse||state.location,employee:state.employee?.name||'Employee',date:new Date(),deliveryMethod:tx.deliveryMethod,lines:tx.lines.map(l=>({sku:l.sku,name:l.name,qty:l.scanned,expected:l.expected})),total:scanned,expectedTotal:expected,missing,note,status:withProblem?(isWill?'Will Call With Problem':'Load With Problem'):(isWill?'Released for Pickup':'Ready for EasyTeams / Delivery')};
+  state.activity.unshift({type:isWill?'WILL CALL':'LOAD',text:`${tx.ref} ${isWill?'will call checked':'load checked'} by ${completed.employee}${withProblem?' · problem reported':' · all pieces match'}`,ref:tx.ref}); showFinalCompletion(completed,mode);
+}
+function showFinalCompletion(tx,mode){
+  const isWill=mode==='willcall'; pageTitle.textContent=isWill?'Will Call Complete':'Load Check Complete';
+  const rows=tx.lines.map(l=>`<tr><td><strong>${esc(l.sku)}</strong><br><span class="muted">${esc(l.name)}</span></td><td>${l.expected}</td><td>${l.qty}</td><td>${l.expected-l.qty}</td></tr>`).join('');
+  app.innerHTML=`<section class="completion-card"><div class="completion-icon">✓</div><div class="eyebrow" style="margin-top:14px">${esc(tx.status.toUpperCase())}</div><h2>${esc(tx.ref)}</h2><p class="muted">${esc(tx.customer||'')} · ${esc(tx.employee)} · ${fmtDate(tx.date)}</p><div class="ticket-preview"><div class="ticket-head"><div><strong>Warehouse:</strong> ${esc(tx.location)}</div><div><strong>Shopify Method:</strong> ${esc(tx.deliveryMethod)}</div><div><strong>Expected:</strong> ${tx.expectedTotal} pieces</div><div><strong>Scanned:</strong> ${tx.total} pieces</div>${tx.note?`<div><strong>Problem:</strong> ${esc(tx.note)}</div>`:''}</div><table><thead><tr><th>Material</th><th>Expected</th><th>Scanned</th><th>Missing</th></tr></thead><tbody>${rows}</tbody></table></div><div class="completion-actions"><button id="printFinal" class="print-btn">🖨 Print</button><button id="doneFinal" class="primary">Done</button></div></section>`;
+  document.getElementById('printFinal').onclick=()=>printFinalTicket(tx,mode); document.getElementById('doneFinal').onclick=()=>go('fulfillment');
+}
+function printFinalTicket(tx,mode){
+  const isWill=mode==='willcall'; const body=`<div class="brand">BARGAIN MOULDING</div><h1>${isWill?'Will Call Verification':'Final Load Verification'} — ${esc(tx.ref)}</h1><div class="meta"><div><strong>Customer:</strong> ${esc(tx.customer||'')}</div><div><strong>Warehouse:</strong> ${esc(tx.location)}</div><div><strong>Shopify Delivery Method:</strong> ${esc(tx.deliveryMethod)}</div><div><strong>Checked By:</strong> ${esc(tx.employee)}</div><div><strong>Date:</strong> ${fmtDate(tx.date)}</div><div><strong>Status:</strong> ${esc(tx.status)}</div></div>${tx.note?`<div class="problem"><strong>Problem:</strong> ${esc(tx.note)}</div>`:''}<table><thead><tr><th>SKU</th><th>Description</th><th>Expected</th><th>Scanned</th></tr></thead><tbody>${tx.lines.map(l=>`<tr><td>${esc(l.sku)}</td><td>${esc(l.name)}</td><td>${l.expected}</td><td>${l.qty}</td></tr>`).join('')}</tbody></table><div class="sig"><div class="line">Warehouse Employee</div><div class="line">${isWill?'Customer / Counter':'Loader / Manager'}</div></div>`; printWindow(`${isWill?'Will Call':'Load'} ${tx.ref}`,body);
+}
+
+function renderAdjust() {
+  pageTitle.textContent = 'Fix Inventory';
+  app.appendChild(cloneTemplate('adjustTemplate'));
+  const input=document.getElementById('adjustSku');
+  const find=()=>showAdjustment(input.value.trim());
+  document.getElementById('adjustFind').onclick=find;
+  input.onkeydown=e=>{if(e.key==='Enter')find();};
+}
+
+function showAdjustment(key) {
+  const p=products[key]; if(!p) return notify('Item not found in prototype');
+  const work=document.getElementById('adjustWork');
+  work.classList.remove('hidden');
+  work.innerHTML=`
+    <div class="adjust-card">
+      <div class="eyebrow">${p.sku}</div>
+      <h3>${p.name}</h3>
+      <div class="muted">Qoblex on hand</div><div class="big-number">${p.onHand.toLocaleString()}</div>
+      <div class="adjust-grid">
+        <label>Correct quantity<input id="correctQty" type="number" value="${p.onHand}" /></label>
+        <label>Reason<select id="adjustReason"><option>Physical Count Correction</option><option>Damaged</option><option>Missing</option><option>Returned Material</option><option>Mis-picked</option><option>Scrap</option><option>Receiving Error</option><option>Transfer Error</option><option>Other</option></select></label>
+      </div>
+      <div class="variance"><span>Difference</span><strong id="varianceVal">0</strong></div>
+      <div class="cost-box"><div><span class="muted">Qoblex unit cost</span><strong>$${p.cost.toFixed(2)}</strong></div><div><span class="muted">Cost impact</span><strong id="costImpact">$0.00</strong></div></div>
+      <p class="permission-note">Inventory removed is shown as a loss at Qoblex cost. Adjustments with $250+ absolute cost impact require manager approval.</p>
+      <div class="summary-bar"><button id="confirmAdjust" class="success">Finish Adjustment</button></div>
+    </div>`;
+  const qty=document.getElementById('correctQty');
+  const update=()=>{const diff=Number(qty.value)-p.onHand; document.getElementById('varianceVal').textContent=diff.toLocaleString(); const impact=diff*p.cost; const el=document.getElementById('costImpact'); el.textContent=`${impact<0?'-':impact>0?'+':''}$${Math.abs(impact).toFixed(2)}`; el.className=impact<0?'money-loss':impact>0?'money-add':'';};
+  qty.oninput=update;
+  document.getElementById('confirmAdjust').onclick=()=>{
+    const newQty=Number(qty.value); if(Number.isNaN(newQty)||newQty<0) return notify('Enter a valid quantity');
+    const old=p.onHand; const variance=newQty-old; const reason=document.getElementById('adjustReason').value; const costImpact=variance*p.cost;
+    if(variance===0) return notify('No adjustment to finish');
+    const finishAdjustment=(approvedBy=null)=>{
+      p.onHand=newQty;
+      const ref='ADJ-'+String(Math.floor(Math.random()*900000+100000));
+      const tx={type:'Adjustment',ref,location:state.location,employee:state.employee?.name||'Employee',date:new Date(),sku:p.sku,name:p.name,oldQty:old,newQty,variance,reason,unitCost:p.cost,costImpact,approvedBy,lines:[{sku:p.sku,name:p.name,qty:Math.abs(variance)}]};
+      adjustmentLog.unshift({ref,date:tx.date,warehouse:state.location,employee:tx.employee,sku:p.sku,name:p.name,oldQty:old,newQty,difference:variance,reason,unitCost:p.cost,approvedBy});
+      state.activity.unshift({type:'ADJUST', text:`${p.sku} corrected from ${old.toLocaleString()} to ${newQty.toLocaleString()} (${variance>=0?'+':''}${variance}) · ${costImpact<0?'loss ':'value '} $${Math.abs(costImpact).toFixed(2)}`, ref});
+      showCompletion(tx,'adjust');
+    };
+    if(Math.abs(costImpact)>=250 && state.employee.role!=='Manager'){
+      const overlay=document.createElement('div'); overlay.className='approval-overlay';
+      overlay.innerHTML=`<div class="approval-card"><div class="eyebrow">MANAGER APPROVAL</div><h3>Large adjustment</h3><p>${esc(p.sku)} · ${variance>=0?'+':''}${variance} pieces</p><p>Cost impact: <strong>${costImpact<0?'-':'+'}$${Math.abs(costImpact).toFixed(2)}</strong></p><input id="adjustManagerPin" type="password" inputmode="numeric" maxlength="4" placeholder="Manager PIN"/><div style="display:flex;gap:10px"><button id="cancelAdjApproval" class="secondary" style="flex:1">Cancel</button><button id="approveAdjustment" class="danger" style="flex:1">Approve Adjustment</button></div><p class="permission-note">Prototype manager PIN: 2468</p></div>`;
+      document.body.appendChild(overlay);
+      overlay.querySelector('#cancelAdjApproval').onclick=()=>overlay.remove();
+      overlay.querySelector('#approveAdjustment').onclick=()=>{if(overlay.querySelector('#adjustManagerPin').value==='2468'){overlay.remove();finishAdjustment('Warehouse Manager');}else notify('Manager PIN not recognized');};
+      setTimeout(()=>overlay.querySelector('#adjustManagerPin').focus(),50);
+    } else finishAdjustment(state.employee.role==='Manager'?'Warehouse Manager':null);
+  };
+}
+
+function money(v){return `${v<0?'-':''}$${Math.abs(v).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2})}`;}
+function adjustmentValue(a){return a.difference*a.unitCost;}
+function periodStart(period){const d=new Date(); if(period==='today'){d.setHours(0,0,0,0);return d;} if(period==='week'){d.setDate(d.getDate()-7);return d;} if(period==='month'){d.setDate(d.getDate()-30);return d;} return new Date(0);}
+function renderAdmin(){
+  if(!state.employee?.permissions.includes('admin')){notify('Manager access required');return go('home');}
+  pageTitle.textContent='Admin Dashboard'; app.appendChild(cloneTemplate('adminTemplate'));
+  const wh=document.getElementById('dashWarehouse'); wh.innerHTML='<option value="all">All Warehouses</option>'+warehouses.map(w=>`<option value="${esc(w)}">${esc(w)}</option>`).join('');
+  const reasons=[...new Set(adjustmentLog.map(a=>a.reason))].sort(); document.getElementById('dashReason').innerHTML='<option value="all">All Reasons</option>'+reasons.map(r=>`<option>${esc(r)}</option>`).join('');
+  const controls=['dashPeriod','dashWarehouse','dashReason','dashSearch']; controls.forEach(id=>{const el=document.getElementById(id); el.addEventListener(id==='dashSearch'?'input':'change',updateAdminDashboard);});
+  document.getElementById('printAdjustReport').onclick=printAdjustmentReport; updateAdminDashboard();
+}
+function getFilteredAdjustments(){
+  const period=document.getElementById('dashPeriod')?.value||'all'; const warehouse=document.getElementById('dashWarehouse')?.value||'all'; const reason=document.getElementById('dashReason')?.value||'all'; const q=(document.getElementById('dashSearch')?.value||'').trim().toLowerCase(); const start=periodStart(period);
+  return adjustmentLog.filter(a=>new Date(a.date)>=start && (warehouse==='all'||a.warehouse===warehouse) && (reason==='all'||a.reason===reason) && (!q||a.sku.toLowerCase().includes(q)||a.employee.toLowerCase().includes(q)||a.name.toLowerCase().includes(q)));
+}
+function updateAdminDashboard(){
+  const rows=getFilteredAdjustments(); const removed=rows.filter(a=>a.difference<0); const added=rows.filter(a=>a.difference>0); const loss=removed.reduce((s,a)=>s+Math.abs(adjustmentValue(a)),0); const addedValue=added.reduce((s,a)=>s+adjustmentValue(a),0); const removedPieces=removed.reduce((s,a)=>s+Math.abs(a.difference),0); const addedPieces=added.reduce((s,a)=>s+a.difference,0);
+  document.getElementById('dashboardKpis').innerHTML=`<div class="dash-kpi"><span class="muted">Adjustments</span><strong>${rows.length}</strong><span class="tiny">transactions</span></div><div class="dash-kpi loss"><span class="muted">Inventory Loss</span><strong>${money(loss)}</strong><span class="tiny">${removedPieces.toLocaleString()} pieces removed</span></div><div class="dash-kpi add"><span class="muted">Inventory Added</span><strong>${money(addedValue)}</strong><span class="tiny">${addedPieces.toLocaleString()} pieces added</span></div><div class="dash-kpi"><span class="muted">Net Cost Change</span><strong>${money(addedValue-loss)}</strong><span class="tiny">at Qoblex cost</span></div>`;
+  const perWh=warehouses.map(w=>{const ar=rows.filter(a=>a.warehouse===w); const l=ar.filter(a=>a.difference<0).reduce((s,a)=>s+Math.abs(adjustmentValue(a)),0); const p=ar.filter(a=>a.difference<0).reduce((s,a)=>s+Math.abs(a.difference),0); return {w,l,p,n:ar.length};}).filter(x=>x.n).sort((a,b)=>b.l-a.l);
+  document.getElementById('warehouseLossGrid').innerHTML=perWh.length?perWh.map(x=>`<button class="warehouse-loss-card" data-wh="${esc(x.w)}"><h4>${esc(x.w)}</h4><div class="loss-value">${money(x.l)}</div><div class="muted">inventory removed at cost</div><div class="mini"><span>${x.p} pieces removed</span><span>${x.n} adjustments</span></div></button>`).join(''):'<div class="muted">No adjustments match these filters.</div>';
+  document.querySelectorAll('.warehouse-loss-card').forEach(b=>b.onclick=()=>{document.getElementById('dashWarehouse').value=b.dataset.wh;updateAdminDashboard();});
+  const sorted=[...rows].sort((a,b)=>new Date(b.date)-new Date(a.date));
+  document.getElementById('adjustmentTable').innerHTML=sorted.length?`<table class="admin-table"><thead><tr><th>Date</th><th>Warehouse</th><th>Employee</th><th>SKU</th><th>Difference</th><th>Reason</th><th>Unit Cost</th><th>Cost Impact</th><th>Review</th></tr></thead><tbody>${sorted.map(a=>{const v=adjustmentValue(a); const flag=Math.abs(v)>=250||a.reason==='Missing'; return `<tr><td>${fmtDate(a.date)}</td><td>${esc(a.warehouse)}</td><td>${esc(a.employee)}</td><td><strong>${esc(a.sku)}</strong><br><span class="tiny">${esc(a.name)}</span></td><td>${a.difference>=0?'+':''}${a.difference}</td><td>${esc(a.reason)}</td><td>$${a.unitCost.toFixed(2)}</td><td class="${v<0?'money-loss':'money-add'}">${v>=0?'+':''}${money(v)}</td><td>${flag?'<span class="flag-badge">Review</span>':'—'}</td></tr>`}).join('')}</tbody></table>`:'<div style="padding:18px" class="muted">No adjustments match these filters.</div>';
+}
+function printAdjustmentReport(){
+  const rows=getFilteredAdjustments(); const loss=rows.filter(a=>a.difference<0).reduce((s,a)=>s+Math.abs(adjustmentValue(a)),0); const add=rows.filter(a=>a.difference>0).reduce((s,a)=>s+adjustmentValue(a),0);
+  let body=`<h1>Bargain Moulding — Inventory Adjustment Report</h1><div class="muted">Printed ${fmtDate(new Date())}</div><div class="meta"><div><strong>Adjustments</strong><br>${rows.length}</div><div><strong>Inventory Loss</strong><br>${money(loss)}</div><div><strong>Inventory Added</strong><br>${money(add)}</div><div><strong>Net Cost Change</strong><br>${money(add-loss)}</div></div><table><thead><tr><th>Date</th><th>Warehouse</th><th>Employee</th><th>SKU</th><th>Difference</th><th>Reason</th><th>Unit Cost</th><th>Cost Impact</th></tr></thead><tbody>${rows.map(a=>`<tr><td>${fmtDate(a.date)}</td><td>${esc(a.warehouse)}</td><td>${esc(a.employee)}</td><td>${esc(a.sku)}</td><td>${a.difference>=0?'+':''}${a.difference}</td><td>${esc(a.reason)}</td><td>$${a.unitCost.toFixed(2)}</td><td>${money(adjustmentValue(a))}</td></tr>`).join('')}</tbody></table>`; printWindow('Inventory Adjustment Report',body);
+}
+
+function esc(v){return String(v??'').replace(/[&<>\"']/g,m=>({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[m]));}
+function fmtDate(d){return new Date(d).toLocaleString([], {month:'short',day:'numeric',year:'numeric',hour:'numeric',minute:'2-digit'});}
+function showCompletion(tx,kind){
+  pageTitle.textContent = kind==='receive'?'Receiving Complete':kind==='transfer'?'Transfer Complete':'Adjustment Complete';
+  const lineRows=(tx.lines||[]).map(l=>`<tr><td><strong>${esc(l.sku||'')}</strong><br><span class="muted">${esc(l.name||'')}</span></td><td>${Number(l.qty||0).toLocaleString()}</td><td>${l.problems?.length?l.problems.map(p=>`${esc(p.type)} (${p.qty})`).join(', '):'—'}</td></tr>`).join('');
+  const details = kind==='receive'
+    ? `<div><strong>PO:</strong> ${esc(tx.po)} &nbsp; <strong>Supplier:</strong> ${esc(tx.supplier)}</div><div><strong>Location:</strong> ${esc(tx.location)} &nbsp; <strong>Status:</strong> ${esc(tx.status)}</div>`
+    : kind==='transfer'
+    ? `<div><strong>Move From:</strong> ${esc(tx.from)}</div><div><strong>Move To:</strong> ${esc(tx.to)}</div><div><strong>Status:</strong> ${esc(tx.status||'Ready to Move')}</div>${tx.note?`<div><strong>Note:</strong> ${esc(tx.note)}</div>`:''}`
+    : `<div><strong>Item:</strong> ${esc(tx.sku)} — ${esc(tx.name)}</div><div><strong>Old:</strong> ${tx.oldQty.toLocaleString()} &nbsp; <strong>New:</strong> ${tx.newQty.toLocaleString()} &nbsp; <strong>Difference:</strong> ${tx.variance>=0?'+':''}${tx.variance.toLocaleString()}</div><div><strong>Reason:</strong> ${esc(tx.reason)}</div><div><strong>Unit Cost:</strong> $${tx.unitCost.toFixed(2)} &nbsp; <strong>Cost Impact:</strong> ${tx.costImpact<0?'-':'+'}$${Math.abs(tx.costImpact).toFixed(2)}</div>${tx.approvedBy?`<div><strong>Approved By:</strong> ${esc(tx.approvedBy)}</div>`:''}`;
+  app.innerHTML=`<section class="completion-card"><div class="completion-icon">✓</div><div class="eyebrow" style="margin-top:14px">FINISHED</div><h2>${kind==='receive'?'Receiving Finished':kind==='transfer'?'Transfer Created':'Adjustment Finished'}</h2><p class="muted">${esc(tx.ref)} · ${fmtDate(tx.date)} · ${esc(tx.employee)}</p><div class="ticket-preview"><div class="ticket-head">${details}</div>${kind==='adjust'?'':`<table><thead><tr><th>Material</th><th>Qty</th><th>Problems</th></tr></thead><tbody>${lineRows}</tbody></table>`}</div><div class="completion-actions"><button id="printTicket" class="print-btn">🖨 Print</button>${kind!=='adjust'?'<button id="printLabels" class="label-btn">▣ Print Labels</button>':''}<button id="doneTx" class="primary">Done</button></div><p class="permission-note">Print opens the normal Windows or iPhone print screen.</p></section>`;
+  document.getElementById('printTicket').onclick=()=>printTicket(tx,kind);
+  const labels=document.getElementById('printLabels'); if(labels) labels.onclick=()=>printLabels(tx,kind);
+  document.getElementById('doneTx').onclick=()=>go(kind==='receive'?'receive':kind==='transfer'?'transfer':'adjust');
+}
+function printWindow(title,body){
+  const w=window.open('','_blank','width=900,height=700');
+  if(!w){notify('Allow pop-ups to print');return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${esc(title)}</title><style>body{font-family:Arial,sans-serif;color:#111;margin:28px}h1{font-size:22px;margin:0 0 4px}.muted{color:#555}.meta{display:grid;grid-template-columns:1fr 1fr;gap:6px 20px;margin:18px 0;padding:14px;border:1px solid #bbb;border-radius:8px}table{width:100%;border-collapse:collapse;margin-top:18px}th,td{border:1px solid #bbb;padding:9px;text-align:left;font-size:13px}th{background:#eee}.sig{margin-top:36px;display:grid;grid-template-columns:1fr 1fr;gap:40px}.line{border-top:1px solid #333;padding-top:5px;margin-top:36px;font-size:12px}@media print{button{display:none}}</style></head><body>${body}<script>window.onload=()=>{setTimeout(()=>window.print(),150)}<\/script></body></html>`);w.document.close();
+}
+function printTicket(tx,kind){
+  let body=`<h1>Bargain Moulding — ${esc(tx.type)} Ticket</h1><div class="muted">${esc(tx.ref)} · ${fmtDate(tx.date)}</div><div class="meta"><div><strong>Employee</strong><br>${esc(tx.employee)}</div><div><strong>Location</strong><br>${esc(tx.location||tx.from||'')}</div>`;
+  if(kind==='receive') body+=`<div><strong>PO</strong><br>${esc(tx.po)}</div><div><strong>Supplier</strong><br>${esc(tx.supplier)}</div><div><strong>Status</strong><br>${esc(tx.status)}</div><div><strong>Good Pieces</strong><br>${tx.total}</div>`;
+  if(kind==='transfer') body+=`<div><strong>Move From</strong><br>${esc(tx.from)}</div><div><strong>Move To</strong><br>${esc(tx.to)}</div><div><strong>Total Pieces</strong><br>${tx.total}</div><div><strong>Status</strong><br>${esc(tx.status||'Ready to Move')}</div>${tx.note?`<div><strong>Note</strong><br>${esc(tx.note)}</div>`:''}`;
+  if(kind==='adjust') body+=`<div><strong>SKU</strong><br>${esc(tx.sku)}</div><div><strong>Reason</strong><br>${esc(tx.reason)}</div><div><strong>Old Quantity</strong><br>${tx.oldQty.toLocaleString()}</div><div><strong>New Quantity</strong><br>${tx.newQty.toLocaleString()}</div><div><strong>Difference</strong><br>${tx.variance>=0?'+':''}${tx.variance.toLocaleString()}</div><div><strong>Unit Cost</strong><br>$${tx.unitCost.toFixed(2)}</div><div><strong>Cost Impact</strong><br>${tx.costImpact<0?'-':'+'}$${Math.abs(tx.costImpact).toFixed(2)}</div>${tx.approvedBy?`<div><strong>Approved By</strong><br>${esc(tx.approvedBy)}</div>`:''}`;
+  body+='</div>';
+  if(kind!=='adjust') body+=`<table><thead><tr><th>SKU</th><th>Description</th><th>Qty</th><th>Problems</th></tr></thead><tbody>${(tx.lines||[]).map(l=>`<tr><td>${esc(l.sku||'')}</td><td>${esc(l.name||'')}</td><td>${Number(l.qty||0).toLocaleString()}</td><td>${l.problems?.length?l.problems.map(p=>`${esc(p.type)} — ${p.qty}${p.note?` — ${esc(p.note)}`:''}${p.photo?' — photo attached':''}`).join('<br>'):'—'}</td></tr>`).join('')}</tbody></table>`;
+  body+=`<div class="sig"><div class="line">Employee Signature</div><div class="line">Manager / Receiver</div></div>`;
+  printWindow(`${tx.type} ${tx.ref}`,body);
+}
+function printLabels(tx,kind){
+  const lines=(tx.lines||[]).filter(l=>Number(l.qty||0)>0);
+  if(!lines.length){notify('No material labels to print');return;}
+  const cards=lines.map(l=>`<div class="label"><div class="brand">BARGAIN MOULDING</div><div class="sku">${esc(l.sku||'')}</div><div class="name">${esc(l.name||'')}</div><div class="barcode">||| || ||| | |||| || |</div><div class="foot">${kind==='receive'?`PO ${esc(tx.po)}`:`${esc(tx.from)} → ${esc(tx.to)}`} · Qty ${Number(l.qty||0).toLocaleString()}</div></div>`).join('');
+  const w=window.open('','_blank','width=900,height=700'); if(!w){notify('Allow pop-ups to print');return;}
+  w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Material Labels</title><style>@page{margin:.35in}body{font-family:Arial,sans-serif;margin:0}.labels{display:grid;grid-template-columns:1fr 1fr;gap:12px}.label{border:2px solid #111;border-radius:8px;padding:14px;min-height:165px;break-inside:avoid}.brand{font-size:11px;font-weight:700;letter-spacing:.08em}.sku{font-size:26px;font-weight:900;margin-top:8px}.name{font-size:13px;margin:4px 0 12px}.barcode{font-family:monospace;font-size:28px;letter-spacing:2px;white-space:nowrap;overflow:hidden}.foot{font-size:11px;margin-top:8px}@media print{.labels{gap:8px}}</style></head><body><div class="labels">${cards}</div><script>window.onload=()=>{setTimeout(()=>window.print(),150)}<\/script></body></html>`);w.document.close();
+}
+
+function notify(msg){toast.textContent=msg;toast.classList.add('show');setTimeout(()=>toast.classList.remove('show'),1800);}
+init();
+
+</script>
+</body>
+</html>
