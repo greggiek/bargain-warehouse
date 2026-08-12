@@ -49,11 +49,12 @@
     try{document.body.classList.toggle('bm-login',!state?.employee||state?.route==='login'||state?.route==='clock');}catch(e){}
     sidebar.querySelectorAll('[data-bm-route]').forEach(btn=>{
       const route=btn.dataset.bmRoute;
-      btn.classList.toggle('active',typeof state!=='undefined'&&state.route===route);
+      const invOverview=route==='inventory-overview';
+      btn.classList.toggle('active',invOverview?document.getElementById('inventoryOverview')?.classList.contains('active'):typeof state!=='undefined'&&state.route===route);
       let allowed=true;
-      try{allowed=route==='home'||state.employee?.permissions?.includes(route)||route==='admin'&&state.employee?.permissions?.includes('admin')}catch(e){}
+      try{allowed=route==='home'||state.employee?.permissions?.includes(route)||route==='admin'&&state.employee?.permissions?.includes('admin')||invOverview&&state.employee?.permissions?.includes('admin')}catch(e){}
       btn.style.display=allowed?'':'none';
-      btn.onclick=()=>{try{if(state.clockedIn)go(route)}catch(e){}};
+      if(!invOverview)btn.onclick=()=>{try{if(state.clockedIn)go(route)}catch(e){}};
     });
   }
   sidebar.querySelector('#bmHome').onclick=()=>{try{if(state.clockedIn)go('home')}catch(e){}};
