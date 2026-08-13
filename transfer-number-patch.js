@@ -27,6 +27,17 @@
       addMore.onclick=()=>{const input=document.getElementById('transferSku');if(input){input.value='';input.focus();input.scrollIntoView({behavior:'smooth',block:'center'});notify('Search or scan the next item')}};
       items.insertAdjacentElement('afterend',addMore);
     }
+    const finish=document.getElementById('createTransfer');
+    if(finish){
+      const save=document.createElement('button');save.id='saveTransferDraft';save.type='button';save.className='secondary';save.textContent='Save Draft';
+      finish.insertAdjacentElement('beforebegin',save);
+      save.onclick=async()=>{
+        if(!state.transferItems.length)return notify('Add at least one transfer line before saving');
+        const token=await window.bmGoogleAuth.accessToken();if(!token)return notify('Your Google session expired. Refresh and sign in again.');
+        save.disabled=true;const prior=save.textContent;save.textContent='Saving…';
+        try{const response=await fetch('/api/warehouse?action=save-transfer',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({transferNumber:pendingTransferNumber,from:state.location,to:document.getElementById('transferTo').value,note:document.getElementById('transferNote').value,lines:state.transferItems.map(item=>({sku:item.sku,name:item.name,barcode:item.barcode||item.sku,qty:item.qty}))})}),data=await response.json();if(!response.ok)throw new Error(data.error||'Could not save transfer');save.textContent='✓ Draft Saved';notify(`${pendingTransferNumber} saved`);setTimeout(()=>{if(document.body.contains(save)){save.textContent=prior;save.disabled=false}},1800)}catch(error){notify(error.message);save.textContent=prior;save.disabled=false}
+      };
+    }
   };
 
   const originalShowCompletion = showCompletion;
