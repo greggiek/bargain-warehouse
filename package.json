@@ -1,0 +1,7 @@
+{
+  "name": "bargain-warehouse",
+  "private": true,
+  "dependencies": {
+    "bcryptjs": "3.0.3"
+  }
+}

@@ -8,7 +8,8 @@
       fetch('./bin-location-patch.js',{cache:'no-store'}).then(r=>r.text()),
       fetch('./bm-time-ui-patch.js',{cache:'no-store'}).then(r=>r.text()),
       fetch('./qoblex-live-data-patch.js',{cache:'no-store'}).then(r=>r.text()),
-      fetch('./inventory-overview-patch.js',{cache:'no-store'}).then(r=>r.text())
+      fetch('./inventory-overview-patch.js',{cache:'no-store'}).then(r=>r.text()),
+      fetch('./warehouse-auth-patch.js',{cache:'no-store'}).then(r=>r.text())
     ]);
     document.open();document.write(html);document.close();
     for(const code of scripts){const s=document.createElement('script');s.textContent=code;document.body.appendChild(s)}
