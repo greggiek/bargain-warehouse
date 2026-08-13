@@ -1,4 +1,6 @@
 module.exports = async function (req, res) {
+  const API_VERSION = '2026-07';
+
   const stores = [
     {
       key: 'store_1',
@@ -16,33 +18,36 @@ module.exports = async function (req, res) {
     }
   ];
 
-  function cleanDomain(v) {
-    return (v || '')
+  function cleanDomain(value) {
+    return String(value || '')
       .replace(/^https?:\/\//, '')
-      .replace(/\/$/, '');
+      .replace(/\/+$/, '');
   }
 
-  async function getToken(store) {
+  async function getAccessToken(store) {
     const shop = cleanDomain(store.domain);
 
     if (!shop || !store.clientId || !store.clientSecret) {
       throw new Error(`${store.key}: missing Shopify environment variables`);
     }
 
-    const r = await fetch(`https://${shop}/admin/oauth/access_token`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/x-www-form-urlencoded',
-        Accept: 'application/json'
-      },
-      body: new URLSearchParams({
-        grant_type: 'client_credentials',
-        client_id: store.clientId,
-        client_secret: store.clientSecret
-      })
-    });
+    const response = await fetch(
+      `https://${shop}/admin/oauth/access_token`,
+      {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/x-www-form-urlencoded',
+          Accept: 'application/json'
+        },
+        body: new URLSearchParams({
+          grant_type: 'client_credentials',
+          client_id: store.clientId,
+          client_secret: store.clientSecret
+        })
+      }
+    );
 
-    const text = await r.text();
+    const text = await response.text();
 
     let data;
     try {
@@ -51,9 +56,9 @@ module.exports = async function (req, res) {
       data = null;
     }
 
-    if (!r.ok || !data?.access_token) {
+    if (!response.ok || !data?.access_token) {
       throw new Error(
-        `${store.key}: token request failed (${r.status}) ${
+        `${store.key}: token request failed (${response.status}) ${
           data?.error_description || data?.error || ''
         }`
       );
@@ -65,9 +70,9 @@ module.exports = async function (req, res) {
     };
   }
 
-  async function gql(shop, token, query, variables = {}) {
-    const r = await fetch(
-      `https://${shop}/admin/api/2026-07/graphql.json`,
+  async function graphql(shop, token, query, variables = {}) {
+    const response = await fetch(
+      `https://${shop}/admin/api/${API_VERSION}/graphql.json`,
       {
         method: 'POST',
         headers: {
@@ -75,41 +80,45 @@ module.exports = async function (req, res) {
           Accept: 'application/json',
           'X-Shopify-Access-Token': token
         },
-        body: JSON.stringify({ query, variables })
+        body: JSON.stringify({
+          query,
+          variables
+        })
       }
     );
 
-    const text = await r.text();
+    const text = await response.text();
 
-    let data;
+    let payload;
     try {
-      data = JSON.parse(text);
+      payload = JSON.parse(text);
     } catch {
-      data = null;
+      payload = null;
     }
 
-    if (!r.ok || !data) {
-      throw new Error(`GraphQL request failed (${r.status})`);
-    }
-
-    if (data.errors?.length) {
+    if (!response.ok || !payload) {
       throw new Error(
-        data.errors.map(e => e.message).join('; ')
+        `Shopify GraphQL request failed (${response.status})`
       );
     }
 
-    return data.data;
+    if (payload.errors?.length) {
+      throw new Error(
+        payload.errors.map(error => error.message).join('; ')
+      );
+    }
+
+    return payload.data;
   }
 
-  async function loadStore(store) {
-    const { shop, token } = await getToken(store);
-
-    const metaQuery = `
-      query BMShopifyMeta {
+  async function loadStoreMeta(shop, token) {
+    const query = `
+      query BMStoreMeta {
         shop {
           name
           myshopifyDomain
         }
+
         locations(first: 100) {
           nodes {
             id
@@ -120,44 +129,62 @@ module.exports = async function (req, res) {
       }
     `;
 
-    const meta = await gql(shop, token, metaQuery);
+    return graphql(shop, token, query);
+  }
 
-    const products = [];
+  async function loadProducts(shop, token, store) {
+    const variants = [];
+
     let cursor = null;
     let hasNextPage = true;
-    let pageCount = 0;
+    let page = 0;
 
-    while (hasNextPage && pageCount < 20) {
-      pageCount++;
+    while (hasNextPage && page < 100) {
+      page += 1;
 
       const query = `
         query BMProducts($cursor: String) {
-          products(first: 50, after: $cursor) {
+          products(
+            first: 10
+            after: $cursor
+          ) {
             pageInfo {
               hasNextPage
               endCursor
             }
+
             nodes {
               id
               title
               status
-              variants(first: 100) {
+
+              variants(first: 20) {
                 nodes {
                   id
                   title
                   sku
                   barcode
+
                   inventoryItem {
                     id
                     tracked
-                    inventoryLevels(first: 100) {
+
+                    inventoryLevels(first: 20) {
                       nodes {
                         id
+
                         location {
                           id
                           name
                         }
-                        quantities(names: ["available", "on_hand", "committed"]) {
+
+                        quantities(
+                          names: [
+                            "available"
+                            "on_hand"
+                            "committed"
+                          ]
+                        ) {
                           name
                           quantity
                         }
@@ -171,141 +198,257 @@ module.exports = async function (req, res) {
         }
       `;
 
-      const data = await gql(shop, token, query, { cursor });
+      const data = await graphql(
+        shop,
+        token,
+        query,
+        { cursor }
+      );
 
-      const connection = data.products;
+      const connection = data?.products;
+
+      if (!connection) {
+        throw new Error(`${store.key}: products connection missing`);
+      }
 
       for (const product of connection.nodes || []) {
         for (const variant of product.variants?.nodes || []) {
-          const levels = variant.inventoryItem?.inventoryLevels?.nodes || [];
+          const inventoryLevels =
+            variant.inventoryItem?.inventoryLevels?.nodes || [];
 
-          products.push({
+          variants.push({
             sourceStore: store.key,
             sourceStoreLabel: store.label,
+
             shopifyProductId: product.id,
             shopifyVariantId: variant.id,
-            shopifyInventoryItemId: variant.inventoryItem?.id || null,
+            shopifyInventoryItemId:
+              variant.inventoryItem?.id || null,
+
             product: product.title,
+            productStatus: product.status,
             variant: variant.title,
+
             sku: variant.sku || '',
             barcode: variant.barcode || '',
-            tracked: variant.inventoryItem?.tracked ?? null,
-            inventory: levels.map(level => {
-              const qty = {};
+            tracked: variant.inventoryItem?.tracked ?? false,
 
-              for (const q of level.quantities || []) {
-                qty[q.name] = q.quantity;
+            inventory: inventoryLevels.map(level => {
+              const quantities = {};
+
+              for (const item of level.quantities || []) {
+                quantities[item.name] = item.quantity;
               }
 
               return {
-                shopifyLocationId: level.location?.id || null,
-                locationName: level.location?.name || '',
-                available: qty.available ?? 0,
-                onHand: qty.on_hand ?? 0,
-                committed: qty.committed ?? 0
+                shopifyLocationId:
+                  level.location?.id || null,
+
+                locationName:
+                  level.location?.name || '',
+
+                onHand:
+                  Number(quantities.on_hand || 0),
+
+                available:
+                  Number(quantities.available || 0),
+
+                committed:
+                  Number(quantities.committed || 0)
               };
             })
           });
         }
       }
 
-      hasNextPage = !!connection.pageInfo?.hasNextPage;
-      cursor = connection.pageInfo?.endCursor || null;
+      hasNextPage =
+        Boolean(connection.pageInfo?.hasNextPage);
+
+      cursor =
+        connection.pageInfo?.endCursor || null;
     }
+
+    return variants;
+  }
+
+  async function loadStore(store) {
+    const { shop, token } =
+      await getAccessToken(store);
+
+    const meta =
+      await loadStoreMeta(shop, token);
+
+    const variants =
+      await loadProducts(shop, token, store);
 
     return {
       key: store.key,
       label: store.label,
+
       shop: meta.shop,
-      locations: meta.locations?.nodes || [],
-      variants: products,
-      variantCount: products.length
+
+      locations:
+        meta.locations?.nodes || [],
+
+      variants,
+
+      variantCount:
+        variants.length
     };
   }
 
-  function normalize(storesData) {
-    const map = new Map();
+  function normalize(storeResults) {
+    const skuMap = new Map();
 
-    for (const store of storesData) {
+    for (const store of storeResults) {
       for (const variant of store.variants) {
-        const sku = (variant.sku || '').trim();
+        const sku =
+          String(variant.sku || '').trim();
 
-        if (!sku) continue;
+        if (!sku) {
+          continue;
+        }
 
-        if (!map.has(sku)) {
-          map.set(sku, {
+        if (!skuMap.has(sku)) {
+          skuMap.set(sku, {
             sku,
             product: variant.product,
-            variants: [],
-            locations: [],
+
             totalOnHand: 0,
             totalAvailable: 0,
-            totalCommitted: 0
+            totalCommitted: 0,
+
+            variants: [],
+            locations: []
           });
         }
 
-        const row = map.get(sku);
+        const row =
+          skuMap.get(sku);
 
         row.variants.push({
-          sourceStore: variant.sourceStore,
-          sourceStoreLabel: variant.sourceStoreLabel,
-          shopifyVariantId: variant.shopifyVariantId,
-          barcode: variant.barcode
+          sourceStore:
+            variant.sourceStore,
+
+          sourceStoreLabel:
+            variant.sourceStoreLabel,
+
+          shopifyProductId:
+            variant.shopifyProductId,
+
+          shopifyVariantId:
+            variant.shopifyVariantId,
+
+          shopifyInventoryItemId:
+            variant.shopifyInventoryItemId,
+
+          barcode:
+            variant.barcode || ''
         });
 
-        for (const inv of variant.inventory) {
+        for (const location of variant.inventory) {
           row.locations.push({
-            sourceStore: variant.sourceStore,
-            sourceStoreLabel: variant.sourceStoreLabel,
-            shopifyLocationId: inv.shopifyLocationId,
-            locationName: inv.locationName,
-            onHand: inv.onHand,
-            available: inv.available,
-            committed: inv.committed
+            sourceStore:
+              variant.sourceStore,
+
+            sourceStoreLabel:
+              variant.sourceStoreLabel,
+
+            shopifyLocationId:
+              location.shopifyLocationId,
+
+            locationName:
+              location.locationName,
+
+            onHand:
+              Number(location.onHand || 0),
+
+            available:
+              Number(location.available || 0),
+
+            committed:
+              Number(location.committed || 0)
           });
 
-          row.totalOnHand += Number(inv.onHand || 0);
-          row.totalAvailable += Number(inv.available || 0);
-          row.totalCommitted += Number(inv.committed || 0);
+          row.totalOnHand +=
+            Number(location.onHand || 0);
+
+          row.totalAvailable +=
+            Number(location.available || 0);
+
+          row.totalCommitted +=
+            Number(location.committed || 0);
         }
       }
     }
 
-    return Array.from(map.values()).sort((a, b) =>
-      a.sku.localeCompare(b.sku)
-    );
+    return Array
+      .from(skuMap.values())
+      .sort((a, b) =>
+        a.sku.localeCompare(b.sku)
+      );
   }
 
   try {
-    const results = [];
+    const storeResults = [];
 
     for (const store of stores) {
-      results.push(await loadStore(store));
+      const result =
+        await loadStore(store);
+
+      storeResults.push(result);
     }
 
-    const normalized = normalize(results);
+    const normalized =
+      normalize(storeResults);
 
     return res.status(200).json({
       ok: true,
-      mode: 'READ_ONLY_PREVIEW',
-      writesEnabled: false,
-      stores: results.map(store => ({
-        key: store.key,
-        label: store.label,
-        shop: store.shop,
-        locations: store.locations,
-        variantCount: store.variantCount
-      })),
-      normalizedCount: normalized.length,
+
+      mode:
+        'READ_ONLY_PREVIEW',
+
+      writesEnabled:
+        false,
+
+      stores:
+        storeResults.map(store => ({
+          key:
+            store.key,
+
+          label:
+            store.label,
+
+          shop:
+            store.shop,
+
+          locations:
+            store.locations,
+
+          variantCount:
+            store.variantCount
+        })),
+
+      normalizedCount:
+        normalized.length,
+
       normalized,
-      generatedAt: new Date().toISOString()
+
+      generatedAt:
+        new Date().toISOString()
     });
   } catch (error) {
     return res.status(500).json({
       ok: false,
-      mode: 'READ_ONLY_PREVIEW',
-      writesEnabled: false,
-      error: error.message
+
+      mode:
+        'READ_ONLY_PREVIEW',
+
+      writesEnabled:
+        false,
+
+      error:
+        error.message
     });
   }
 };
