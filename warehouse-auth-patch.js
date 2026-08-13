@@ -80,5 +80,11 @@
       if (data.location) { state.location = data.location; locationSelect.value = data.location; }
       state.route = state.clockedIn ? 'home' : 'clock'; render();
     })
-    .catch(() => {});
+    .catch(() => {
+      state.employee = null;
+      state.clockedIn = false;
+      state.clockInTime = null;
+      state.route = 'login';
+      render();
+    });
 })();
