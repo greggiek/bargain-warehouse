@@ -1,6 +1,8 @@
-<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BM Warehouse</title><style>body{font-family:system-ui;margin:0;background:#f5f7fb;color:#111827}#loading{min-height:100vh;display:grid;place-items:center;font-size:18px;font-weight:700}</style></head><body><div id="loading">Loading BM Warehouse…</div><script>
+<!doctype html><html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>BM Warehouse</title><style>body{font-family:system-ui;margin:0;background:#f5f7fb;color:#111827}#loading{min-height:100vh;display:grid;place-items:center;font-size:18px;font-weight:700}</style></head><body><div id="loading">Loading BM Warehouse…</div><script src="./warehouse-google-auth.js"></script><script>
 (async()=>{
   try{
+    const googleUser=await window.bmGoogleAuth.requireUser();
+    if(!googleUser)return;
     const [html,...scripts]=await Promise.all([
       fetch('./Bargain-Warehouse-Prototype-v3-7-1(1).html',{cache:'no-store'}).then(r=>r.text()),
       fetch('./barcode-print-patch.js',{cache:'no-store'}).then(r=>r.text()),
@@ -8,16 +10,16 @@
       fetch('./bin-location-patch.js',{cache:'no-store'}).then(r=>r.text()),
       fetch('./bm-time-ui-patch.js',{cache:'no-store'}).then(r=>r.text()),
       fetch('./inventory-overview-patch.js',{cache:'no-store'}).then(r=>r.text()),
-      fetch('./purchase-order-create-patch.js',{cache:'no-store'}).then(r=>r.text())
+      fetch('./purchase-order-create-patch.js',{cache:'no-store'}).then(r=>r.text()),
+      fetch('./shopify-catalog-search-patch.js',{cache:'no-store'}).then(r=>r.text())
     ]);
     document.open();document.write(html);document.close();
     for(const code of scripts){const s=document.createElement('script');s.textContent=code;document.body.appendChild(s)}
 
-    // Open the warehouse tools directly while the operational workflows are built.
-    // Authentication and BM Time can be reintroduced after the tools are finalized.
+    // Google Workspace has authenticated the user; BM Time remains separate.
     const openTools=document.createElement('script');
     openTools.textContent=`
-      state.employee={...employees['2468'],name:'Warehouse Tools'};
+      state.employee={...employees['2468'],name:${JSON.stringify(googleUser.user_metadata?.full_name||googleUser.email||'Warehouse User')}};
       state.clockedIn=true;
       state.clockInTime=new Date();
       state.route='home';
