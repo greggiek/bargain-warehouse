@@ -203,8 +203,10 @@ async function createPurchaseOrder(req, res, session) {
   const body = req.body || {}, lines = Array.isArray(body.lines) ? body.lines : [];
   const poNumber = String(body.poNumber || '').trim().toUpperCase();
   const status = body.status === 'open' ? 'open' : 'draft';
+  const shippingCost = Number(body.shippingCost || 0);
   if (!/^PO-[A-Z0-9-]{4,30}$/.test(poNumber)) return res.status(400).json({ ok: false, error: 'Enter a valid PO number.' });
   if (!body.vendorId || !body.destinationLocationId) return res.status(400).json({ ok: false, error: 'Choose a vendor and destination warehouse.' });
+  if (!Number.isFinite(shippingCost) || shippingCost < 0) return res.status(400).json({ ok: false, error: 'Shipping cost cannot be negative.' });
   if (!lines.length) return res.status(400).json({ ok: false, error: 'Add at least one material line.' });
   for (const line of lines) {
     if (!String(line.sku || '').trim() || !(Number(line.orderedQty) > 0)) return res.status(400).json({ ok: false, error: 'Every line needs a SKU and quantity above zero.' });
@@ -217,7 +219,7 @@ async function createPurchaseOrder(req, res, session) {
       body: JSON.stringify({
         po_number: poNumber, vendor_id: body.vendorId, destination_location_id: body.destinationLocationId,
         status, order_date: body.orderDate || new Date().toISOString().slice(0, 10),
-        expected_date: body.expectedDate || null,
+        expected_date: body.expectedDate || null, shipping_cost: shippingCost,
         notes: [String(body.notes || '').trim(), `Created by ${session.name}`].filter(Boolean).join('\n')
       })
     });
