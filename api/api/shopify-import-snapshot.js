@@ -5,7 +5,7 @@
 // SHOPIFY: READ ONLY
 // SUPABASE: WRITES snapshot + sync log
 //
-// Existing Vercel environment variables:
+// Required Vercel env vars:
 //
 // SHOPIFY_STORE_1_DOMAIN
 // SHOPIFY_STORE_1_CLIENT_ID
@@ -31,29 +31,33 @@ const STORES = [
     label: "Bargain Moulding",
     domain: process.env.SHOPIFY_STORE_1_DOMAIN,
     clientId: process.env.SHOPIFY_STORE_1_CLIENT_ID,
-    clientSecret: process.env.SHOPIFY_STORE_1_CLIENT_SECRET,
+    clientSecret: process.env.SHOPIFY_STORE_1_CLIENT_SECRET
   },
   {
     key: "store_2",
     label: "Bargain Moulding CT",
     domain: process.env.SHOPIFY_STORE_2_DOMAIN,
     clientId: process.env.SHOPIFY_STORE_2_CLIENT_ID,
-    clientSecret: process.env.SHOPIFY_STORE_2_CLIENT_SECRET,
-  },
+    clientSecret: process.env.SHOPIFY_STORE_2_CLIENT_SECRET
+  }
 ];
 
 function normalizeDomain(value) {
-  if (!value) return null;
-
-  return String(value)
+  return String(value || "")
     .trim()
     .replace(/^https?:\/\//i, "")
-    .replace(/\/.*$/, "");
+    .replace(/\/+$/, "");
+}
+
+function normalizeSku(value) {
+  return String(value || "")
+    .trim()
+    .toUpperCase();
 }
 
 function quantityValue(quantities, name) {
-  const item = quantities?.find(
-    (q) => q.name === name
+  const item = (quantities || []).find(
+    q => q.name === name
   );
 
   const value = Number(item?.quantity ?? 0);
@@ -63,16 +67,10 @@ function quantityValue(quantities, name) {
     : 0;
 }
 
-function normalizeSku(value) {
-  return String(value || "")
-    .trim()
-    .toUpperCase();
-}
 
-
-// ----------------------------------------------------
+// --------------------------------------------------
 // SHOPIFY AUTH
-// ----------------------------------------------------
+// --------------------------------------------------
 
 async function getShopifyAccessToken(store) {
   const domain = normalizeDomain(store.domain);
@@ -100,18 +98,24 @@ async function getShopifyAccessToken(store) {
     {
       method: "POST",
       headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
+        "Content-Type":
+          "application/x-www-form-urlencoded",
+        Accept:
+          "application/json"
       },
-      body: JSON.stringify({
-        client_id: store.clientId,
-        client_secret: store.clientSecret,
-        grant_type: "client_credentials",
-      }),
+      body: new URLSearchParams({
+        grant_type:
+          "client_credentials",
+        client_id:
+          store.clientId,
+        client_secret:
+          store.clientSecret
+      })
     }
   );
 
-  const text = await response.text();
+  const text =
+    await response.text();
 
   let body;
 
@@ -121,16 +125,18 @@ async function getShopifyAccessToken(store) {
     body = null;
   }
 
-  if (!response.ok) {
+  if (
+    !response.ok ||
+    !body?.access_token
+  ) {
     throw new Error(
-      `${store.label}: Shopify authentication failed ` +
-      `(${response.status}) ${text}`
-    );
-  }
-
-  if (!body?.access_token) {
-    throw new Error(
-      `${store.label}: Shopify returned no access token`
+      `${store.label}: Shopify authentication failed (${response.status}) ` +
+      `${
+        body?.error_description ||
+        body?.error ||
+        text ||
+        ""
+      }`
     );
   }
 
@@ -138,9 +144,9 @@ async function getShopifyAccessToken(store) {
 }
 
 
-// ----------------------------------------------------
+// --------------------------------------------------
 // SHOPIFY GRAPHQL
-// ----------------------------------------------------
+// --------------------------------------------------
 
 async function shopifyGraphQL(
   store,
@@ -148,32 +154,40 @@ async function shopifyGraphQL(
   query,
   variables = {}
 ) {
-  const domain = normalizeDomain(store.domain);
+  const domain =
+    normalizeDomain(store.domain);
 
   const response = await fetch(
     `https://${domain}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,
     {
-      method: "POST",
+      method:
+        "POST",
 
       headers: {
-        "Content-Type": "application/json",
-        Accept: "application/json",
-        "X-Shopify-Access-Token": accessToken,
+        "Content-Type":
+          "application/json",
+        Accept:
+          "application/json",
+        "X-Shopify-Access-Token":
+          accessToken
       },
 
-      body: JSON.stringify({
-        query,
-        variables,
-      }),
+      body:
+        JSON.stringify({
+          query,
+          variables
+        })
     }
   );
 
-  const text = await response.text();
+  const text =
+    await response.text();
 
   let body;
 
   try {
-    body = JSON.parse(text);
+    body =
+      JSON.parse(text);
   } catch {
     body = null;
   }
@@ -193,7 +207,9 @@ async function shopifyGraphQL(
   if (body.errors?.length) {
     throw new Error(
       `${store.label}: Shopify GraphQL error: ` +
-      JSON.stringify(body.errors)
+      body.errors
+        .map(error => error.message)
+        .join("; ")
     );
   }
 
@@ -201,31 +217,26 @@ async function shopifyGraphQL(
 }
 
 
-// ----------------------------------------------------
-// IMPORTANT:
+// --------------------------------------------------
+// LOW-COST INVENTORY QUERY
 //
-// Keep the query deliberately small.
-//
-// We previously hit Shopify's 1000 query-cost ceiling.
-// This fetches only 25 variants per page and only 50
-// inventory levels per variant.
-// ----------------------------------------------------
+// Important:
+// We already hit Shopify's single-query cost limit.
+// This intentionally keeps the request small.
+// --------------------------------------------------
 
 const INVENTORY_QUERY = `
   query WarehouseInventory($cursor: String) {
-
     productVariants(
-      first: 25
+      first: 20
       after: $cursor
     ) {
-
       pageInfo {
         hasNextPage
         endCursor
       }
 
       nodes {
-
         id
         sku
         barcode
@@ -236,13 +247,10 @@ const INVENTORY_QUERY = `
         }
 
         inventoryItem {
-
           id
 
-          inventoryLevels(first: 50) {
-
+          inventoryLevels(first: 10) {
             nodes {
-
               location {
                 id
                 name
@@ -258,7 +266,6 @@ const INVENTORY_QUERY = `
                 name
                 quantity
               }
-
             }
           }
         }
@@ -268,16 +275,18 @@ const INVENTORY_QUERY = `
 `;
 
 
-// ----------------------------------------------------
-// READ ONE SHOPIFY STORE
-// ----------------------------------------------------
+// --------------------------------------------------
+// READ ONE STORE
+// --------------------------------------------------
 
 async function readStoreInventory(
   store,
   syncedAt
 ) {
   const accessToken =
-    await getShopifyAccessToken(store);
+    await getShopifyAccessToken(
+      store
+    );
 
   const rows = [];
 
@@ -287,30 +296,31 @@ async function readStoreInventory(
   while (true) {
     pageNumber += 1;
 
-    const data = await shopifyGraphQL(
-      store,
-      accessToken,
-      INVENTORY_QUERY,
-      {
-        cursor,
-      }
-    );
+    const data =
+      await shopifyGraphQL(
+        store,
+        accessToken,
+        INVENTORY_QUERY,
+        { cursor }
+      );
 
     const variants =
       data?.productVariants;
 
     if (!variants) {
       throw new Error(
-        `${store.label}: no productVariants returned`
+        `${store.label}: productVariants missing`
       );
     }
 
     for (
-      const variant of variants.nodes || []
+      const variant
+      of variants.nodes || []
     ) {
-      const sku = String(
-        variant.sku || ""
-      ).trim();
+      const sku =
+        String(
+          variant.sku || ""
+        ).trim();
 
       if (!sku) {
         continue;
@@ -324,10 +334,14 @@ async function readStoreInventory(
       }
 
       const levels =
-        inventoryItem.inventoryLevels?.nodes || [];
+        inventoryItem
+          .inventoryLevels
+          ?.nodes || [];
 
       for (const level of levels) {
-        if (!level.location?.id) {
+        if (
+          !level.location?.id
+        ) {
           continue;
         }
 
@@ -335,7 +349,6 @@ async function readStoreInventory(
           level.quantities || [];
 
         rows.push({
-
           source_store:
             store.key,
 
@@ -343,7 +356,8 @@ async function readStoreInventory(
             store.label,
 
           shopify_product_id:
-            variant.product?.id || null,
+            variant.product?.id ||
+            null,
 
           shopify_variant_id:
             variant.id,
@@ -355,7 +369,7 @@ async function readStoreInventory(
             level.location.id,
 
           location_name:
-            level.location.name ||
+            level.location?.name ||
             "Unknown Shopify Location",
 
           sku,
@@ -390,7 +404,7 @@ async function readStoreInventory(
             syncedAt,
 
           raw: {
-            store:
+            source_store:
               store.key,
 
             product_id:
@@ -406,20 +420,23 @@ async function readStoreInventory(
             location_id:
               level.location.id,
 
-            quantities,
-          },
+            quantities
+          }
         });
       }
     }
 
     if (
-      !variants.pageInfo?.hasNextPage
+      !variants.pageInfo
+        ?.hasNextPage
     ) {
       break;
     }
 
     cursor =
-      variants.pageInfo.endCursor;
+      variants.pageInfo
+        ?.endCursor ||
+      null;
 
     if (!cursor) {
       throw new Error(
@@ -427,8 +444,9 @@ async function readStoreInventory(
       );
     }
 
-    // Absolute safety valve.
-    if (pageNumber >= 5000) {
+    if (
+      pageNumber >= 5000
+    ) {
       throw new Error(
         `${store.label}: pagination safety limit reached`
       );
@@ -436,47 +454,62 @@ async function readStoreInventory(
   }
 
   return {
-    store: store.key,
-    label: store.label,
+    store:
+      store.key,
+
+    label:
+      store.label,
+
     rows,
-    pages: pageNumber,
+
+    pages:
+      pageNumber
   };
 }
 
 
-// ----------------------------------------------------
+// --------------------------------------------------
 // SUPABASE
-// ----------------------------------------------------
+// --------------------------------------------------
 
-function supabaseBaseUrl() {
-  const value =
+function getSupabaseBaseUrl() {
+  const url =
     process.env.SUPABASE_URL;
 
-  if (!value) {
+  if (!url) {
     throw new Error(
       "Missing SUPABASE_URL"
     );
   }
 
-  return value.replace(/\/$/, "");
+  return String(url)
+    .replace(/\/+$/, "");
 }
 
-function supabaseHeaders(extra = {}) {
-  const key =
+function getSupabaseHeaders(
+  extra = {}
+) {
+  const serviceRoleKey =
     process.env
       .SUPABASE_SERVICE_ROLE_KEY;
 
-  if (!key) {
+  if (!serviceRoleKey) {
     throw new Error(
       "Missing SUPABASE_SERVICE_ROLE_KEY"
     );
   }
 
   return {
-    apikey: key,
-    Authorization: `Bearer ${key}`,
-    "Content-Type": "application/json",
-    ...extra,
+    apikey:
+      serviceRoleKey,
+
+    Authorization:
+      `Bearer ${serviceRoleKey}`,
+
+    "Content-Type":
+      "application/json",
+
+    ...extra
   };
 }
 
@@ -485,14 +518,14 @@ async function supabaseRequest(
   options = {}
 ) {
   const response = await fetch(
-    `${supabaseBaseUrl()}${path}`,
+    `${getSupabaseBaseUrl()}${path}`,
     {
       ...options,
 
       headers:
-        supabaseHeaders(
+        getSupabaseHeaders(
           options.headers || {}
-        ),
+        )
     }
   );
 
@@ -503,20 +536,22 @@ async function supabaseRequest(
 
   if (text) {
     try {
-      body = JSON.parse(text);
+      body =
+        JSON.parse(text);
     } catch {
-      body = text;
+      body =
+        text;
     }
   }
 
   if (!response.ok) {
     throw new Error(
-      `Supabase ${response.status}: ` +
-      (
-        typeof body === "string"
+      `Supabase ${response.status}: ${
+        typeof body ===
+        "string"
           ? body
           : JSON.stringify(body)
-      )
+      }`
     );
   }
 
@@ -524,49 +559,52 @@ async function supabaseRequest(
 }
 
 
-// ----------------------------------------------------
-// SYNC RUN LOG
-// ----------------------------------------------------
+// --------------------------------------------------
+// SYNC RUN LOGGING
+// --------------------------------------------------
 
 async function createSyncRun() {
   const result =
     await supabaseRequest(
       "/rest/v1/shopify_sync_runs",
       {
-        method: "POST",
+        method:
+          "POST",
 
         headers: {
           Prefer:
-            "return=representation",
+            "return=representation"
         },
 
-        body: JSON.stringify({
-          started_at:
-            new Date().toISOString(),
+        body:
+          JSON.stringify({
+            started_at:
+              new Date()
+                .toISOString(),
 
-          mode:
-            "shopify_inventory_snapshot",
+            mode:
+              "shopify_inventory_snapshot",
 
-          success:
-            null,
+            success:
+              null,
 
-          stores_seen:
-            0,
+            stores_seen:
+              0,
 
-          normalized_skus:
-            0,
+            normalized_skus:
+              0,
 
-          snapshot_rows:
-            0,
+            snapshot_rows:
+              0,
 
-          metadata: {
-            api_version:
-              SHOPIFY_API_VERSION,
+            metadata: {
+              api_version:
+                SHOPIFY_API_VERSION,
 
-            shopify_write_back:
-              false,
-          },
-        }),
+              shopify_write_back:
+                false
+            }
+          })
       }
     );
 
@@ -575,7 +613,7 @@ async function createSyncRun() {
 
   if (!id) {
     throw new Error(
-      "Could not create Shopify sync run"
+      "Could not create shopify_sync_runs record"
     );
   }
 
@@ -591,31 +629,30 @@ async function updateSyncRun(
       runId
     )}`,
     {
-      method: "PATCH",
+      method:
+        "PATCH",
 
       headers: {
         Prefer:
-          "return=minimal",
+          "return=minimal"
       },
 
       body:
-        JSON.stringify(values),
+        JSON.stringify(
+          values
+        )
     }
   );
 }
 
 
-// ----------------------------------------------------
+// --------------------------------------------------
 // SNAPSHOT UPSERT
-//
-// Your live table has this unique key:
-//
-// source_store
-// + shopify_variant_id
-// + shopify_location_id
-// ----------------------------------------------------
+// --------------------------------------------------
 
-async function upsertRows(rows) {
+async function upsertSnapshotRows(
+  rows
+) {
   if (!rows.length) {
     return;
   }
@@ -640,29 +677,29 @@ async function upsertRows(rows) {
       "shopify_variant_id," +
       "shopify_location_id",
       {
-        method: "POST",
+        method:
+          "POST",
 
         headers: {
           Prefer:
-            "resolution=merge-duplicates,return=minimal",
+            "resolution=merge-duplicates,return=minimal"
         },
 
         body:
-          JSON.stringify(batch),
+          JSON.stringify(
+            batch
+          )
       }
     );
   }
 }
 
 
-// ----------------------------------------------------
-// REMOVE OLD SNAPSHOT ROWS
-//
-// ONLY run this after the store was read and upserted
-// successfully.
-// ----------------------------------------------------
+// --------------------------------------------------
+// REMOVE STALE SNAPSHOT ROWS
+// --------------------------------------------------
 
-async function deleteOldRows(
+async function deleteOldSnapshotRows(
   storeKey,
   syncedAt
 ) {
@@ -680,27 +717,33 @@ async function deleteOldRows(
   await supabaseRequest(
     path,
     {
-      method: "DELETE",
+      method:
+        "DELETE",
 
       headers: {
         Prefer:
-          "return=minimal",
-      },
+          "return=minimal"
+      }
     }
   );
 }
 
 
-// ----------------------------------------------------
+// --------------------------------------------------
 // SKU COUNT
-// ----------------------------------------------------
+// --------------------------------------------------
 
-function countUniqueSkus(rows) {
-  const set = new Set();
+function countUniqueSkus(
+  rows
+) {
+  const set =
+    new Set();
 
   for (const row of rows) {
     const sku =
-      normalizeSku(row.sku);
+      normalizeSku(
+        row.sku
+      );
 
     if (sku) {
       set.add(sku);
@@ -711,44 +754,53 @@ function countUniqueSkus(rows) {
 }
 
 
-// ----------------------------------------------------
-// OPTIONAL ENDPOINT PROTECTION
-// ----------------------------------------------------
+// --------------------------------------------------
+// OPTIONAL IMPORT SECRET
+// --------------------------------------------------
 
-function authorized(req) {
+function isAuthorized(req) {
   const secret =
-    process.env.IMPORT_SECRET;
+    process.env
+      .IMPORT_SECRET;
 
-  // During initial setup/testing,
-  // IMPORT_SECRET can be omitted.
   if (!secret) {
     return true;
   }
 
-  const authorization =
-    req.headers.authorization;
+  const auth =
+    req.headers
+      ?.authorization ||
+    "";
 
   if (
-    authorization ===
+    auth ===
     `Bearer ${secret}`
   ) {
     return true;
   }
 
   const headerSecret =
-    req.headers["x-import-secret"];
+    req.headers
+      ?.[
+        "x-import-secret"
+      ];
 
   return (
-    headerSecret === secret
+    headerSecret ===
+    secret
   );
 }
 
 
-// ----------------------------------------------------
-// API HANDLER
-// ----------------------------------------------------
+// --------------------------------------------------
+// VERCEL HANDLER
+//
+// IMPORTANT:
+// CommonJS on purpose because this project's
+// existing working Vercel API files use module.exports.
+// --------------------------------------------------
 
-export default async function handler(
+module.exports = async function handler(
   req,
   res
 ) {
@@ -764,19 +816,23 @@ export default async function handler(
     return res
       .status(405)
       .json({
-        ok: false,
+        ok:
+          false,
+
         error:
-          "Method not allowed",
+          "Method not allowed"
       });
   }
 
-  if (!authorized(req)) {
+  if (!isAuthorized(req)) {
     return res
       .status(401)
       .json({
-        ok: false,
+        ok:
+          false,
+
         error:
-          "Unauthorized",
+          "Unauthorized"
       });
   }
 
@@ -784,14 +840,12 @@ export default async function handler(
     Date.now();
 
   const syncedAt =
-    new Date().toISOString();
+    new Date()
+      .toISOString();
 
   let runId = null;
 
   try {
-
-    // Validate configuration.
-
     const missing = [];
 
     for (const store of STORES) {
@@ -815,7 +869,8 @@ export default async function handler(
     }
 
     if (
-      !process.env.SUPABASE_URL
+      !process.env
+        .SUPABASE_URL
     ) {
       missing.push(
         "SUPABASE_URL"
@@ -839,8 +894,6 @@ export default async function handler(
     }
 
 
-    // Start log.
-
     runId =
       await createSyncRun();
 
@@ -849,24 +902,18 @@ export default async function handler(
     const results = [];
 
 
-    // Intentionally sequential.
-    //
-    // We do NOT hammer both Shopify
-    // stores simultaneously.
-
     for (const store of STORES) {
-
       const result =
         await readStoreInventory(
           store,
           syncedAt
         );
 
-      await upsertRows(
+      await upsertSnapshotRows(
         result.rows
       );
 
-      await deleteOldRows(
+      await deleteOldSnapshotRows(
         store.key,
         syncedAt
       );
@@ -891,7 +938,7 @@ export default async function handler(
         skus:
           countUniqueSkus(
             result.rows
-          ),
+          )
       });
     }
 
@@ -906,13 +953,12 @@ export default async function handler(
       startedAt;
 
 
-    // Successful log.
-
     await updateSyncRun(
       runId,
       {
         completed_at:
-          new Date().toISOString(),
+          new Date()
+            .toISOString(),
 
         success:
           true,
@@ -940,8 +986,8 @@ export default async function handler(
             durationMs,
 
           stores:
-            results,
-        },
+            results
+        }
       }
     );
 
@@ -977,13 +1023,12 @@ export default async function handler(
           durationMs,
 
         shopify_write_back:
-          false,
+          false
       });
 
   } catch (error) {
-
     console.error(
-      "Shopify snapshot import failed",
+      "Shopify snapshot import failed:",
       error
     );
 
@@ -993,17 +1038,14 @@ export default async function handler(
         : String(error);
 
 
-    // Try to record failure,
-    // but don't hide original error
-    // if logging itself fails.
-
     if (runId) {
       try {
         await updateSyncRun(
           runId,
           {
             completed_at:
-              new Date().toISOString(),
+              new Date()
+                .toISOString(),
 
             success:
               false,
@@ -1020,13 +1062,13 @@ export default async function handler(
 
               duration_ms:
                 Date.now() -
-                startedAt,
-            },
+                startedAt
+            }
           }
         );
       } catch (logError) {
         console.error(
-          "Could not record failed sync run",
+          "Could not update failed sync run:",
           logError
         );
       }
@@ -1046,7 +1088,7 @@ export default async function handler(
           message,
 
         shopify_write_back:
-          false,
+          false
       });
   }
-}
+};
