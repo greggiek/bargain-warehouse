@@ -5,7 +5,8 @@
     { key: 'bohemia', label: 'Bohemia', locations: ['Bohemia Warehouse'] },
     { key: 'outpost', label: 'Outpost - Ronkonkoma', locations: ['Outpost - Ronkonkoma'] },
     { key: 'riverhead', label: 'Riverhead', locations: ['Riverhead Warehouse'] },
-    { key: 'windham', label: 'Windham', locations: ['730 Windham Rd', 'Annex (Retail) 730'] }
+    { key: 'windham', label: 'Windham', locations: ['730 Windham Rd'] },
+    { key: 'annex', label: 'Annex', locations: ['Annex (Retail) 730'] }
   ];
 
   const css = document.createElement('style');
