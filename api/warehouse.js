@@ -73,6 +73,28 @@ async function login(req, res) {
     if (await bcrypt.compare(pin, employee.pin_hash)) { matched = employee; break; }
   }
   if (!matched) {
+    const managers = await rest(
+      base,
+      key,
+      'time_users?select=id,name,pin_hash,role,location_id,all_locations,active&active=eq.true'
+    );
+    let manager = null;
+    for (const user of managers || []) {
+      if (await bcrypt.compare(pin, user.pin_hash)) { manager = user; break; }
+    }
+    if (manager) {
+      const session = {
+        employeeId: manager.id,
+        name: manager.name,
+        role: 'Manager',
+        permissions: ['receive','transfer','adjust','pickpack','fulfillment','admin'],
+        principalType: 'manager',
+        clockedIn: false,
+        location: null
+      };
+      setSession(res, session);
+      return res.status(200).json({ ok: true, employee: employeeView(session), clockedIn: false });
+    }
     await new Promise(resolve => setTimeout(resolve, 400));
     return res.status(401).json({ ok: false, error: 'PIN not recognized.' });
   }
@@ -85,6 +107,7 @@ async function login(req, res) {
     permissions: manager
       ? ['receive','transfer','adjust','pickpack','fulfillment','admin']
       : ['receive','transfer','adjust','pickpack','fulfillment'],
+    principalType: 'employee',
     clockedIn: false,
     location: null
   };
@@ -106,6 +129,16 @@ async function clock(req, res, session) {
   if (!['clock_in', 'clock_out'].includes(action)) return res.status(400).json({ ok: false, error: 'Invalid clock action.' });
   const timeLocation = CLOCK_LOCATION[warehouseLocation];
   if (!timeLocation) return res.status(400).json({ ok: false, error: 'That location does not have an employee time clock.' });
+  if (session.principalType === 'manager') {
+    const next = { ...session, clockedIn: action === 'clock_in', location: warehouseLocation };
+    setSession(res, next);
+    return res.status(200).json({
+      ok: true,
+      employee: employeeView(next),
+      clockedIn: next.clockedIn,
+      location: next.location
+    });
+  }
   const base = env('NEXT_PUBLIC_SUPABASE_URL'), key = env('SUPABASE_SERVICE_ROLE_KEY');
   const locations = await rest(base, key, `time_locations?select=id,name&name=eq.${encodeURIComponent(timeLocation)}&active=eq.true&limit=1`);
   const location = locations[0];
