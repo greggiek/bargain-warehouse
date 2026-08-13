@@ -20,6 +20,13 @@
       number.innerHTML = `<span>TRANSFER NUMBER</span><strong>${esc(pendingTransferNumber)}</strong><small>Assigned now and printed on all transfer paperwork</small>`;
       heading.appendChild(number);
     }
+    const items=document.getElementById('transferItems');
+    if(items){
+      const addMore=document.createElement('button');
+      addMore.id='addTransferLine';addMore.type='button';addMore.className='secondary add-transfer-line';addMore.textContent='+ Add More Lines';
+      addMore.onclick=()=>{const input=document.getElementById('transferSku');if(input){input.value='';input.focus();input.scrollIntoView({behavior:'smooth',block:'center'});notify('Search or scan the next item')}};
+      items.insertAdjacentElement('afterend',addMore);
+    }
   };
 
   const originalShowCompletion = showCompletion;
@@ -53,6 +60,6 @@
   };
 
   const style = document.createElement('style');
-  style.textContent = `.transfer-number-card{display:grid;gap:3px;margin-top:14px;padding:12px 14px;border:1px solid #99f6e4;border-radius:12px;background:#f0fdfa;width:fit-content}.transfer-number-card span{font-size:11px;font-weight:900;letter-spacing:.1em;color:#0f766e}.transfer-number-card strong{font-size:20px;letter-spacing:.03em}.transfer-number-card small{color:#64748b}`;
+  style.textContent = `.transfer-number-card{display:grid;gap:3px;margin-top:14px;padding:12px 14px;border:1px solid #99f6e4;border-radius:12px;background:#f0fdfa;width:fit-content}.transfer-number-card span{font-size:11px;font-weight:900;letter-spacing:.1em;color:#0f766e}.transfer-number-card strong{font-size:20px;letter-spacing:.03em}.transfer-number-card small{color:#64748b}.add-transfer-line{display:block;margin:12px 0 18px;width:100%;border:1px dashed #94a3b8;background:#f8fafc;color:#0f766e}`;
   document.head.appendChild(style);
 })();
