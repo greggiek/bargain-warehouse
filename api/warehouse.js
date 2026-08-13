@@ -275,6 +275,43 @@ async function createPurchaseOrder(req, res, session) {
   }
 }
 
+const TRANSFER_LOCATION_NAMES = {
+  '336 Bayview': 'Amityville Main',
+  'Bargain Moulding (Bohemia)': 'Bohemia Main',
+  '1133 Old Country (Riverhead)': 'Riverhead Main',
+  '730 Windham Rd': '730 Windham Rd',
+  'Annex Warehouse': 'Annex Warehouse',
+  'Outpost - Ronkonkoma': 'Outpost - Ronkonkoma'
+};
+
+async function saveTransferDraft(req, res, session) {
+  const body=req.body||{},transferNumber=String(body.transferNumber||'').trim().toUpperCase(),lines=Array.isArray(body.lines)?body.lines:[];
+  const fromName=TRANSFER_LOCATION_NAMES[String(body.from||'')],toName=TRANSFER_LOCATION_NAMES[String(body.to||'')];
+  if(!/^TR-\d{8}-\d{9}$/.test(transferNumber))return res.status(400).json({ok:false,error:'Invalid transfer number.'});
+  if(!fromName||!toName||fromName===toName)return res.status(400).json({ok:false,error:'Choose two different warehouse locations.'});
+  if(!lines.length)return res.status(400).json({ok:false,error:'Add at least one transfer line before saving.'});
+  if(lines.some(line=>!String(line.sku||'').trim()||!(Number(line.qty)>0)))return res.status(400).json({ok:false,error:'Every transfer line needs a SKU and quantity.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  const locations=await rest(base,key,`warehouse_locations?select=id,name&name=in.(${encodeURIComponent(fromName)},${encodeURIComponent(toName)})`);
+  const from=locations.find(row=>row.name===fromName),to=locations.find(row=>row.name===toName);
+  if(!from||!to)throw new Error('A warehouse location is not configured in BM Warehouse.');
+  let existing=await rest(base,key,`transfers?select=id&transfer_number=eq.${encodeURIComponent(transferNumber)}&limit=1`),transferId=existing[0]?.id;
+  const transferRow={transfer_number:transferNumber,from_location_id:from.id,to_location_id:to.id,status:'draft',notes:String(body.note||'').trim()||null,created_by_name:session.name,created_by_email:session.email||null,updated_at:new Date().toISOString()};
+  if(transferId){
+    await rest(base,key,`transfers?id=eq.${transferId}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(transferRow)});
+    await rest(base,key,`transfer_lines?transfer_id=eq.${transferId}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
+  }else{
+    const created=await rest(base,key,'transfers?select=id',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify(transferRow)});transferId=created[0].id;
+  }
+  for(const raw of lines){
+    const sku=String(raw.sku).trim().toUpperCase(),name=String(raw.name||sku).trim();
+    let products=await rest(base,key,`products?select=id&sku=eq.${encodeURIComponent(sku)}&limit=1`);
+    if(!products[0])products=await rest(base,key,'products?select=id',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({sku,name,uom:'EA',purchase_price:0})});
+    await rest(base,key,'transfer_lines',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({transfer_id:transferId,product_id:products[0].id,requested_qty:Number(raw.qty)})});
+  }
+  return res.status(200).json({ok:true,transfer:{id:transferId,transferNumber,status:'draft',lineCount:lines.length,savedBy:session.name}});
+}
+
 module.exports = async function (req, res) {
   try {
     const action = String(req.query?.action || req.body?.action || '');
@@ -287,6 +324,7 @@ module.exports = async function (req, res) {
     if (action === 'clock' && req.method === 'POST') return clock(req, res, session);
     if (action === 'inventory' && req.method === 'GET') return inventory(res);
     if (action === 'create-po' && req.method === 'POST') return createPurchaseOrder(req, res, session);
+    if (action === 'save-transfer' && req.method === 'POST') return saveTransferDraft(req, res, session);
     return res.status(404).json({ ok: false, error: 'Unknown action.' });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
