@@ -76,24 +76,38 @@ async function login(req, res) {
     const managers = await rest(
       base,
       key,
-      'time_users?select=id,name,pin_hash,role,location_id,all_locations,active&active=eq.true'
+      'time_users?select=id,name,pin_hash,role,location_id,all_locations,active,time_locations(name)&active=eq.true'
     );
     let manager = null;
     for (const user of managers || []) {
       if (await bcrypt.compare(pin, user.pin_hash)) { manager = user; break; }
     }
     if (manager) {
+      const timeLocation = Array.isArray(manager.time_locations)
+        ? manager.time_locations[0]?.name
+        : manager.time_locations?.name;
+      const managerLocation = {
+        Amityville: '336 Bayview',
+        Bohemia: 'Bargain Moulding (Bohemia)',
+        Riverhead: '1133 Old Country (Riverhead)',
+        Windham: '730 Windham Rd'
+      }[timeLocation] || '336 Bayview';
       const session = {
         employeeId: manager.id,
         name: manager.name,
         role: 'Manager',
         permissions: ['receive','transfer','adjust','pickpack','fulfillment','admin'],
         principalType: 'manager',
-        clockedIn: false,
-        location: null
+        clockedIn: true,
+        location: managerLocation
       };
       setSession(res, session);
-      return res.status(200).json({ ok: true, employee: employeeView(session), clockedIn: false });
+      return res.status(200).json({
+        ok: true,
+        employee: employeeView(session),
+        clockedIn: true,
+        location: managerLocation
+      });
     }
     await new Promise(resolve => setTimeout(resolve, 400));
     return res.status(401).json({ ok: false, error: 'PIN not recognized.' });
