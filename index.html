@@ -8,11 +8,25 @@
       fetch('./bin-location-patch.js',{cache:'no-store'}).then(r=>r.text()),
       fetch('./bm-time-ui-patch.js',{cache:'no-store'}).then(r=>r.text()),
       fetch('./qoblex-live-data-patch.js',{cache:'no-store'}).then(r=>r.text()),
-      fetch('./inventory-overview-patch.js',{cache:'no-store'}).then(r=>r.text()),
-      fetch('./warehouse-auth-patch.js',{cache:'no-store'}).then(r=>r.text())
+      fetch('./inventory-overview-patch.js',{cache:'no-store'}).then(r=>r.text())
     ]);
     document.open();document.write(html);document.close();
     for(const code of scripts){const s=document.createElement('script');s.textContent=code;document.body.appendChild(s)}
+
+    // Open the warehouse tools directly while the operational workflows are built.
+    // Authentication and BM Time can be reintroduced after the tools are finalized.
+    const openTools=document.createElement('script');
+    openTools.textContent=`
+      state.employee={...employees['2468'],name:'Warehouse Tools'};
+      state.clockedIn=true;
+      state.clockInTime=new Date();
+      state.route='home';
+      const accessStyle=document.createElement('style');
+      accessStyle.textContent='#employeeBar,.panel:has(.clock-card){display:none!important}';
+      document.head.appendChild(accessStyle);
+      render();
+    `;
+    document.body.appendChild(openTools);
   }catch(err){document.getElementById('loading').textContent='Could not load BM Warehouse: '+err.message}
 })();
 </script></body></html>
