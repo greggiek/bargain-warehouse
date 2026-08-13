@@ -44,7 +44,7 @@
         <div class="section-head" style="margin-top:22px"><div><div class="eyebrow">MATERIAL</div><h3>PO Lines</h3></div><button id="addPoLine" class="secondary">+ Add Line</button></div>
         <div id="poLines"></div><div id="poTotal" class="po-total">Material: $0.00 · Shipping: $0.00 · PO Total: $0.00</div>
         <div class="po-actions"><button id="savePoDraft" class="secondary">Save Draft</button><button id="openPo" class="success">Save & Open for Receiving</button></div>
-        <p class="permission-note">A BM Time manager PIN is required only when saving.</p></section>`;
+        <p class="permission-note">Your Google Workspace login authorizes this purchase order.</p></section>`;
       document.getElementById('cancelPo').onclick=()=>go('receive');
       document.getElementById('addPoLine').onclick=addLine;
       document.getElementById('savePoDraft').onclick=()=>savePo('draft');
@@ -64,22 +64,14 @@
     return [...document.querySelectorAll('.po-line')].map(row=>({sku:row.querySelector('[data-field=sku]').value.trim(),name:row.querySelector('[data-field=name]').value.trim(),uom:row.querySelector('[data-field=uom]').value,orderedQty:Number(row.querySelector('[data-field=qty]').value),unitCost:Number(row.querySelector('[data-field=cost]').value)})).filter(l=>l.sku||l.name);
   }
   function updateTotal(){const material=collectLines().reduce((s,l)=>s+(l.orderedQty||0)*(l.unitCost||0),0),shipping=Math.max(0,Number(document.getElementById('poShipping')?.value||0)),total=material+shipping;const money=n=>n.toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2});const el=document.getElementById('poTotal');if(el)el.textContent=`Material: $${money(material)} · Shipping: $${money(shipping)} · PO Total: $${money(total)}`}
-  async function managerUnlock() {
-    const pin = window.prompt('Manager approval required. Enter your BM Time manager PIN:');
-    if (!pin) throw new Error('Save cancelled.');
-    const response = await fetch('/api/warehouse?action=login',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({pin})});
-    const data=await response.json(); if(!response.ok) throw new Error(data.error||'Manager PIN not recognized.');
-    if(data.employee?.role!=='Manager') throw new Error('A manager PIN is required.');
-    return data.employee;
-  }
   async function savePo(status) {
     const lines=collectLines();
     if(!document.getElementById('poVendor').value||!document.getElementById('poDestination').value)return notify('Choose a vendor and destination warehouse');
     if(!lines.length||lines.some(l=>!l.sku||!(l.orderedQty>0)))return notify('Every line needs a SKU and quantity');
     const draftBtn=document.getElementById('savePoDraft'),openBtn=document.getElementById('openPo');draftBtn.disabled=openBtn.disabled=true;
     try{
-      await managerUnlock();
-      const response=await fetch('/api/warehouse?action=create-po',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poNumber:document.getElementById('poNumber').value,supplierReferenceNumber:document.getElementById('poSupplierReference').value,vendorId:document.getElementById('poVendor').value,destinationLocationId:document.getElementById('poDestination').value,expectedDate:document.getElementById('poExpected').value||null,shippingCost:Number(document.getElementById('poShipping').value||0),notes:document.getElementById('poNotes').value,status,lines})});
+      const token=await window.bmGoogleAuth.accessToken();if(!token)throw new Error('Your Google session expired. Refresh and sign in again.');
+      const response=await fetch('/api/warehouse?action=create-po',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify({poNumber:document.getElementById('poNumber').value,supplierReferenceNumber:document.getElementById('poSupplierReference').value,vendorId:document.getElementById('poVendor').value,destinationLocationId:document.getElementById('poDestination').value,expectedDate:document.getElementById('poExpected').value||null,shippingCost:Number(document.getElementById('poShipping').value||0),notes:document.getElementById('poNotes').value,status,lines})});
       const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not save PO.');
       app.innerHTML=`<section class="completion-card"><div class="completion-icon">✓</div><div class="eyebrow" style="margin-top:14px">PURCHASE ORDER ${status==='open'?'OPEN':'SAVED'}</div><h2>${esc(data.purchaseOrder.po_number)}</h2><p class="muted">${data.purchaseOrder.lineCount} material line${data.purchaseOrder.lineCount===1?'':'s'} · created by ${esc(data.purchaseOrder.createdBy)}</p><div class="completion-actions"><button id="donePo" class="primary">Back to Receiving</button></div></section>`;
       document.getElementById('donePo').onclick=()=>go('receive');
