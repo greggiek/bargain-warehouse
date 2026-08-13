@@ -12,6 +12,7 @@
       fetch('./inventory-overview-patch.js',{cache:'no-store'}).then(r=>r.text()),
       fetch('./purchase-order-create-patch.js',{cache:'no-store'}).then(r=>r.text()),
       fetch('./shopify-catalog-search-patch.js',{cache:'no-store'}).then(r=>r.text())
+      ,fetch('./transfer-number-patch.js',{cache:'no-store'}).then(r=>r.text())
     ]);
     document.open();document.write(html);document.close();
     for(const code of scripts){const s=document.createElement('script');s.textContent=code;document.body.appendChild(s)}
