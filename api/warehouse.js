@@ -183,16 +183,81 @@ async function inventory(res) {
   return res.status(200).json({ ok: true, mode: 'SUPABASE_CACHE', shopifyWritesEnabled: false, normalized: [...map.values()], normalizedCount: map.size, generatedAt });
 }
 
+function requireManager(session, res) {
+  if (session?.role === 'Manager' && session?.permissions?.includes('admin')) return true;
+  res.status(403).json({ ok: false, error: 'A BM Time manager PIN is required to save purchase orders.' });
+  return false;
+}
+
+async function purchaseOrderReference(res) {
+  const base = env('BM_WAREHOUSE_SUPABASE_URL'), key = env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  const [vendors, locations] = await Promise.all([
+    rest(base, key, 'vendors?select=id,code,name&active=eq.true&order=name.asc'),
+    rest(base, key, 'warehouse_locations?select=id,code,name&active=eq.true&order=name.asc')
+  ]);
+  return res.status(200).json({ ok: true, vendors, locations });
+}
+
+async function createPurchaseOrder(req, res, session) {
+  if (!requireManager(session, res)) return;
+  const body = req.body || {}, lines = Array.isArray(body.lines) ? body.lines : [];
+  const poNumber = String(body.poNumber || '').trim().toUpperCase();
+  const status = body.status === 'open' ? 'open' : 'draft';
+  if (!/^PO-[A-Z0-9-]{4,30}$/.test(poNumber)) return res.status(400).json({ ok: false, error: 'Enter a valid PO number.' });
+  if (!body.vendorId || !body.destinationLocationId) return res.status(400).json({ ok: false, error: 'Choose a vendor and destination warehouse.' });
+  if (!lines.length) return res.status(400).json({ ok: false, error: 'Add at least one material line.' });
+  for (const line of lines) {
+    if (!String(line.sku || '').trim() || !(Number(line.orderedQty) > 0)) return res.status(400).json({ ok: false, error: 'Every line needs a SKU and quantity above zero.' });
+  }
+  const base = env('BM_WAREHOUSE_SUPABASE_URL'), key = env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  let purchaseOrder = null;
+  try {
+    const created = await rest(base, key, 'purchase_orders?select=id,po_number,status,created_at', {
+      method: 'POST', headers: { Prefer: 'return=representation' },
+      body: JSON.stringify({
+        po_number: poNumber, vendor_id: body.vendorId, destination_location_id: body.destinationLocationId,
+        status, order_date: body.orderDate || new Date().toISOString().slice(0, 10),
+        expected_date: body.expectedDate || null,
+        notes: [String(body.notes || '').trim(), `Created by ${session.name}`].filter(Boolean).join('\n')
+      })
+    });
+    purchaseOrder = created[0];
+    for (const raw of lines) {
+      const sku = String(raw.sku).trim().toUpperCase(), name = String(raw.name || sku).trim();
+      let products = await rest(base, key, `products?select=id&sku=eq.${encodeURIComponent(sku)}&limit=1`);
+      if (!products[0]) {
+        products = await rest(base, key, 'products?select=id', {
+          method: 'POST', headers: { Prefer: 'return=representation' },
+          body: JSON.stringify({ sku, name, uom: String(raw.uom || 'EA').trim().toUpperCase(), purchase_price: Number(raw.unitCost || 0) })
+        });
+      }
+      await rest(base, key, 'purchase_order_lines', {
+        method: 'POST', headers: { Prefer: 'return=minimal' },
+        body: JSON.stringify({ purchase_order_id: purchaseOrder.id, product_id: products[0].id, ordered_qty: Number(raw.orderedQty), unit_cost: Number(raw.unitCost || 0) })
+      });
+    }
+    return res.status(201).json({ ok: true, purchaseOrder: { ...purchaseOrder, lineCount: lines.length, createdBy: session.name } });
+  } catch (error) {
+    if (purchaseOrder?.id) {
+      await rest(base, key, `purchase_order_lines?purchase_order_id=eq.${purchaseOrder.id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }).catch(() => null);
+      await rest(base, key, `purchase_orders?id=eq.${purchaseOrder.id}`, { method: 'DELETE', headers: { Prefer: 'return=minimal' } }).catch(() => null);
+    }
+    throw error;
+  }
+}
+
 module.exports = async function (req, res) {
   try {
     const action = String(req.query?.action || req.body?.action || '');
     if (action === 'login' && req.method === 'POST') return login(req, res);
     if (action === 'logout' && req.method === 'POST') { clearSession(res); return res.status(200).json({ ok: true }); }
+    if (action === 'po-reference' && req.method === 'GET') return purchaseOrderReference(res);
     const session = sessionFrom(req);
     if (!session) return res.status(401).json({ ok: false, error: 'Sign in required.' });
     if (action === 'session' && req.method === 'GET') return res.status(200).json({ ok: true, employee: employeeView(session), clockedIn: session.clockedIn, location: session.location });
     if (action === 'clock' && req.method === 'POST') return clock(req, res, session);
     if (action === 'inventory' && req.method === 'GET') return inventory(res);
+    if (action === 'create-po' && req.method === 'POST') return createPurchaseOrder(req, res, session);
     return res.status(404).json({ ok: false, error: 'Unknown action.' });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message });
