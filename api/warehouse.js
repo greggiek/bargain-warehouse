@@ -202,9 +202,11 @@ async function createPurchaseOrder(req, res, session) {
   if (!requireManager(session, res)) return;
   const body = req.body || {}, lines = Array.isArray(body.lines) ? body.lines : [];
   const poNumber = String(body.poNumber || '').trim().toUpperCase();
+  const supplierReferenceNumber = String(body.supplierReferenceNumber || '').trim();
   const status = body.status === 'open' ? 'open' : 'draft';
   const shippingCost = Number(body.shippingCost || 0);
   if (!/^PO-[A-Z0-9-]{4,30}$/.test(poNumber)) return res.status(400).json({ ok: false, error: 'Enter a valid PO number.' });
+  if (supplierReferenceNumber.length > 100) return res.status(400).json({ ok: false, error: 'Supplier reference number must be 100 characters or fewer.' });
   if (!body.vendorId || !body.destinationLocationId) return res.status(400).json({ ok: false, error: 'Choose a vendor and destination warehouse.' });
   if (!Number.isFinite(shippingCost) || shippingCost < 0) return res.status(400).json({ ok: false, error: 'Shipping cost cannot be negative.' });
   if (!lines.length) return res.status(400).json({ ok: false, error: 'Add at least one material line.' });
@@ -217,7 +219,8 @@ async function createPurchaseOrder(req, res, session) {
     const created = await rest(base, key, 'purchase_orders?select=id,po_number,status,created_at', {
       method: 'POST', headers: { Prefer: 'return=representation' },
       body: JSON.stringify({
-        po_number: poNumber, vendor_id: body.vendorId, destination_location_id: body.destinationLocationId,
+        po_number: poNumber, supplier_reference_number: supplierReferenceNumber || null,
+        vendor_id: body.vendorId, destination_location_id: body.destinationLocationId,
         status, order_date: body.orderDate || new Date().toISOString().slice(0, 10),
         expected_date: body.expectedDate || null, shipping_cost: shippingCost,
         notes: [String(body.notes || '').trim(), `Created by ${session.name}`].filter(Boolean).join('\n')

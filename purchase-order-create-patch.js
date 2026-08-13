@@ -34,6 +34,7 @@
       app.innerHTML = `<section class="panel po-create"><div class="section-head"><div><div class="eyebrow">RECEIVING</div><h2>New Purchase Order</h2></div><button id="cancelPo" class="secondary">Back</button></div>
         <div class="po-head-grid">
           <label>PO Number<input id="poNumber" value="${esc(defaultPoNumber())}"></label>
+          <label>Supplier Reference Number<input id="poSupplierReference" maxlength="100" placeholder="Vendor confirmation / order number"></label>
           <label>Vendor<select id="poVendor"><option value="">Choose vendor…</option>${ref.vendors.map(v=>`<option value="${v.id}">${esc(v.name)}</option>`).join('')}</select></label>
           <label>Destination Warehouse<select id="poDestination"><option value="">Choose warehouse…</option>${ref.locations.map(l=>`<option value="${l.id}">${esc(l.name)}</option>`).join('')}</select></label>
           <label>Expected Date<input id="poExpected" type="date"></label>
@@ -78,7 +79,7 @@
     const draftBtn=document.getElementById('savePoDraft'),openBtn=document.getElementById('openPo');draftBtn.disabled=openBtn.disabled=true;
     try{
       await managerUnlock();
-      const response=await fetch('/api/warehouse?action=create-po',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poNumber:document.getElementById('poNumber').value,vendorId:document.getElementById('poVendor').value,destinationLocationId:document.getElementById('poDestination').value,expectedDate:document.getElementById('poExpected').value||null,shippingCost:Number(document.getElementById('poShipping').value||0),notes:document.getElementById('poNotes').value,status,lines})});
+      const response=await fetch('/api/warehouse?action=create-po',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poNumber:document.getElementById('poNumber').value,supplierReferenceNumber:document.getElementById('poSupplierReference').value,vendorId:document.getElementById('poVendor').value,destinationLocationId:document.getElementById('poDestination').value,expectedDate:document.getElementById('poExpected').value||null,shippingCost:Number(document.getElementById('poShipping').value||0),notes:document.getElementById('poNotes').value,status,lines})});
       const data=await response.json();if(!response.ok)throw new Error(data.error||'Could not save PO.');
       app.innerHTML=`<section class="completion-card"><div class="completion-icon">✓</div><div class="eyebrow" style="margin-top:14px">PURCHASE ORDER ${status==='open'?'OPEN':'SAVED'}</div><h2>${esc(data.purchaseOrder.po_number)}</h2><p class="muted">${data.purchaseOrder.lineCount} material line${data.purchaseOrder.lineCount===1?'':'s'} · created by ${esc(data.purchaseOrder.createdBy)}</p><div class="completion-actions"><button id="donePo" class="primary">Back to Receiving</button></div></section>`;
       document.getElementById('donePo').onclick=()=>go('receive');
