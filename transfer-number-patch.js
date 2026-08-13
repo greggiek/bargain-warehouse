@@ -44,7 +44,12 @@
       };
       pendingTransferNumber = null;
     }
-    return originalShowCompletion(tx, kind);
+    const result=originalShowCompletion(tx, kind);
+    if(kind==='transfer'){
+      const print=document.getElementById('printTicket');
+      if(print)print.textContent='🖨 Print Transfer';
+    }
+    return result;
   };
 
   const style = document.createElement('style');
