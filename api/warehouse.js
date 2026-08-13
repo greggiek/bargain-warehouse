@@ -61,6 +61,30 @@ function employeeView(session) {
   return { id: session.employeeId, name: session.name, role: session.role, permissions: session.permissions };
 }
 
+async function googleSession(req) {
+  const bearer = String(req.headers.authorization || '');
+  if (!bearer.startsWith('Bearer ')) return null;
+  const base = env('BM_WAREHOUSE_SUPABASE_URL');
+  const key = env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  const response = await fetch(`${base.replace(/\/+$/, '')}/auth/v1/user`, {
+    headers: { apikey: key, Authorization: bearer, Accept: 'application/json' }
+  });
+  if (!response.ok) return null;
+  const user = await response.json();
+  const email = String(user.email || '').trim().toLowerCase();
+  if (email.split('@')[1] !== 'bargainmoulding.com') return null;
+  return {
+    employeeId: user.id,
+    name: user.user_metadata?.full_name || email,
+    email,
+    role: 'Manager',
+    permissions: ['receive','transfer','adjust','pickpack','fulfillment','admin'],
+    principalType: 'google_workspace',
+    clockedIn: true,
+    location: null
+  };
+}
+
 async function login(req, res) {
   if (rateLimited(req)) return res.status(429).json({ ok: false, error: 'Too many attempts. Wait 10 minutes.' });
   const pin = String(req.body?.pin || '');
@@ -185,7 +209,7 @@ async function inventory(res) {
 
 function requireManager(session, res) {
   if (session?.role === 'Manager' && session?.permissions?.includes('admin')) return true;
-  res.status(403).json({ ok: false, error: 'A BM Time manager PIN is required to save purchase orders.' });
+  res.status(403).json({ ok: false, error: 'Manager Google Workspace access is required to save purchase orders.' });
   return false;
 }
 
@@ -257,7 +281,7 @@ module.exports = async function (req, res) {
     if (action === 'login' && req.method === 'POST') return login(req, res);
     if (action === 'logout' && req.method === 'POST') { clearSession(res); return res.status(200).json({ ok: true }); }
     if (action === 'po-reference' && req.method === 'GET') return purchaseOrderReference(res);
-    const session = sessionFrom(req);
+    const session = await googleSession(req) || sessionFrom(req);
     if (!session) return res.status(401).json({ ok: false, error: 'Sign in required.' });
     if (action === 'session' && req.method === 'GET') return res.status(200).json({ ok: true, employee: employeeView(session), clockedIn: session.clockedIn, location: session.location });
     if (action === 'clock' && req.method === 'POST') return clock(req, res, session);
