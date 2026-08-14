@@ -29,7 +29,7 @@ async function ordersForStore(store){
     if(!connection?.pageInfo?.hasNextPage||!connection.pageInfo.endCursor)break;
     after=connection.pageInfo.endCursor;
   }
-  return orders.filter(order=>order.displayFulfillmentStatus!=='FULFILLED').map(order=>mapOrder(store,order))
+  return orders.filter(order=>order.displayFulfillmentStatus==='UNFULFILLED').map(order=>mapOrder(store,order))
 }
 
 module.exports=async function(req,res){res.setHeader('Cache-Control','private, max-age=20');try{const user=await authorizedUser(req);if(!user)return res.status(401).json({ok:false,error:'Sign in with your Bargain Moulding Google account.'});const settled=await Promise.allSettled(STORES.map(ordersForStore)),orders=settled.flatMap(result=>result.status==='fulfilled'?result.value:[]),warnings=settled.filter(result=>result.status==='rejected').map(result=>result.reason.message);if(!orders.length&&warnings.length===STORES.length)throw new Error(warnings.join('; '));return res.status(200).json({ok:true,mode:'SHOPIFY_READ_ONLY_ORDERS',writesEnabled:false,orders,counts:{willcall:orders.filter(order=>order.bucket==='willcall').length,delivery:orders.filter(order=>order.bucket==='delivery').length,review:orders.filter(order=>order.bucket==='review').length},warnings})}catch(error){return res.status(500).json({ok:false,mode:'SHOPIFY_READ_ONLY_ORDERS',writesEnabled:false,error:error.message})}}
