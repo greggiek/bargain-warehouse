@@ -6,6 +6,9 @@ const MAX_AGE = 60 * 60 * 12;
 const attempts = new Map();
 const LOGISTICS_COORDINATORS = new Set(['greg@bargainmoulding.com','edwin@bargainmoulding.com','justin@bargainmoulding.com','matt@bargainmoulding.com']);
 const WAREHOUSE_MANAGERS = new Set(['evener.umanzor@bargainmoulding.com']);
+const MANAGER_WAREHOUSE_ASSIGNMENTS = new Map([
+  ['evener.umanzor@bargainmoulding.com', ['730 Windham Rd']]
+]);
 
 function jsonHeaders(key) {
   return { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json', 'Content-Type': 'application/json' };
@@ -60,8 +63,10 @@ async function rest(base, key, path, options = {}) {
   return data;
 }
 function employeeView(session) {
-  return { id: session.employeeId, name: session.name, role: session.role, permissions: session.permissions };
+  return { id: session.employeeId, name: session.name, role: session.role, permissions: session.permissions, allowedLocations: session.allowedLocations || null };
 }
+function allowedLocations(session){return Array.isArray(session?.allowedLocations)&&session.allowedLocations.length?session.allowedLocations:null}
+function canAccessLocation(session,location){const allowed=allowedLocations(session);return !allowed||allowed.includes(String(location||''))}
 
 async function googleSession(req) {
   const bearer = String(req.headers.authorization || '');
@@ -76,6 +81,7 @@ async function googleSession(req) {
   const email = String(user.email || '').trim().toLowerCase();
   const coordinator=LOGISTICS_COORDINATORS.has(email),manager=WAREHOUSE_MANAGERS.has(email);
   if (!coordinator&&!manager) return null;
+  const assignedLocations=coordinator?null:(MANAGER_WAREHOUSE_ASSIGNMENTS.get(email)||[]);
   return {
     employeeId: user.id,
     name: user.user_metadata?.full_name || email,
@@ -85,7 +91,8 @@ async function googleSession(req) {
     jobTitle: coordinator?'Logistics Coordinator':'Warehouse Manager',
     principalType: 'google_workspace',
     clockedIn: true,
-    location: null
+    location: assignedLocations?.[0]||null,
+    allowedLocations: assignedLocations
   };
 }
 
@@ -197,11 +204,13 @@ async function clock(req, res, session) {
   return res.status(200).json({ ok: true, employee: employeeView(next), clockedIn: next.clockedIn, location: next.location });
 }
 
-async function inventory(res) {
+async function inventory(res,session) {
   const base = env('BM_WAREHOUSE_SUPABASE_URL'), key = env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
   const snapshot = await rest(base, key, 'shopify_inventory_snapshot?select=sku,product_name,location_name,on_hand,synced_at&order=sku.asc');
   const map = new Map(); let generatedAt = null;
+  const assigned=allowedLocations(session);
   for (const row of snapshot) {
+    if(assigned&&!assigned.includes(String(row.location_name||'')))continue;
     const sku = String(row.sku || '').trim(); if (!sku) continue;
     if (!map.has(sku)) map.set(sku, { sku, product: row.product_name || '', totalOnHand: 0, locations: [] });
     const item = map.get(sku), onHand = Number(row.on_hand || 0);
@@ -251,6 +260,10 @@ async function receivePurchaseOrder(req,res,session){
   const received=lines.map(line=>({sku:String(line.sku||'').trim().toUpperCase(),qty:Number(line.qty||0)})).filter(line=>line.sku&&line.qty>0);
   if(!received.length)return res.status(400).json({ok:false,error:'Enter at least one received quantity.'});
   const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  const poRows=await rest(base,key,`purchase_orders?select=id,warehouse_locations(name)&po_number=eq.${encodeURIComponent(poNumber)}&limit=1`);
+  if(!poRows[0])return res.status(404).json({ok:false,error:'Purchase order not found.'});
+  const destination=one(poRows[0].warehouse_locations)?.name||'';
+  if(!canAccessLocation(session,destination))return res.status(403).json({ok:false,error:`This purchase order belongs to ${destination||'another warehouse'}.`});
   const result=await rest(base,key,'rpc/receive_purchase_order',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({p_po_number:poNumber,p_lines:received,p_employee_name:session.name,p_employee_email:session.email||null})});
   const value=Array.isArray(result)?result[0]:result;
   await writeActivity(session,{actionType:'PO_RECEIVED',documentType:'purchase_order',documentNumber:poNumber,warehouse:String(body.warehouse||''),description:`Received ${received.reduce((sum,line)=>sum+line.qty,0)} pieces on ${poNumber}`,status:value?.status||'partial',metadata:{lines:received,costUpdates:value?.cost_updates||[]}});
@@ -363,19 +376,21 @@ async function saveTransferDraft(req, res, session) {
 function one(value){return Array.isArray(value)?value[0]:value}
 const APP_LOCATION_NAMES={'Amityville Main':'336 Bayview','Bohemia Main':'Bargain Moulding (Bohemia)','Riverhead Main':'1133 Old Country (Riverhead)'};
 
-async function waitingPurchaseOrders(res){
+async function waitingPurchaseOrders(res,session){
   const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
   const rows=await rest(base,key,'purchase_orders?select=id,po_number,status,expected_date,supplier_reference_number,vendors(name),warehouse_locations(name),purchase_order_lines(id,ordered_qty,received_qty,products(name,sku))&status=in.(open,partial)&order=created_at.asc');
-  return res.status(200).json({ok:true,purchaseOrders:rows.map(row=>({
+  const visible=rows.filter(row=>canAccessLocation(session,one(row.warehouse_locations)?.name||''));
+  return res.status(200).json({ok:true,purchaseOrders:visible.map(row=>({
     id:row.id,ref:row.po_number,poNumber:row.po_number,status:row.status,supplier:one(row.vendors)?.name||'Unknown vendor',shipTo:one(row.warehouse_locations)?.name||'',supplierRef:row.supplier_reference_number||'',expectedDate:row.expected_date||'',
     lines:(row.purchase_order_lines||[]).map(line=>{const product=one(line.products)||{};return{id:line.id,sku:product.sku||'',name:product.name||product.sku||'',barcode:product.barcode||product.sku||'',ordered:Number(line.ordered_qty||0),received:Number(line.received_qty||0)}})
   }))});
 }
 
-async function waitingTransfers(res){
+async function waitingTransfers(res,session){
   const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
   const rows=await rest(base,key,'transfers?select=id,transfer_number,status,notes,created_by_name,updated_at,from:warehouse_locations!transfers_from_location_id_fkey(name),to:warehouse_locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_qty,shipped_qty,received_qty,products(name,sku))&status=eq.awaiting_receipt&order=updated_at.asc');
-  return res.status(200).json({ok:true,transfers:rows.map(row=>({
+  const visible=rows.filter(row=>canAccessLocation(session,APP_LOCATION_NAMES[one(row.to)?.name]||one(row.to)?.name||''));
+  return res.status(200).json({ok:true,transfers:visible.map(row=>({
     id:row.id,ref:row.transfer_number,status:'Awaiting Receipt',from:APP_LOCATION_NAMES[one(row.from)?.name]||one(row.from)?.name||'',to:APP_LOCATION_NAMES[one(row.to)?.name]||one(row.to)?.name||'',createdBy:row.created_by_name||'',note:row.notes||'',
     lines:(row.transfer_lines||[]).map(line=>{const product=one(line.products)||{};return{id:line.id,sku:product.sku||'',name:product.name||product.sku||'',barcode:product.barcode||product.sku||'',expected:Number(line.requested_qty||0)}})
   }))});
@@ -391,9 +406,9 @@ module.exports = async function (req, res) {
     if (!session) return res.status(401).json({ ok: false, error: 'Sign in required.' });
     if (action === 'session' && req.method === 'GET') return res.status(200).json({ ok: true, employee: employeeView(session), clockedIn: session.clockedIn, location: session.location });
     if (action === 'clock' && req.method === 'POST') return clock(req, res, session);
-    if (action === 'inventory' && req.method === 'GET') return inventory(res);
-    if (action === 'waiting-pos' && req.method === 'GET') return waitingPurchaseOrders(res);
-    if (action === 'waiting-transfers' && req.method === 'GET') return waitingTransfers(res);
+    if (action === 'inventory' && req.method === 'GET') return inventory(res,session);
+    if (action === 'waiting-pos' && req.method === 'GET') return waitingPurchaseOrders(res,session);
+    if (action === 'waiting-transfers' && req.method === 'GET') return waitingTransfers(res,session);
     if (action === 'activity' && req.method === 'GET') return activityEvents(req,res,session);
     if (action === 'log-activity' && req.method === 'POST') return logClientActivity(req,res,session);
     if (action === 'receive-po' && req.method === 'POST') return receivePurchaseOrder(req,res,session);
