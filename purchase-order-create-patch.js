@@ -7,8 +7,20 @@
     const canCreate=state.employee?.permissions?.includes('create_docs');
     app.innerHTML=`<section class="panel"><div class="section-head"><div><div class="eyebrow">RECEIVING</div><h2>What are you doing?</h2></div></div><div class="transfer-choice-grid">${canCreate?'<button class="transfer-choice primary-choice" id="createPoBtn"><div><div class="choice-icon">＋</div><h3>Create PO</h3><p class="muted">Build and save a purchase order for incoming material.</p></div><strong>Start ›</strong></button>':''}<button class="transfer-choice check-choice" id="receivePoBtn"><div><div class="choice-icon">▣</div><h3>Receive PO</h3><p class="muted">Open a purchase order and receive incoming material.</p></div><strong>Receive ›</strong></button></div></section>`;
     const create=document.getElementById('createPoBtn');if(create)create.onclick=renderCreatePurchaseOrder;
-    document.getElementById('receivePoBtn').onclick=()=>{pageTitle.textContent='Receive PO';app.innerHTML='';originalRenderReceive()};
+    document.getElementById('receivePoBtn').onclick=()=>{pageTitle.textContent='Receive PO';app.innerHTML='';originalRenderReceive();loadWaitingPurchaseOrders()};
   };
+
+  async function loadWaitingPurchaseOrders(){
+    const host=document.createElement('section');host.className='panel waiting-receipt-panel';host.innerHTML='<div class="section-head"><div><div class="eyebrow">WAITING TO RECEIVE</div><h2>Open Purchase Orders</h2></div></div><p class="muted">Loading open purchase orders…</p>';
+    app.prepend(host);
+    try{
+      const token=await window.bmGoogleAuth.accessToken();if(!token)throw new Error('Your Google session expired. Refresh and sign in again.');
+      const response=await fetch('/api/warehouse?action=waiting-pos',{cache:'no-store',headers:{Authorization:`Bearer ${token}`}}),data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load purchase orders.');
+      for(const po of data.purchaseOrders||[])purchaseOrders[po.ref]=po;
+      host.innerHTML=`<div class="section-head"><div><div class="eyebrow">WAITING TO RECEIVE</div><h2>Open Purchase Orders</h2></div><span class="waiting-count">${(data.purchaseOrders||[]).length} waiting</span></div>${(data.purchaseOrders||[]).length?`<div class="waiting-doc-list">${data.purchaseOrders.map(po=>`<button class="waiting-doc" data-waiting-po="${esc(po.ref)}"><span><strong>${esc(po.ref)}</strong><small>${esc(po.supplier)} → ${esc(po.shipTo)}</small></span><span>${esc(po.status==='partial'?'Partially Received':'Open')} ›</span></button>`).join('')}</div>`:'<p class="muted">Nothing is waiting to be received.</p>'}`;
+      host.querySelectorAll('[data-waiting-po]').forEach(button=>button.onclick=()=>showPO(button.dataset.waitingPo));
+    }catch(error){host.innerHTML=`<div class="eyebrow">WAITING TO RECEIVE</div><h2>Open Purchase Orders</h2><p>${esc(error.message)}</p><button class="secondary" id="retryWaitingPo">Retry</button>`;host.querySelector('#retryWaitingPo').onclick=()=>{host.remove();loadWaitingPurchaseOrders()}}
+  }
 
   const css = document.createElement('style');
   css.textContent = `.po-create{max-width:1000px;margin:auto}.po-head-grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}.po-head-grid label,.po-line label{display:grid;gap:6px;font-weight:700}.po-line{display:grid;grid-template-columns:1fr 2fr 90px 90px 110px auto;gap:10px;align-items:end;border:1px solid var(--line);padding:12px;border-radius:14px;margin:10px 0}.po-actions{display:flex;justify-content:flex-end;gap:10px;margin-top:18px}.po-total{font-size:22px;font-weight:900;text-align:right;margin-top:14px}@media(max-width:760px){.po-head-grid,.po-line{grid-template-columns:1fr}.po-actions{flex-direction:column}.po-actions button{width:100%}}`;

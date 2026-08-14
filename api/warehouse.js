@@ -301,7 +301,8 @@ async function saveTransferDraft(req, res, session) {
   const from=locations.find(row=>row.name===fromName),to=locations.find(row=>row.name===toName);
   if(!from||!to)throw new Error('A warehouse location is not configured in BM Warehouse.');
   let existing=await rest(base,key,`transfers?select=id&transfer_number=eq.${encodeURIComponent(transferNumber)}&limit=1`),transferId=existing[0]?.id;
-  const transferRow={transfer_number:transferNumber,from_location_id:from.id,to_location_id:to.id,status:'draft',notes:String(body.note||'').trim()||null,created_by_name:session.name,created_by_email:session.email||null,updated_at:new Date().toISOString()};
+  const status=body.status==='awaiting_receipt'?'awaiting_receipt':'draft';
+  const transferRow={transfer_number:transferNumber,from_location_id:from.id,to_location_id:to.id,status,notes:String(body.note||'').trim()||null,created_by_name:session.name,created_by_email:session.email||null,updated_at:new Date().toISOString()};
   if(transferId){
     await rest(base,key,`transfers?id=eq.${transferId}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify(transferRow)});
     await rest(base,key,`transfer_lines?transfer_id=eq.${transferId}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
@@ -314,7 +315,28 @@ async function saveTransferDraft(req, res, session) {
     if(!products[0])products=await rest(base,key,'products?select=id',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({sku,name,uom:'EA',purchase_price:0})});
     await rest(base,key,'transfer_lines',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({transfer_id:transferId,product_id:products[0].id,requested_qty:Number(raw.qty)})});
   }
-  return res.status(200).json({ok:true,transfer:{id:transferId,transferNumber,status:'draft',lineCount:lines.length,savedBy:session.name}});
+  return res.status(200).json({ok:true,transfer:{id:transferId,transferNumber,status,lineCount:lines.length,savedBy:session.name}});
+}
+
+function one(value){return Array.isArray(value)?value[0]:value}
+const APP_LOCATION_NAMES={'Amityville Main':'336 Bayview','Bohemia Main':'Bargain Moulding (Bohemia)','Riverhead Main':'1133 Old Country (Riverhead)'};
+
+async function waitingPurchaseOrders(res){
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  const rows=await rest(base,key,'purchase_orders?select=id,po_number,status,expected_date,supplier_reference_number,vendors(name),warehouse_locations(name),purchase_order_lines(id,ordered_qty,received_qty,products(name,sku,barcode))&status=in.(open,partial)&order=created_at.asc');
+  return res.status(200).json({ok:true,purchaseOrders:rows.map(row=>({
+    id:row.id,ref:row.po_number,poNumber:row.po_number,status:row.status,supplier:one(row.vendors)?.name||'Unknown vendor',shipTo:one(row.warehouse_locations)?.name||'',supplierRef:row.supplier_reference_number||'',expectedDate:row.expected_date||'',
+    lines:(row.purchase_order_lines||[]).map(line=>{const product=one(line.products)||{};return{id:line.id,sku:product.sku||'',name:product.name||product.sku||'',barcode:product.barcode||product.sku||'',ordered:Number(line.ordered_qty||0),received:Number(line.received_qty||0)}})
+  }))});
+}
+
+async function waitingTransfers(res){
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  const rows=await rest(base,key,'transfers?select=id,transfer_number,status,notes,created_by_name,updated_at,from:warehouse_locations!transfers_from_location_id_fkey(name),to:warehouse_locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_qty,shipped_qty,received_qty,products(name,sku,barcode))&status=eq.awaiting_receipt&order=updated_at.asc');
+  return res.status(200).json({ok:true,transfers:rows.map(row=>({
+    id:row.id,ref:row.transfer_number,status:'Awaiting Receipt',from:APP_LOCATION_NAMES[one(row.from)?.name]||one(row.from)?.name||'',to:APP_LOCATION_NAMES[one(row.to)?.name]||one(row.to)?.name||'',createdBy:row.created_by_name||'',note:row.notes||'',
+    lines:(row.transfer_lines||[]).map(line=>{const product=one(line.products)||{};return{id:line.id,sku:product.sku||'',name:product.name||product.sku||'',barcode:product.barcode||product.sku||'',expected:Number(line.requested_qty||0)}})
+  }))});
 }
 
 module.exports = async function (req, res) {
@@ -328,6 +350,8 @@ module.exports = async function (req, res) {
     if (action === 'session' && req.method === 'GET') return res.status(200).json({ ok: true, employee: employeeView(session), clockedIn: session.clockedIn, location: session.location });
     if (action === 'clock' && req.method === 'POST') return clock(req, res, session);
     if (action === 'inventory' && req.method === 'GET') return inventory(res);
+    if (action === 'waiting-pos' && req.method === 'GET') return waitingPurchaseOrders(res);
+    if (action === 'waiting-transfers' && req.method === 'GET') return waitingTransfers(res);
     if (action === 'create-po' && req.method === 'POST') return createPurchaseOrder(req, res, session);
     if (action === 'save-transfer' && req.method === 'POST') return saveTransferDraft(req, res, session);
     return res.status(404).json({ ok: false, error: 'Unknown action.' });
