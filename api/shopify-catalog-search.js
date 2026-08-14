@@ -2,7 +2,8 @@ const API_VERSION = '2026-07';
 const tokenCache = new Map();
 const ALLOWED_EMAILS = new Set(['greg@bargainmoulding.com','edwin@bargainmoulding.com','justin@bargainmoulding.com','matt@bargainmoulding.com','evener.umanzor@bargainmoulding.com']);
 
-async function authorizedUser(req){const bearer=String(req.headers.authorization||'');if(!bearer.startsWith('Bearer '))return null;const base=String(process.env.BM_WAREHOUSE_SUPABASE_URL||'').replace(/\/+$/,''),key=process.env.BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY;if(!base||!key)throw new Error('Warehouse authentication is not configured');const response=await fetch(`${base}/auth/v1/user`,{headers:{apikey:key,Authorization:bearer}});if(!response.ok)return null;const user=await response.json(),email=String(user.email||'').trim().toLowerCase();return ALLOWED_EMAILS.has(email)?user:null}
+function serviceBase(value){const base=String(value||'').trim().replace(/\/+$/,'');if(!base)return'';return /^https?:\/\//i.test(base)?base:`https://${base}`}
+async function authorizedUser(req){const bearer=String(req.headers.authorization||'');if(!bearer.startsWith('Bearer '))return null;const base=serviceBase(process.env.BM_WAREHOUSE_SUPABASE_URL),key=process.env.BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY;if(!base||!key)throw new Error('Warehouse authentication is not configured');const response=await fetch(`${base}/auth/v1/user`,{headers:{apikey:key,Authorization:bearer}});if(!response.ok)return null;const user=await response.json(),email=String(user.email||'').trim().toLowerCase();return ALLOWED_EMAILS.has(email)?user:null}
 
 const STORES = [
   { key:'store_1', label:'Bargain Moulding', domain:'SHOPIFY_STORE_1_DOMAIN', clientId:'SHOPIFY_STORE_1_CLIENT_ID', clientSecret:'SHOPIFY_STORE_1_CLIENT_SECRET' },
@@ -33,7 +34,7 @@ function normalize(all){
 }
 async function addCosts(items){
   if(!items.length)return items;
-  const base=String(process.env.BM_WAREHOUSE_SUPABASE_URL||'').replace(/\/+$/,''),key=process.env.BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY;
+  const base=serviceBase(process.env.BM_WAREHOUSE_SUPABASE_URL),key=process.env.BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY;
   if(!base||!key)return items;
   const values=items.map(item=>encodeURIComponent(item.sku)).join(',');
   const response=await fetch(`${base}/rest/v1/products?select=sku,purchase_price,moving_average_cost&sku=in.(${values})`,{headers:{apikey:key,Authorization:`Bearer ${key}`,Accept:'application/json'}});
