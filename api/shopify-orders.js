@@ -16,15 +16,15 @@ function mapOrder(store,order){
   const method=String(order.shippingLine?.title||order.shippingLine?.code||'').trim(),lines=[];
   for(const line of order.lineItems?.nodes||[]){const sku=String(line.sku||'').trim(),remaining=Number(line.unfulfilledQuantity||0);if(!sku||remaining<=0)continue;const existing=lines.find(item=>item.sku.toUpperCase()===sku.toUpperCase());if(existing)existing.expected+=remaining;else lines.push({sku,name:line.name||sku,barcode:line.variant?.barcode||sku,expected:remaining})}
   const retailName=order.retailLocation?.name||'',warehouse=LOCATION_NAMES[retailName]||retailName,bucket=classify(method);
-  return{ref:String(order.name||'').toUpperCase(),shopifyOrderId:order.id,sourceStore:store.key,sourceStoreLabel:store.label,customer:order.customer?.displayName||order.shippingAddress?.name||order.billingAddress?.name||'Customer',job:order.note||'',warehouse,deliveryMethod:method,bucket,status:'Unfulfilled',createdAt:order.createdAt,financialStatus:order.displayFinancialStatus,lines,reviewReason:!method?'Delivery method is blank':!warehouse?'Warehouse assignment is blank':''}
+  return{ref:String(order.name||'').toUpperCase(),shopifyOrderId:order.id,sourceStore:store.key,sourceStoreLabel:store.label,customer:'Shopify Order',job:order.note||'',warehouse,deliveryMethod:method,bucket,status:'Unfulfilled',createdAt:order.createdAt,financialStatus:order.displayFinancialStatus,lines,reviewReason:!method?'Delivery method is blank':!warehouse?'Warehouse assignment is blank':''}
 }
 async function ordersForStore(store){
-  const{shop,token}=await access(store),query=`query BMUnfulfilledOrders($after:String){orders(first:40,after:$after,reverse:true,query:"status:open fulfillment_status:unfulfilled"){pageInfo{hasNextPage endCursor}nodes{id name createdAt displayFinancialStatus displayFulfillmentStatus note customer{displayName} billingAddress{name} shippingAddress{name} retailLocation{name} shippingLine{title code deliveryCategory} lineItems(first:50){nodes{name sku unfulfilledQuantity variant{barcode}}}}}}`;
+  const{shop,token}=await access(store),query=`query BMUnfulfilledOrders($after:String){orders(first:40,after:$after,reverse:true,query:"status:open fulfillment_status:unfulfilled"){pageInfo{hasNextPage endCursor}nodes{id name createdAt displayFinancialStatus displayFulfillmentStatus note retailLocation{name} shippingLine{title code deliveryCategory} lineItems(first:50){nodes{name sku unfulfilledQuantity variant{barcode}}}}}}`;
   const orders=[];let after=null;
   for(let page=0;page<4;page++){
     const response=await fetch(`https://${shop}/admin/api/${API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables:{after}})}),payload=await response.json().catch(()=>null);
     if(!response.ok||!payload)throw new Error(`${store.label}: order query failed (${response.status})`);
-    if(payload.errors?.length)throw new Error(`${store.label}: ${payload.errors.map(error=>error.message).join('; ')}`);
+    if(payload.errors?.length)throw new Error(`${store.label}: ${[...new Set(payload.errors.map(error=>error.message))].join('; ')}`);
     const connection=payload.data?.orders;orders.push(...(connection?.nodes||[]));
     if(!connection?.pageInfo?.hasNextPage||!connection.pageInfo.endCursor)break;
     after=connection.pageInfo.endCursor;
