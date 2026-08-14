@@ -217,6 +217,33 @@ function requireCoordinator(session, res) {
   return false;
 }
 
+async function writeActivity(session,event){
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  await rest(base,key,'activity_events',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({user_id:session.employeeId||null,user_name:session.name||session.email||'Unknown user',user_email:session.email||null,action_type:String(event.actionType||'').slice(0,60),document_type:event.documentType||null,document_number:event.documentNumber||null,warehouse:event.warehouse||null,description:String(event.description||'').slice(0,500),status:event.status||null,metadata:event.metadata||{}})});
+}
+
+async function activityEvents(req,res,session){
+  if(!session.permissions?.includes('admin'))return res.status(403).json({ok:false,error:'Manager activity access is required.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY'),q=req.query||{};
+  const filters=['select=id,created_at,user_name,user_email,action_type,document_type,document_number,warehouse,description,status,metadata','order=created_at.desc',`limit=${Math.min(500,Math.max(1,Number(q.limit)||200))}`];
+  if(q.action)filters.push(`action_type=eq.${encodeURIComponent(String(q.action).slice(0,60))}`);
+  if(q.user)filters.push(`or=(user_name.ilike.*${encodeURIComponent(String(q.user).slice(0,100))}*,user_email.ilike.*${encodeURIComponent(String(q.user).slice(0,100))}*)`);
+  if(q.document)filters.push(`document_number=ilike.*${encodeURIComponent(String(q.document).slice(0,100))}*`);
+  if(q.warehouse)filters.push(`warehouse=eq.${encodeURIComponent(String(q.warehouse).slice(0,100))}`);
+  if(q.from)filters.push(`created_at=gte.${encodeURIComponent(String(q.from))}`);
+  if(q.to)filters.push(`created_at=lte.${encodeURIComponent(String(q.to))}`);
+  const events=await rest(base,key,`activity_events?${filters.join('&')}`);
+  const facets=await rest(base,key,'activity_events?select=user_name,user_email,action_type,warehouse&order=created_at.desc&limit=1000');
+  return res.status(200).json({ok:true,events,facets:{actions:[...new Set(facets.map(x=>x.action_type).filter(Boolean))].sort(),users:[...new Set(facets.map(x=>x.user_email||x.user_name).filter(Boolean))].sort(),warehouses:[...new Set(facets.map(x=>x.warehouse).filter(Boolean))].sort()}});
+}
+
+async function logClientActivity(req,res,session){
+  const body=req.body||{};
+  if(!/^[A-Z][A-Z0-9_]{1,59}$/.test(String(body.actionType||'')))return res.status(400).json({ok:false,error:'Invalid activity type.'});
+  if(!String(body.description||'').trim())return res.status(400).json({ok:false,error:'Activity description is required.'});
+  await writeActivity(session,body);return res.status(201).json({ok:true});
+}
+
 async function purchaseOrderReference(res) {
   const base = env('BM_WAREHOUSE_SUPABASE_URL'), key = env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
   const [vendors, locations] = await Promise.all([
@@ -269,6 +296,7 @@ async function createPurchaseOrder(req, res, session) {
         body: JSON.stringify({ purchase_order_id: purchaseOrder.id, product_id: products[0].id, ordered_qty: Number(raw.orderedQty), unit_cost: Number(raw.unitCost || 0) })
       });
     }
+    await writeActivity(session,{actionType:status==='open'?'PO_OPENED':'PO_DRAFT_SAVED',documentType:'purchase_order',documentNumber:poNumber,warehouse:body.destinationName||null,description:`${status==='open'?'Opened':'Saved draft'} purchase order ${poNumber} with ${lines.length} line${lines.length===1?'':'s'}`,status,metadata:{lineCount:lines.length,vendorId:body.vendorId,destinationLocationId:body.destinationLocationId,shippingCost}});
     return res.status(201).json({ ok: true, purchaseOrder: { ...purchaseOrder, lineCount: lines.length, createdBy: session.name } });
   } catch (error) {
     if (purchaseOrder?.id) {
@@ -315,6 +343,7 @@ async function saveTransferDraft(req, res, session) {
     if(!products[0])products=await rest(base,key,'products?select=id',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({sku,name,uom:'EA',purchase_price:0})});
     await rest(base,key,'transfer_lines',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify({transfer_id:transferId,product_id:products[0].id,requested_qty:Number(raw.qty)})});
   }
+  await writeActivity(session,{actionType:status==='awaiting_receipt'?'TRANSFER_SENT':'TRANSFER_DRAFT_SAVED',documentType:'transfer',documentNumber:transferNumber,warehouse:String(body.to||''),description:`${status==='awaiting_receipt'?'Sent':'Saved draft'} transfer ${transferNumber} from ${body.from} to ${body.to} with ${lines.length} line${lines.length===1?'':'s'}`,status,metadata:{from:body.from,to:body.to,lineCount:lines.length}});
   return res.status(200).json({ok:true,transfer:{id:transferId,transferNumber,status,lineCount:lines.length,savedBy:session.name}});
 }
 
@@ -352,6 +381,8 @@ module.exports = async function (req, res) {
     if (action === 'inventory' && req.method === 'GET') return inventory(res);
     if (action === 'waiting-pos' && req.method === 'GET') return waitingPurchaseOrders(res);
     if (action === 'waiting-transfers' && req.method === 'GET') return waitingTransfers(res);
+    if (action === 'activity' && req.method === 'GET') return activityEvents(req,res,session);
+    if (action === 'log-activity' && req.method === 'POST') return logClientActivity(req,res,session);
     if (action === 'create-po' && req.method === 'POST') return createPurchaseOrder(req, res, session);
     if (action === 'save-transfer' && req.method === 'POST') return saveTransferDraft(req, res, session);
     return res.status(404).json({ ok: false, error: 'Unknown action.' });
