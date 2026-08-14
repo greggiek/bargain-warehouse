@@ -16,6 +16,7 @@
       ,fetch('./activity-portal-patch.js',{cache:'no-store'}).then(r=>r.text())
       ,fetch('./shopify-orders-patch.js?v=order-buckets',{cache:'no-store'}).then(r=>r.text())
       ,fetch('./delivery-schedule-patch.js?v=calendar-first',{cache:'no-store'}).then(r=>r.text())
+      ,fetch('./low-stock-report-patch.js?v=low-stock-v1',{cache:'no-store'}).then(r=>r.text())
     ]);
     document.open();document.write(html);document.close();
     for(const code of scripts){const s=document.createElement('script');s.textContent=code;document.body.appendChild(s)}
