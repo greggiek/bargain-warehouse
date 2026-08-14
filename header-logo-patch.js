@@ -19,10 +19,9 @@
     .bm-header-brand{display:flex;flex-direction:column;align-items:flex-start;min-width:0}
     .bm-header-logo{display:block;width:clamp(210px,28vw,330px);height:auto;object-fit:contain}
     .bm-header-brand>.eyebrow{display:none}
-    .bm-header-brand>#pageTitle{font-size:14px;margin:3px 0 0 3px;color:var(--muted);letter-spacing:.04em}
+    .bm-header-brand>#pageTitle{display:none}
     @media(max-width:760px){
       .bm-header-logo{width:clamp(165px,48vw,230px)}
-      .bm-header-brand>#pageTitle{font-size:12px}
       .topbar{gap:10px}
     }
   `;
