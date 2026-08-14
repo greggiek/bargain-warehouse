@@ -365,7 +365,7 @@ const APP_LOCATION_NAMES={'Amityville Main':'336 Bayview','Bohemia Main':'Bargai
 
 async function waitingPurchaseOrders(res){
   const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
-  const rows=await rest(base,key,'purchase_orders?select=id,po_number,status,expected_date,supplier_reference_number,vendors(name),warehouse_locations(name),purchase_order_lines(id,ordered_qty,received_qty,products(name,sku,barcode))&status=in.(open,partial)&order=created_at.asc');
+  const rows=await rest(base,key,'purchase_orders?select=id,po_number,status,expected_date,supplier_reference_number,vendors(name),warehouse_locations(name),purchase_order_lines(id,ordered_qty,received_qty,products(name,sku))&status=in.(open,partial)&order=created_at.asc');
   return res.status(200).json({ok:true,purchaseOrders:rows.map(row=>({
     id:row.id,ref:row.po_number,poNumber:row.po_number,status:row.status,supplier:one(row.vendors)?.name||'Unknown vendor',shipTo:one(row.warehouse_locations)?.name||'',supplierRef:row.supplier_reference_number||'',expectedDate:row.expected_date||'',
     lines:(row.purchase_order_lines||[]).map(line=>{const product=one(line.products)||{};return{id:line.id,sku:product.sku||'',name:product.name||product.sku||'',barcode:product.barcode||product.sku||'',ordered:Number(line.ordered_qty||0),received:Number(line.received_qty||0)}})
@@ -374,7 +374,7 @@ async function waitingPurchaseOrders(res){
 
 async function waitingTransfers(res){
   const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
-  const rows=await rest(base,key,'transfers?select=id,transfer_number,status,notes,created_by_name,updated_at,from:warehouse_locations!transfers_from_location_id_fkey(name),to:warehouse_locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_qty,shipped_qty,received_qty,products(name,sku,barcode))&status=eq.awaiting_receipt&order=updated_at.asc');
+  const rows=await rest(base,key,'transfers?select=id,transfer_number,status,notes,created_by_name,updated_at,from:warehouse_locations!transfers_from_location_id_fkey(name),to:warehouse_locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_qty,shipped_qty,received_qty,products(name,sku))&status=eq.awaiting_receipt&order=updated_at.asc');
   return res.status(200).json({ok:true,transfers:rows.map(row=>({
     id:row.id,ref:row.transfer_number,status:'Awaiting Receipt',from:APP_LOCATION_NAMES[one(row.from)?.name]||one(row.from)?.name||'',to:APP_LOCATION_NAMES[one(row.to)?.name]||one(row.to)?.name||'',createdBy:row.created_by_name||'',note:row.notes||'',
     lines:(row.transfer_lines||[]).map(line=>{const product=one(line.products)||{};return{id:line.id,sku:product.sku||'',name:product.name||product.sku||'',barcode:product.barcode||product.sku||'',expected:Number(line.requested_qty||0)}})
