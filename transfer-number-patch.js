@@ -11,7 +11,12 @@
   };
 
   const originalRenderTransferCheck=renderTransferCheck;
-  renderTransferCheck=function(){originalRenderTransferCheck();pageTitle.textContent='Receive Transfer';const eyebrow=app.querySelector('.eyebrow'),heading=app.querySelector('h2'),copy=app.querySelector('.section-head p');if(eyebrow)eyebrow.textContent='RECEIVE TRANSFER';if(heading)heading.textContent='Scan the incoming transfer paperwork';if(copy)copy.textContent='Scan or enter the transfer number, then verify every piece received.'};
+  renderTransferCheck=function(){originalRenderTransferCheck();pageTitle.textContent='Receive Transfer';const eyebrow=app.querySelector('.eyebrow'),heading=app.querySelector('h2'),copy=app.querySelector('.section-head p');if(eyebrow)eyebrow.textContent='RECEIVE TRANSFER';if(heading)heading.textContent='Scan the incoming transfer paperwork';if(copy)copy.textContent='Scan or enter the transfer number, then verify every piece received.';loadWaitingTransfers()};
+
+  async function loadWaitingTransfers(){
+    const host=document.createElement('section');host.className='panel waiting-receipt-panel';host.innerHTML='<div class="eyebrow">WAITING TO RECEIVE</div><h2>Incoming Transfers</h2><p class="muted">Loading transfers…</p>';app.prepend(host);
+    try{const token=await window.bmGoogleAuth.accessToken();if(!token)throw new Error('Your Google session expired. Refresh and sign in again.');const response=await fetch('/api/warehouse?action=waiting-transfers',{cache:'no-store',headers:{Authorization:`Bearer ${token}`}}),data=await response.json();if(!response.ok)throw new Error(data.error||'Could not load transfers.');for(const transfer of data.transfers||[])backendTransfers[transfer.ref]=transfer;host.innerHTML=`<div class="section-head"><div><div class="eyebrow">WAITING TO RECEIVE</div><h2>Incoming Transfers</h2></div><strong>${(data.transfers||[]).length} waiting</strong></div>${(data.transfers||[]).length?`<div style="display:grid;gap:9px">${data.transfers.map(transfer=>`<button class="waiting-transfer" data-waiting-transfer="${esc(transfer.ref)}"><span><strong>${esc(transfer.ref)}</strong><small>${esc(transfer.from)} → ${esc(transfer.to)}</small></span><span>Receive ›</span></button>`).join('')}</div>`:'<p class="muted">Nothing is waiting to be received.</p>'}`;host.querySelectorAll('[data-waiting-transfer]').forEach(button=>button.onclick=()=>showTransferCheck(button.dataset.waitingTransfer))}catch(error){host.innerHTML=`<div class="eyebrow">WAITING TO RECEIVE</div><h2>Incoming Transfers</h2><p>${esc(error.message)}</p>`}
+  }
 
   function pad(value, size = 2) { return String(value).padStart(size, '0'); }
   function nextTransferNumber() {
@@ -72,6 +77,8 @@
           expected: Number(line.qty || 0)
         }))
       };
+      const transferToSave={transferNumber:tx.ref,from:tx.from,to:tx.to,note:tx.note||'',status:'awaiting_receipt',lines:(tx.lines||[]).map(line=>({sku:line.sku,name:line.name,barcode:line.barcode||line.sku,qty:Number(line.qty||0)}))};
+      window.bmGoogleAuth.accessToken().then(token=>token&&fetch('/api/warehouse?action=save-transfer',{method:'POST',headers:{'Content-Type':'application/json',Authorization:`Bearer ${token}`},body:JSON.stringify(transferToSave)})).then(response=>{if(response&&!response.ok)notify('Transfer created, but the waiting queue could not be updated. Try Save Draft and finish again.')}).catch(()=>notify('Transfer created, but the waiting queue could not be updated.'));
       pendingTransferNumber = null;
     }
     const result=originalShowCompletion(tx, kind);
