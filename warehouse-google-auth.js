@@ -2,15 +2,18 @@
   const SUPABASE_URL = 'https://ozatjjikidvhnheblzuh.supabase.co';
   const PUBLISHABLE_KEY = 'sb_publishable_dhk_e_9BmV8mYzxcZ3pQ3Q_XjFarvbI';
   const ALLOWED_DOMAIN = 'bargainmoulding.com';
+  const COORDINATORS = new Set(['greg@bargainmoulding.com','edwin@bargainmoulding.com','justin@bargainmoulding.com','matt@bargainmoulding.com']);
+  const MANAGERS = new Set(['evener.umanzor@bargainmoulding.com']);
   const STORAGE_KEY = 'bm_warehouse_google_session';
 
   function readStored(){try{return JSON.parse(localStorage.getItem(STORAGE_KEY)||'null')}catch{return null}}
   function save(session){localStorage.setItem(STORAGE_KEY,JSON.stringify(session))}
   function clear(){localStorage.removeItem(STORAGE_KEY)}
-  function emailAllowed(email){const parts=String(email||'').trim().toLowerCase().split('@');return parts.length===2&&parts[1]===ALLOWED_DOMAIN}
+  function emailAllowed(email){const value=String(email||'').trim().toLowerCase();return COORDINATORS.has(value)||MANAGERS.has(value)}
+  function accessRole(email){const value=String(email||'').trim().toLowerCase();return COORDINATORS.has(value)?'logistics_coordinator':MANAGERS.has(value)?'warehouse_manager':null}
   function captureOAuthResult(){const hash=new URLSearchParams(location.hash.replace(/^#/,'')),accessToken=hash.get('access_token');if(!accessToken)return;save({accessToken,refreshToken:hash.get('refresh_token')||'',expiresAt:Date.now()+Math.max(60,Number(hash.get('expires_in')||3600))*1000});history.replaceState({},document.title,location.pathname+location.search)}
   async function refresh(session){if(!session?.refreshToken)return null;const response=await fetch(`${SUPABASE_URL}/auth/v1/token?grant_type=refresh_token`,{method:'POST',headers:{apikey:PUBLISHABLE_KEY,'Content-Type':'application/json'},body:JSON.stringify({refresh_token:session.refreshToken})});if(!response.ok)return null;const data=await response.json(),next={accessToken:data.access_token,refreshToken:data.refresh_token||session.refreshToken,expiresAt:Date.now()+Math.max(60,Number(data.expires_in||3600))*1000};save(next);return next}
-  async function currentUser(){captureOAuthResult();let session=readStored();if(session&&session.expiresAt<Date.now()+60000)session=await refresh(session);if(!session?.accessToken)return null;const response=await fetch(`${SUPABASE_URL}/auth/v1/user`,{headers:{apikey:PUBLISHABLE_KEY,Authorization:`Bearer ${session.accessToken}`}});if(!response.ok){clear();return null}const user=await response.json();if(!emailAllowed(user.email)){clear();return{deniedEmail:user.email||'This account'}}return{...user,accessToken:session.accessToken}}
+  async function currentUser(){captureOAuthResult();let session=readStored();if(session&&session.expiresAt<Date.now()+60000)session=await refresh(session);if(!session?.accessToken)return null;const response=await fetch(`${SUPABASE_URL}/auth/v1/user`,{headers:{apikey:PUBLISHABLE_KEY,Authorization:`Bearer ${session.accessToken}`}});if(!response.ok){clear();return null}const user=await response.json();if(!emailAllowed(user.email)){clear();return{deniedEmail:user.email||'This account'}}return{...user,bmRole:accessRole(user.email),accessToken:session.accessToken}}
   function signIn(){const redirectTo=`${location.origin}${location.pathname}`;location.assign(`${SUPABASE_URL}/auth/v1/authorize?provider=google&redirect_to=${encodeURIComponent(redirectTo)}`)}
   function signOut(){clear();location.reload()}
   function escapeHtml(value){return String(value).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
