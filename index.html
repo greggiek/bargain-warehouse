@@ -15,7 +15,7 @@
       ,fetch('./transfer-number-patch.js',{cache:'no-store'}).then(r=>r.text())
       ,fetch('./activity-portal-patch.js',{cache:'no-store'}).then(r=>r.text())
       ,fetch('./shopify-orders-patch.js?v=order-buckets',{cache:'no-store'}).then(r=>r.text())
-      ,fetch('./delivery-schedule-patch.js?v=easyroutes-calendar',{cache:'no-store'}).then(r=>r.text())
+      ,fetch('./delivery-schedule-patch.js?v=open-delivery-queue',{cache:'no-store'}).then(r=>r.text())
     ]);
     document.open();document.write(html);document.close();
     for(const code of scripts){const s=document.createElement('script');s.textContent=code;document.body.appendChild(s)}
