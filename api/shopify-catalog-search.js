@@ -31,6 +31,16 @@ function normalize(all){
   for(const item of all){if(!item.sku)continue;const key=item.sku.toUpperCase();if(!map.has(key))map.set(key,{sku:item.sku,product:item.product,barcode:item.barcode,totalOnHand:0,totalAvailable:0,locations:[],sources:[]});const row=map.get(key);if(!row.barcode&&item.barcode)row.barcode=item.barcode;row.sources.push(item.sourceStoreLabel);for(const l of item.locations){row.locations.push({...l,sourceStore:item.sourceStore,sourceStoreLabel:item.sourceStoreLabel});row.totalOnHand+=l.onHand;row.totalAvailable+=l.available}}
   return [...map.values()].sort((a,b)=>a.sku.localeCompare(b.sku));
 }
+async function addCosts(items){
+  if(!items.length)return items;
+  const base=String(process.env.BM_WAREHOUSE_SUPABASE_URL||'').replace(/\/+$/,''),key=process.env.BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY;
+  if(!base||!key)return items;
+  const values=items.map(item=>encodeURIComponent(item.sku)).join(',');
+  const response=await fetch(`${base}/rest/v1/products?select=sku,purchase_price,moving_average_cost&sku=in.(${values})`,{headers:{apikey:key,Authorization:`Bearer ${key}`,Accept:'application/json'}});
+  if(!response.ok)return items;
+  const rows=await response.json(),costs=new Map(rows.map(row=>[String(row.sku).toUpperCase(),row]));
+  return items.map(item=>{const cost=costs.get(item.sku.toUpperCase())||{};return{...item,purchasePrice:Number(cost.purchase_price||0),movingAverageCost:Number(cost.moving_average_cost||0)}});
+}
 
 module.exports=async function(req,res){
   res.setHeader('Cache-Control','private, max-age=15');
@@ -40,6 +50,7 @@ module.exports=async function(req,res){
     const settled=await Promise.allSettled(STORES.map(store=>searchStore(store,term)));
     const items=settled.flatMap(x=>x.status==='fulfilled'?x.value:[]),errors=settled.filter(x=>x.status==='rejected').map(x=>x.reason.message);
     if(!items.length&&errors.length===STORES.length)throw new Error(errors.join('; '));
-    return res.status(200).json({ok:true,mode:'SHOPIFY_READ_ONLY_SEARCH',writesEnabled:false,items:normalize(items).slice(0,40),warnings:errors});
+    const normalized=normalize(items).slice(0,40);
+    return res.status(200).json({ok:true,mode:'SHOPIFY_READ_ONLY_SEARCH',writesEnabled:false,items:await addCosts(normalized),warnings:errors});
   }catch(error){return res.status(500).json({ok:false,mode:'SHOPIFY_READ_ONLY_SEARCH',writesEnabled:false,error:error.message})}
 };

@@ -244,6 +244,19 @@ async function logClientActivity(req,res,session){
   await writeActivity(session,body);return res.status(201).json({ok:true});
 }
 
+async function receivePurchaseOrder(req,res,session){
+  if(!session.permissions?.includes('receive'))return res.status(403).json({ok:false,error:'Receiving access is required.'});
+  const body=req.body||{},poNumber=String(body.poNumber||'').trim().toUpperCase(),lines=Array.isArray(body.lines)?body.lines:[];
+  if(!/^PO-[A-Z0-9-]{4,30}$/.test(poNumber))return res.status(400).json({ok:false,error:'Invalid PO number.'});
+  const received=lines.map(line=>({sku:String(line.sku||'').trim().toUpperCase(),qty:Number(line.qty||0)})).filter(line=>line.sku&&line.qty>0);
+  if(!received.length)return res.status(400).json({ok:false,error:'Enter at least one received quantity.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  const result=await rest(base,key,'rpc/receive_purchase_order',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({p_po_number:poNumber,p_lines:received,p_employee_name:session.name,p_employee_email:session.email||null})});
+  const value=Array.isArray(result)?result[0]:result;
+  await writeActivity(session,{actionType:'PO_RECEIVED',documentType:'purchase_order',documentNumber:poNumber,warehouse:String(body.warehouse||''),description:`Received ${received.reduce((sum,line)=>sum+line.qty,0)} pieces on ${poNumber}`,status:value?.status||'partial',metadata:{lines:received,costUpdates:value?.cost_updates||[]}});
+  return res.status(200).json({ok:true,receipt:value});
+}
+
 async function purchaseOrderReference(res) {
   const base = env('BM_WAREHOUSE_SUPABASE_URL'), key = env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
   const [vendors, locations] = await Promise.all([
@@ -383,6 +396,7 @@ module.exports = async function (req, res) {
     if (action === 'waiting-transfers' && req.method === 'GET') return waitingTransfers(res);
     if (action === 'activity' && req.method === 'GET') return activityEvents(req,res,session);
     if (action === 'log-activity' && req.method === 'POST') return logClientActivity(req,res,session);
+    if (action === 'receive-po' && req.method === 'POST') return receivePurchaseOrder(req,res,session);
     if (action === 'create-po' && req.method === 'POST') return createPurchaseOrder(req, res, session);
     if (action === 'save-transfer' && req.method === 'POST') return saveTransferDraft(req, res, session);
     return res.status(404).json({ ok: false, error: 'Unknown action.' });
