@@ -12,6 +12,7 @@
   const style=document.createElement('style');
   style.textContent=`.shopify-search-wrap{position:relative}.shopify-search-results{position:absolute;z-index:60;top:100%;left:0;right:0;background:#fff;border:1px solid var(--line);border-radius:12px;box-shadow:0 16px 40px rgba(15,23,42,.18);max-height:420px;overflow:auto;margin-top:4px}.po-line .shopify-search-results{right:auto;width:min(920px,calc(100vw - 390px));min-width:620px}.shopify-search-item{display:grid;grid-template-columns:150px minmax(280px,1fr) auto;align-items:start;gap:16px;width:100%;padding:14px 16px;border:0;border-bottom:1px solid var(--line);background:#fff;text-align:left}.shopify-search-item:hover{background:#f8fafc}.shopify-search-item:last-child{border-bottom:0}.shopify-search-sku{font-weight:900}.shopify-search-name{color:var(--muted);line-height:1.35;overflow-wrap:anywhere}.shopify-search-qty{font-weight:900;white-space:nowrap}.shopify-search-status{padding:16px;color:var(--muted);font-size:13px}@media(max-width:900px){.po-line .shopify-search-results{width:min(680px,calc(100vw - 48px));min-width:0}}@media(max-width:700px){.shopify-search-item{grid-template-columns:1fr;gap:5px}.shopify-search-qty{text-align:left}.po-line .shopify-search-results{position:fixed;left:16px;right:16px;top:20%;width:auto;max-height:65vh}}`;
   document.head.appendChild(style);
+  style.textContent+=`.shopify-search-cost{display:block;margin-top:6px;color:#0f766e;font-weight:800;font-size:12px}`;
 
   async function search(term){
     const key=term.trim().toLowerCase();if(cache.has(key))return cache.get(key);
@@ -29,12 +30,12 @@
     input.addEventListener('keydown',e=>{if(e.key==='Escape')box.classList.add('hidden')});
     function render(items){
       if(!items.length){box.innerHTML='<div class="shopify-search-status">No Shopify items found.</div>';return}
-      box.innerHTML=items.map((item,i)=>{const qty=mode==='transfer'?atWarehouse(item,state.location):item.totalOnHand;return`<button type="button" class="shopify-search-item" data-result="${i}"><span class="shopify-search-sku">${esc(item.sku)}</span><span class="shopify-search-name">${esc(item.product)}${item.barcode?` · ${esc(item.barcode)}`:''}</span><span class="shopify-search-qty">${qty.toLocaleString()} on hand${mode==='transfer'?' here':' total'}</span></button>`}).join('');
+      box.innerHTML=items.map((item,i)=>{const qty=mode==='transfer'?atWarehouse(item,state.location):item.totalOnHand,cost=Number(item.movingAverageCost||0),last=Number(item.purchasePrice||0);return`<button type="button" class="shopify-search-item" data-result="${i}"><span class="shopify-search-sku">${esc(item.sku)}</span><span class="shopify-search-name">${esc(item.product)}${item.barcode?` · ${esc(item.barcode)}`:''}${mode==='po'?`<small class="shopify-search-cost">Moving Avg: $${cost.toFixed(4)} · Last Cost: $${last.toFixed(4)}</small>`:''}</span><span class="shopify-search-qty">${qty.toLocaleString()} on hand${mode==='transfer'?' here':' total'}</span></button>`}).join('');
       box.querySelectorAll('[data-result]').forEach(button=>button.onclick=()=>select(items[Number(button.dataset.result)]));
     }
     function select(item){
       input.value=item.sku;box.classList.add('hidden');
-      if(mode==='po'){const row=input.closest('.po-line');row.querySelector('[data-field=name]').value=item.product||''}
+      if(mode==='po'){const row=input.closest('.po-line');row.querySelector('[data-field=name]').value=item.product||'';const cost=row.querySelector('[data-field=cost]');if(cost)cost.value=Number(item.purchasePrice||item.movingAverageCost||0).toFixed(4);if(typeof updateTotal==='function')updateTotal()}
       else{const onHand=atWarehouse(item,state.location);products[item.sku]={sku:item.sku,name:item.product||item.sku,barcode:item.barcode||item.sku,onHand,cost:0};notify(`${item.sku} selected · ${onHand.toLocaleString()} on hand at ${state.location}`)}
     }
   }
