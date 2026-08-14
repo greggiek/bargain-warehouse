@@ -4,6 +4,8 @@ const bcrypt = require('bcryptjs');
 const COOKIE = 'bm_warehouse_session';
 const MAX_AGE = 60 * 60 * 12;
 const attempts = new Map();
+const LOGISTICS_COORDINATORS = new Set(['greg@bargainmoulding.com','edwin@bargainmoulding.com','justin@bargainmoulding.com','matt@bargainmoulding.com']);
+const WAREHOUSE_MANAGERS = new Set(['evener.umanzor@bargainmoulding.com']);
 
 function jsonHeaders(key) {
   return { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json', 'Content-Type': 'application/json' };
@@ -72,13 +74,15 @@ async function googleSession(req) {
   if (!response.ok) return null;
   const user = await response.json();
   const email = String(user.email || '').trim().toLowerCase();
-  if (email.split('@')[1] !== 'bargainmoulding.com') return null;
+  const coordinator=LOGISTICS_COORDINATORS.has(email),manager=WAREHOUSE_MANAGERS.has(email);
+  if (!coordinator&&!manager) return null;
   return {
     employeeId: user.id,
     name: user.user_metadata?.full_name || email,
     email,
     role: 'Manager',
-    permissions: ['receive','transfer','adjust','pickpack','fulfillment','admin'],
+    permissions: coordinator?['receive','transfer','adjust','pickpack','fulfillment','admin','create_docs']:['receive','transfer'],
+    jobTitle: coordinator?'Logistics Coordinator':'Warehouse Manager',
     principalType: 'google_workspace',
     clockedIn: true,
     location: null
@@ -207,9 +211,9 @@ async function inventory(res) {
   return res.status(200).json({ ok: true, mode: 'SUPABASE_CACHE', shopifyWritesEnabled: false, normalized: [...map.values()], normalizedCount: map.size, generatedAt });
 }
 
-function requireManager(session, res) {
-  if (session?.role === 'Manager' && session?.permissions?.includes('admin')) return true;
-  res.status(403).json({ ok: false, error: 'Manager Google Workspace access is required to save purchase orders.' });
+function requireCoordinator(session, res) {
+  if (session?.permissions?.includes('create_docs')) return true;
+  res.status(403).json({ ok: false, error: 'Logistics Coordinator access is required to create purchase orders or transfers.' });
   return false;
 }
 
@@ -223,7 +227,7 @@ async function purchaseOrderReference(res) {
 }
 
 async function createPurchaseOrder(req, res, session) {
-  if (!requireManager(session, res)) return;
+  if (!requireCoordinator(session, res)) return;
   const body = req.body || {}, lines = Array.isArray(body.lines) ? body.lines : [];
   const poNumber = String(body.poNumber || '').trim().toUpperCase();
   const supplierReferenceNumber = String(body.supplierReferenceNumber || '').trim();
@@ -285,6 +289,7 @@ const TRANSFER_LOCATION_NAMES = {
 };
 
 async function saveTransferDraft(req, res, session) {
+  if(!requireCoordinator(session,res))return;
   const body=req.body||{},transferNumber=String(body.transferNumber||'').trim().toUpperCase(),lines=Array.isArray(body.lines)?body.lines:[];
   const fromName=TRANSFER_LOCATION_NAMES[String(body.from||'')],toName=TRANSFER_LOCATION_NAMES[String(body.to||'')];
   if(!/^TR-\d{8}-\d{9}$/.test(transferNumber))return res.status(400).json({ok:false,error:'Invalid transfer number.'});

@@ -1,8 +1,8 @@
 const API_VERSION = '2026-07';
 const tokenCache = new Map();
-const ALLOWED_DOMAIN = 'bargainmoulding.com';
+const ALLOWED_EMAILS = new Set(['greg@bargainmoulding.com','edwin@bargainmoulding.com','justin@bargainmoulding.com','matt@bargainmoulding.com','evener.umanzor@bargainmoulding.com']);
 
-async function authorizedUser(req){const bearer=String(req.headers.authorization||'');if(!bearer.startsWith('Bearer '))return null;const base=String(process.env.BM_WAREHOUSE_SUPABASE_URL||'').replace(/\/+$/,''),key=process.env.BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY;if(!base||!key)throw new Error('Warehouse authentication is not configured');const response=await fetch(`${base}/auth/v1/user`,{headers:{apikey:key,Authorization:bearer}});if(!response.ok)return null;const user=await response.json(),domain=String(user.email||'').trim().toLowerCase().split('@')[1];return domain===ALLOWED_DOMAIN?user:null}
+async function authorizedUser(req){const bearer=String(req.headers.authorization||'');if(!bearer.startsWith('Bearer '))return null;const base=String(process.env.BM_WAREHOUSE_SUPABASE_URL||'').replace(/\/+$/,''),key=process.env.BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY;if(!base||!key)throw new Error('Warehouse authentication is not configured');const response=await fetch(`${base}/auth/v1/user`,{headers:{apikey:key,Authorization:bearer}});if(!response.ok)return null;const user=await response.json(),email=String(user.email||'').trim().toLowerCase();return ALLOWED_EMAILS.has(email)?user:null}
 
 const STORES = [
   { key:'store_1', label:'Bargain Moulding', domain:'SHOPIFY_STORE_1_DOMAIN', clientId:'SHOPIFY_STORE_1_CLIENT_ID', clientSecret:'SHOPIFY_STORE_1_CLIENT_SECRET' },

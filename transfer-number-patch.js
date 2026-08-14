@@ -1,6 +1,18 @@
 (() => {
   let pendingTransferNumber = null;
 
+  const originalRenderTransferHub=renderTransferHub;
+  renderTransferHub=function(){
+    originalRenderTransferHub();
+    const canCreate=state.employee?.permissions?.includes('create_docs'),create=document.getElementById('newTransferBtn'),receive=document.getElementById('checkTransferBtn'),note=document.getElementById('managerTransferNote');
+    if(create&&!canCreate)create.remove();
+    if(receive){receive.disabled=false;receive.innerHTML='<div><div class="choice-icon">▣✓</div><h3>Receive Transfer</h3><p class="muted">Scan transfer paperwork, then verify every piece received.</p></div><strong>Receive ›</strong>';receive.onclick=()=>go('transferCheck')}
+    if(note)note.textContent=canCreate?'Create outgoing transfers or receive incoming transfers.':'Warehouse Manager access — receive incoming transfers.';
+  };
+
+  const originalRenderTransferCheck=renderTransferCheck;
+  renderTransferCheck=function(){originalRenderTransferCheck();pageTitle.textContent='Receive Transfer';const eyebrow=app.querySelector('.eyebrow'),heading=app.querySelector('h2'),copy=app.querySelector('.section-head p');if(eyebrow)eyebrow.textContent='RECEIVE TRANSFER';if(heading)heading.textContent='Scan the incoming transfer paperwork';if(copy)copy.textContent='Scan or enter the transfer number, then verify every piece received.'};
+
   function pad(value, size = 2) { return String(value).padStart(size, '0'); }
   function nextTransferNumber() {
     const now = new Date();

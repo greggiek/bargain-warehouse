@@ -3,13 +3,11 @@
   let poReference = null;
 
   renderReceive = function () {
-    originalRenderReceive();
-    const section = app.querySelector('.section-head') || app.querySelector('.panel');
-    if (!section || document.getElementById('createPoBtn')) return;
-    const button = document.createElement('button');
-    button.id = 'createPoBtn'; button.className = 'primary'; button.textContent = '+ Create Purchase Order';
-    button.onclick = renderCreatePurchaseOrder;
-    section.appendChild(button);
+    pageTitle.textContent='Receiving';
+    const canCreate=state.employee?.permissions?.includes('create_docs');
+    app.innerHTML=`<section class="panel"><div class="section-head"><div><div class="eyebrow">RECEIVING</div><h2>What are you doing?</h2></div></div><div class="transfer-choice-grid">${canCreate?'<button class="transfer-choice primary-choice" id="createPoBtn"><div><div class="choice-icon">＋</div><h3>Create PO</h3><p class="muted">Build and save a purchase order for incoming material.</p></div><strong>Start ›</strong></button>':''}<button class="transfer-choice check-choice" id="receivePoBtn"><div><div class="choice-icon">▣</div><h3>Receive PO</h3><p class="muted">Open a purchase order and receive incoming material.</p></div><strong>Receive ›</strong></button></div></section>`;
+    const create=document.getElementById('createPoBtn');if(create)create.onclick=renderCreatePurchaseOrder;
+    document.getElementById('receivePoBtn').onclick=()=>{pageTitle.textContent='Receive PO';app.innerHTML='';originalRenderReceive()};
   };
 
   const css = document.createElement('style');
