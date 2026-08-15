@@ -16,12 +16,13 @@
 
   const style = document.createElement('style');
   style.textContent = `
-    .bm-header-brand{display:flex;flex-direction:column;align-items:flex-start;min-width:0}
-    .bm-header-logo{display:block;width:clamp(210px,28vw,330px);height:auto;object-fit:contain}
+    .bm-header-brand{position:fixed;top:10px;left:12px;z-index:30;display:flex;align-items:flex-start}
+    .bm-header-logo{display:block;width:165px;height:auto;object-fit:contain}
     .bm-header-brand>.eyebrow{display:none}
     .bm-header-brand>#pageTitle{display:none}
     @media(max-width:760px){
-      .bm-header-logo{width:clamp(165px,48vw,230px)}
+      .bm-header-brand{top:9px;left:10px}
+      .bm-header-logo{width:145px}
       .topbar{gap:10px}
     }
   `;
