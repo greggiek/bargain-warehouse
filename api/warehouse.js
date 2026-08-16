@@ -79,17 +79,19 @@ async function googleSession(req) {
   if (!response.ok) return null;
   const user = await response.json();
   const email = String(user.email || '').trim().toLowerCase();
-  const coordinator=LOGISTICS_COORDINATORS.has(email),manager=WAREHOUSE_MANAGERS.has(email);
-  if (!coordinator&&!manager) return null;
-  const assignedLocations=coordinator?null:(MANAGER_WAREHOUSE_ASSIGNMENTS.get(email)||[]);
+  const profiles=await rest(base,key,`warehouse_app_users?select=id,display_name,email,username,role,location,active&or=(auth_user_id.eq.${user.id},email.ilike.${encodeURIComponent(email)})&active=eq.true&limit=1`),profile=profiles[0];
+  if(!profile)return null;
+  const coordinator=profile.role==='logistics_coordinator',manager=profile.role==='warehouse_manager';
+  const assignedLocations=coordinator?null:(profile.location?[profile.location]:[]);
+  const permissions=coordinator?['receive','transfer','adjust','pickpack','fulfillment','admin','create_docs']:manager?['receive','transfer','adjust','pickpack','fulfillment','admin']:['receive','transfer','pickpack','fulfillment'];
   return {
-    employeeId: user.id,
-    name: user.user_metadata?.full_name || email,
+    employeeId: profile.id,
+    name: profile.display_name || user.user_metadata?.full_name || profile.username || email,
     email,
-    role: 'Manager',
-    permissions: coordinator?['receive','transfer','adjust','pickpack','fulfillment','admin','create_docs']:['receive','transfer'],
-    jobTitle: coordinator?'Logistics Coordinator':'Warehouse Manager',
-    principalType: 'google_workspace',
+    role: coordinator?'Logistics Coordinator':manager?'Warehouse Manager':'Warehouse Employee',
+    permissions,
+    jobTitle: coordinator?'Logistics Coordinator':manager?'Warehouse Manager':'Warehouse Employee',
+    principalType: profile.username?'employee_pin':'google_workspace',
     clockedIn: true,
     location: assignedLocations?.[0]||null,
     allowedLocations: assignedLocations
