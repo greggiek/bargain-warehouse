@@ -81,7 +81,7 @@ async function googleSession(req) {
   const email = String(user.email || '').trim().toLowerCase();
   const profiles=await rest(base,key,`warehouse_app_users?select=id,display_name,email,username,role,location,active&or=(auth_user_id.eq.${user.id},email.ilike.${encodeURIComponent(email)})&active=eq.true&limit=1`),profile=profiles[0];
   if(!profile)return null;
-  const coordinator=profile.role==='logistics_coordinator',manager=profile.role==='warehouse_manager';
+  const coordinator=['administrator','developer','logistics_coordinator'].includes(profile.role),manager=profile.role==='warehouse_manager';
   const assignedLocations=coordinator?null:(profile.location?[profile.location]:[]);
   const permissions=coordinator?['receive','transfer','adjust','pickpack','fulfillment','admin','create_docs']:manager?['receive','transfer','adjust','pickpack','fulfillment','admin']:['receive','transfer','pickpack','fulfillment'];
   return {
