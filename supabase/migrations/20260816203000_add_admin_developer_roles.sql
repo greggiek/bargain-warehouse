@@ -15,14 +15,18 @@ update public.warehouse_app_users
 set role = 'administrator', location = null, updated_at = now()
 where lower(email) = 'greg@bargainmoulding.com' and active = true;
 
-insert into public.warehouse_app_users
-  (display_name,email,auth_mode,role,location,active,created_by_email)
-values
-  ('Jennifer Weber','weber.jennifer@gmail.com','google_external','developer',null,true,'greg@bargainmoulding.com')
-on conflict (email) do update
-set display_name = excluded.display_name,
-    auth_mode = excluded.auth_mode,
-    role = excluded.role,
+update public.warehouse_app_users
+set display_name = 'Jennifer Weber',
+    auth_mode = 'google_external',
+    role = 'developer',
     location = null,
     active = true,
-    updated_at = now();
+    updated_at = now()
+where lower(email) = 'weber.jennifer@gmail.com';
+
+insert into public.warehouse_app_users
+  (display_name,email,auth_mode,role,location,active,created_by_email)
+select 'Jennifer Weber','weber.jennifer@gmail.com','google_external','developer',null,true,'greg@bargainmoulding.com'
+where not exists (
+  select 1 from public.warehouse_app_users where lower(email) = 'weber.jennifer@gmail.com'
+);
