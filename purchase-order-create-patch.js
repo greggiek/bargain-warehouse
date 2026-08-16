@@ -12,12 +12,13 @@
 
   async function loadWaitingPurchaseOrders(){
     const host=document.createElement('section');host.className='panel waiting-receipt-panel';host.innerHTML='<div class="section-head"><div><div class="eyebrow">WAITING TO RECEIVE</div><h2>Open Purchase Orders</h2></div></div><p class="muted">Loading open purchase orders…</p>';
-    app.prepend(host);
+    app.appendChild(host);
     try{
       const token=await window.bmGoogleAuth.accessToken();if(!token)throw new Error('Your Google session expired. Refresh and sign in again.');
       const response=await fetch('/api/warehouse?action=waiting-pos',{cache:'no-store',headers:{Authorization:`Bearer ${token}`}}),payload=await response.text();let data;try{data=JSON.parse(payload)}catch{throw new Error(response.ok?'The purchase-order response was invalid.':'The server could not load purchase orders.')}if(!response.ok)throw new Error(data.error||'Could not load purchase orders.');
-      for(const po of data.purchaseOrders||[])purchaseOrders[po.ref]=po;
-      host.innerHTML=`<div class="section-head"><div><div class="eyebrow">WAITING TO RECEIVE</div><h2>Open Purchase Orders</h2></div><span class="waiting-count">${(data.purchaseOrders||[]).length} waiting</span></div>${(data.purchaseOrders||[]).length?`<div class="waiting-doc-list">${data.purchaseOrders.map(po=>`<button class="waiting-doc" data-waiting-po="${esc(po.ref)}"><span><strong>${esc(po.ref)}</strong><small>${esc(po.supplier)} → ${esc(po.shipTo)}</small></span><span>${esc(po.status==='partial'?'Partially Received':'Open')} ›</span></button>`).join('')}</div>`:'<p class="muted">Nothing is waiting to be received.</p>'}`;
+      const warehouseNames={'336 Bayview':'Amityville Main','Bargain Moulding (Bohemia)':'Bohemia Main','1133 Old Country (Riverhead)':'Riverhead Main'},selected=warehouseNames[state.location]||state.location,pos=(data.purchaseOrders||[]).filter(po=>String(po.shipTo||'').trim().toLowerCase()===String(selected||'').trim().toLowerCase());
+      for(const po of pos)purchaseOrders[po.ref]=po;
+      host.innerHTML=`<div class="section-head"><div><div class="eyebrow">WAITING TO RECEIVE</div><h2>Open Purchase Orders</h2><p class="muted">Purchase orders arriving at ${esc(state.location)}.</p></div><span class="waiting-count">${pos.length} waiting</span></div>${pos.length?`<div class="waiting-doc-list">${pos.map(po=>`<button class="waiting-doc" data-waiting-po="${esc(po.ref)}"><span><strong>${esc(po.ref)}</strong><small>${esc(po.supplier)} → ${esc(po.shipTo)}</small></span><span>${esc(po.status==='partial'?'Partially Received':'Open')} ›</span></button>`).join('')}</div>`:'<p class="muted">No open purchase orders are waiting for this warehouse.</p>'}`;
       host.querySelectorAll('[data-waiting-po]').forEach(button=>button.onclick=()=>showPO(button.dataset.waitingPo));
     }catch(error){host.innerHTML=`<div class="eyebrow">WAITING TO RECEIVE</div><h2>Open Purchase Orders</h2><p>${esc(error.message)}</p><button class="secondary" id="retryWaitingPo">Retry</button>`;host.querySelector('#retryWaitingPo').onclick=()=>{host.remove();loadWaitingPurchaseOrders()}}
   }
