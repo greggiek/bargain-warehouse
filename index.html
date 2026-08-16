@@ -20,7 +20,8 @@
       ,fetch('./delivery-schedule-patch.js?v=calendar-first',{cache:'no-store'}).then(r=>r.text())
       ,fetch('./low-stock-report-patch.js?v=low-stock-v1',{cache:'no-store'}).then(r=>r.text())
       ,fetch('./door-shop-patch.js?v=door-shop-v1',{cache:'no-store'}).then(r=>r.text())
-      ,fetch('./navigation-cleanup-patch.js?v=nav-cleanup-v1',{cache:'no-store'}).then(r=>r.text())
+      ,fetch('./navigation-cleanup-patch.js?v=nav-cleanup-v2',{cache:'no-store'}).then(r=>r.text())
+      ,fetch('./operations-dashboard-patch.js?v=operations-v1',{cache:'no-store'}).then(r=>r.text())
     ]);
     document.open();document.write(html);document.close();
     for(const code of scripts){const s=document.createElement('script');s.textContent=code;document.body.appendChild(s)}

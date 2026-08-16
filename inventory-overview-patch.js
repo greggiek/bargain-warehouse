@@ -5,7 +5,7 @@
     { key: 'bohemia', label: 'Bohemia', locations: ['Bohemia Warehouse'] },
     { key: 'outpost', label: 'Outpost - Ronkonkoma', locations: ['Outpost - Ronkonkoma'] },
     { key: 'riverhead', label: 'Riverhead', locations: ['Riverhead Warehouse'] },
-    { key: 'windham', label: '730 Windham', locations: ['730 Windham Rd'] },
+    { key: 'windham', label: 'Windham', locations: ['730 Windham Rd'] },
     { key: 'annex', label: 'Annex', locations: ['Annex (Retail) 730'] }
   ];
 
@@ -134,6 +134,7 @@
     if (event.target.id === 'invSearch') render();
   });
 
+  window.bmOpenInventoryDashboard = show;
   const oldGo = window.go;
   if (typeof oldGo === 'function') {
     window.go = function (route) {
