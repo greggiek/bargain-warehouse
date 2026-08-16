@@ -5,7 +5,7 @@
   window.bmAudit={log};
 
   const originalRenderHome=renderHome;
-  renderHome=function(){originalRenderHome();if(!state.employee?.permissions?.includes('admin'))return;const grid=app.querySelector('.action-grid'),admin=document.getElementById('adminDashboardBtn');if(!grid||document.getElementById('activityPortalBtn'))return;const button=document.createElement('button');button.className='action-card admin-card';button.id='activityPortalBtn';button.innerHTML='<div class="action-icon">☷</div><div><h3>Activity Portal</h3><p>Search every recorded action by user, document and warehouse</p></div><span>›</span>';button.onclick=renderActivityPortal;admin?admin.insertAdjacentElement('afterend',button):grid.appendChild(button)};
+  renderHome=function(){originalRenderHome()};
 
   async function renderActivityPortal(){
     pageTitle.textContent='Activity Portal';
@@ -17,6 +17,7 @@
     function exportCsv(){if(!last.length)return notify('No activity to export');const columns=['created_at','user_name','user_email','action_type','document_type','document_number','warehouse','description','status'],quote=value=>`"${String(value??'').replaceAll('"','""')}"`,csv=[columns.join(','),...last.map(row=>columns.map(key=>quote(row[key])).join(','))].join('\n'),blob=new Blob([csv],{type:'text/csv'}),url=URL.createObjectURL(blob),a=document.createElement('a');a.href=url;a.download=`bm-warehouse-activity-${new Date().toISOString().slice(0,10)}.csv`;a.click();URL.revokeObjectURL(url)}
     load();
   }
+  window.bmOpenActivityPortal=renderActivityPortal;
 
   const originalShowCompletion=showCompletion;
   showCompletion=function(tx,kind){const result=originalShowCompletion(tx,kind);if(kind==='receive')api('receive-po',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({poNumber:tx.po,warehouse:tx.location||state.location||'',lines:(tx.lines||[]).map(line=>({sku:line.sku,qty:Number(line.qty||0)}))})}).then(data=>{const changes=data.receipt?.cost_updates||[];if(changes.length)notify(`Inventory and moving average cost updated for ${changes.length} item${changes.length===1?'':'s'}`)}).catch(error=>notify(`Receipt saved on screen, but database update failed: ${error.message}`));return result};
