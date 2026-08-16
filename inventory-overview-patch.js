@@ -15,6 +15,9 @@
     @media(max-width:900px){.inv-hero{align-items:flex-start;flex-direction:column}.inv-actions{width:100%}.inv-search{width:100%;flex:1}.inv-table-scroll{max-height:calc(100vh - 250px)}}
   `;
   document.head.appendChild(css);
+  const filterCss=document.createElement('style');
+  filterCss.textContent='.inv-filter-row th{top:32px;padding:6px;background:#e8eef5}.inv-filter-row input{width:100%;min-width:68px;height:30px;box-sizing:border-box;border:1px solid #cbd5e1;border-radius:6px;padding:0 7px;background:#fff;color:#17324d;font-size:11px}.inv-filter-row input:focus{outline:2px solid #60a5fa;border-color:#2563eb}.inv-filter-row th:nth-child(n+3) input{text-align:right}.inv-no-results{text-align:center!important;padding:30px!important;color:#64748b}.inv-table thead tr:first-child th{top:0}';
+  document.head.appendChild(filterCss);
 
   const screen = document.createElement('section');
   screen.className = 'inv-overview';
@@ -22,6 +25,7 @@
   let rows = [];
   let loading = false;
   let generatedAt = null;
+  const filters = {};
 
   screen.innerHTML = `<div class="inv-hero"><div><div class="eyebrow">NETWORK INVENTORY</div><h2>Inventory Overview</h2><p>Live on-hand inventory from both Shopify stores.</p></div><div class="inv-actions"><input class="inv-search" id="invSearch" placeholder="Search all inventory…"><button class="inv-refresh" id="invRefresh">Refresh Shopify</button></div></div><div id="invBody"><div class="inv-status">Loading live Shopify inventory…</div></div>`;
 
@@ -57,14 +61,21 @@
     };
   }
 
-  function render() {
+  function numericMatch(value, rule) {
+    const text=String(rule||'').trim();if(!text)return true;
+    const range=text.match(/^(-?\d+(?:\.\d+)?)\s*-\s*(-?\d+(?:\.\d+)?)$/);if(range)return value>=Number(range[1])&&value<=Number(range[2]);
+    const match=text.match(/^(<=|>=|<|>|=)?\s*(-?\d+(?:\.\d+)?)$/);if(!match)return true;const target=Number(match[2]);
+    return match[1]==='<'?value<target:match[1]==='<='?value<=target:match[1]==='>'?value>target:match[1]==='>='?value>=target:value===target;
+  }
+
+  function render(focusKey) {
     const body = screen.querySelector('#invBody');
     const query = (screen.querySelector('#invSearch')?.value || '').trim().toLowerCase();
-    const shown = query
-      ? rows.filter(row => `${row.sku} ${row.name}`.toLowerCase().includes(query))
-      : rows;
+    const shown = rows.filter(row => (!query||`${row.sku} ${row.name}`.toLowerCase().includes(query))&&(!filters.sku||row.sku.toLowerCase().includes(filters.sku.toLowerCase()))&&(!filters.name||row.name.toLowerCase().includes(filters.name.toLowerCase()))&&numericMatch(row.total,filters.total)&&WAREHOUSES.every(warehouse=>numericMatch(row[warehouse.key],filters[warehouse.key])));
+    const input=(key,type='text')=>`<input data-inv-filter="${key}" inputmode="${type==='number'?'decimal':'text'}" value="${esc(filters[key]||'')}" placeholder="${type==='number'?'=0, <10':'Filter…'}" aria-label="Filter ${esc(key)}">`;
 
-    body.innerHTML = `<div class="inv-wrap"><div class="inv-table-scroll"><table class="inv-table"><thead><tr><th>SKU</th><th>Product</th><th>Total</th>${WAREHOUSES.map(warehouse => `<th>${esc(warehouse.label)}</th>`).join('')}</tr></thead><tbody>${shown.map(row => `<tr><td class="inv-sku">${esc(row.sku)}</td><td class="inv-name" title="${esc(row.name)}">${esc(row.name)}</td>${cell(row.total, 'inv-total')}${WAREHOUSES.map(warehouse => cell(row[warehouse.key])).join('')}</tr>`).join('')}</tbody></table></div><div class="inv-footbar"><span class="inv-count">Showing ${shown.length.toLocaleString()} of ${rows.length.toLocaleString()} SKUs</span><span class="inv-mode">Shopify read-only</span><span>${generatedAt ? `Updated ${new Date(generatedAt).toLocaleTimeString()}` : ''}</span></div></div>`;
+    body.innerHTML = `<div class="inv-wrap"><div class="inv-table-scroll"><table class="inv-table"><thead><tr><th>SKU</th><th>Product</th><th>Total</th>${WAREHOUSES.map(warehouse => `<th>${esc(warehouse.label)}</th>`).join('')}</tr><tr class="inv-filter-row"><th>${input('sku')}</th><th>${input('name')}</th><th>${input('total','number')}</th>${WAREHOUSES.map(warehouse=>`<th>${input(warehouse.key,'number')}</th>`).join('')}</tr></thead><tbody>${shown.map(row => `<tr><td class="inv-sku">${esc(row.sku)}</td><td class="inv-name" title="${esc(row.name)}">${esc(row.name)}</td>${cell(row.total, 'inv-total')}${WAREHOUSES.map(warehouse => cell(row[warehouse.key])).join('')}</tr>`).join('')||'<tr><td colspan="9" class="inv-no-results">No inventory matches these filters.</td></tr>'}</tbody></table></div><div class="inv-footbar"><span class="inv-count">Showing ${shown.length.toLocaleString()} of ${rows.length.toLocaleString()} SKUs</span><span class="inv-mode">Shopify read-only</span><span>${generatedAt ? `Updated ${new Date(generatedAt).toLocaleTimeString()}` : ''}</span></div></div>`;
+    if(focusKey){const field=body.querySelector(`[data-inv-filter="${focusKey}"]`);field?.focus();field?.setSelectionRange(field.value.length,field.value.length)}
   }
 
   function mount() {
@@ -132,6 +143,7 @@
   });
   screen.addEventListener('input', event => {
     if (event.target.id === 'invSearch') render();
+    if (event.target.matches('[data-inv-filter]')) {filters[event.target.dataset.invFilter]=event.target.value;render(event.target.dataset.invFilter)}
   });
 
   window.bmOpenInventoryDashboard = show;
