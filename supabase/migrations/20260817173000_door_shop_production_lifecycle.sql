@@ -202,7 +202,9 @@ revoke all on function public.complete_door_shop_work_order(bigint,text,text) fr
 revoke all on function public.create_door_shop_transfer(bigint,text,text) from public,anon,authenticated;
 grant execute on function public.start_door_shop_work_order(bigint,text,text) to service_role;
 grant execute on function public.complete_door_shop_work_order(bigint,text,text) to service_role;
-grant execute on function public.create_door_shop_transfer(bigint,text,text) to service_role;create table if not exists public.shopify_cost_writebacks (
+grant execute on function public.create_door_shop_transfer(bigint,text,text) to service_role;
+
+create table if not exists public.shopify_cost_writebacks (
   id uuid primary key default gen_random_uuid(),
   purchase_order_id uuid references public.purchase_orders(id) on delete set null,
   po_number text not null,
