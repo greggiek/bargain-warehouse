@@ -850,14 +850,14 @@ async function finishCheckedTransfer(tx,withProblem){
   let note='';
   if(withProblem){note=window.prompt('What is wrong with this transfer? Example: 2 pieces short, damaged, wrong item.')||''; if(!note.trim()) return notify('Add a problem note before finishing');}
   const finish=document.getElementById('finishCheck'),problem=document.getElementById('finishWithProblem');
-  finish.disabled=true;problem.disabled=true;const prior=withProblem?problem.textContent:finish.textContent;(withProblem?problem:finish).textContent='Posting to Qoblex…';
+  finish.disabled=true;problem.disabled=true;const prior=withProblem?problem.textContent:finish.textContent;(withProblem?problem:finish).textContent='Saving in BM Warehouse…';
   try{
     const token=await window.bmGoogleAuth.accessToken();
     if(!token)throw new Error('Your session expired. Refresh and sign in again.');
     const response=await fetch('/api/warehouse?action=finish-transfer-check',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({transferNumber:tx.ref,withProblem,problemNote:note,lines:tx.lines.map(l=>({id:l.id,sku:l.sku,receivedQty:l.scanned,note:l.expected===l.scanned?'':note})),problems:tx.problems.map(p=>({type:p.type,value:p.value,quantity:1,note}))})});
     const data=await response.json().catch(()=>null);
-    if(!response.ok)throw new Error(data?.error||'The transfer could not be posted.');
-    const completed={type:'Transfer Check',ref:tx.ref,from:tx.from,to:tx.to,location:tx.to,employee:state.employee?.name||'Manager',date:new Date(),lines:tx.lines.map(l=>({sku:l.sku,name:l.name,qty:l.scanned,expected:l.expected})),total:scanned,expectedTotal:expected,missing,problems:tx.problems,note,status:withProblem?'Problem — Logistics Review':'Completed',serverRecorded:true,qoblexTransferId:data.transfer?.qoblexTransferId||null};
+    if(!response.ok)throw new Error(data?.error||'The transfer count could not be saved.');
+    const completed={type:'Transfer Check',ref:tx.ref,from:tx.from,to:tx.to,location:tx.to,employee:state.employee?.name||'Manager',date:new Date(),lines:tx.lines.map(l=>({sku:l.sku,name:l.name,qty:l.scanned,expected:l.expected})),total:scanned,expectedTotal:expected,missing,problems:tx.problems,note,status:withProblem?'Problem — Logistics Review':'Completed',serverRecorded:true,shadowMode:Boolean(data.shadowMode),inventoryPosted:Boolean(data.inventoryPosted),qoblexTransferId:null};
     state.activity.unshift({type:'TRANSFER',text:`${tx.ref} checked by ${completed.employee} · ${withProblem?'problem reported':'all pieces match'}`,ref:tx.ref});
     showTransferCheckCompletion(completed);
   }catch(error){
@@ -868,7 +868,7 @@ async function finishCheckedTransfer(tx,withProblem){
 function showTransferCheckCompletion(tx){
   pageTitle.textContent='Transfer Check Complete';
   const rows=tx.lines.map(l=>`<tr><td><strong>${esc(l.sku)}</strong><br><span class="muted">${esc(l.name)}</span></td><td>${l.expected}</td><td>${l.qty}</td><td>${l.expected-l.qty}</td></tr>`).join('');
-  app.innerHTML=`<section class="completion-card"><div class="completion-icon">✓</div><div class="eyebrow" style="margin-top:14px">${tx.status==='Checked — Matches'?'TRANSFER MATCHED':'PROBLEM REPORTED'}</div><h2>${esc(tx.ref)}</h2><p class="muted">Checked by ${esc(tx.employee)} · ${fmtDate(tx.date)}</p><div class="ticket-preview"><div class="ticket-head"><div><strong>Move From:</strong> ${esc(tx.from)}</div><div><strong>Move To:</strong> ${esc(tx.to)}</div><div><strong>Status:</strong> ${esc(tx.status)}</div>${tx.note?`<div><strong>Problem:</strong> ${esc(tx.note)}</div>`:''}</div><table><thead><tr><th>Material</th><th>Expected</th><th>Scanned</th><th>Missing</th></tr></thead><tbody>${rows}</tbody></table></div><div class="completion-actions"><button id="printCheck" class="print-btn">🖨 Print</button><button id="doneCheck" class="primary">Done</button></div></section>`;
+  app.innerHTML=`<section class="completion-card"><div class="completion-icon">✓</div><div class="eyebrow" style="margin-top:14px">${tx.status==='Checked — Matches'?'TRANSFER MATCHED':'PROBLEM REPORTED'}</div><h2>${esc(tx.ref)}</h2><p class="muted">Checked by ${esc(tx.employee)} · ${fmtDate(tx.date)}</p>${tx.shadowMode?'<div class="scan-feedback warn"><strong>SHADOW MODE:</strong> Recorded in BM Warehouse only. Inventory was not posted to Qoblex or Shopify.</div>':''}<div class="ticket-preview"><div class="ticket-head"><div><strong>Move From:</strong> ${esc(tx.from)}</div><div><strong>Move To:</strong> ${esc(tx.to)}</div><div><strong>Status:</strong> ${esc(tx.status)}</div>${tx.note?`<div><strong>Problem:</strong> ${esc(tx.note)}</div>`:''}</div><table><thead><tr><th>Material</th><th>Expected</th><th>Scanned</th><th>Missing</th></tr></thead><tbody>${rows}</tbody></table></div><div class="completion-actions"><button id="printCheck" class="print-btn">🖨 Print</button><button id="doneCheck" class="primary">Done</button></div></section>`;
   document.getElementById('printCheck').onclick=()=>printTransferCheck(tx);
   document.getElementById('doneCheck').onclick=()=>go('transferCheck');
 }
