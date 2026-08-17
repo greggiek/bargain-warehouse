@@ -268,11 +268,11 @@ button:disabled { opacity:.45; cursor:not-allowed; }
         <div>
           <div class="eyebrow">CREATE TRANSFER</div>
           <h2>Move material</h2>
-          <p class="muted" style="margin:6px 0 0">Scan each piece as it is loaded. Your clocked-in warehouse is the Move From location.</p>
+          <p class="muted" style="margin:6px 0 0">Choose the source warehouse, then scan each piece as it is loaded.</p>
         </div>
       </div>
       <div class="two-col">
-        <label>Move From<div id="transferFromLocked" class="locked-location"></div></label>
+        <label>Move From<select id="transferFrom"></select></label>
         <label>Move To<select id="transferTo"></select></label>
       </div>
       <div class="scan-row spaced">
@@ -695,11 +695,14 @@ function renderTransferHub() {
 function renderTransferCreate() {
   pageTitle.textContent = 'Create Transfer';
   app.appendChild(cloneTemplate('transferCreateTemplate'));
-  const from = state.location;
-  document.getElementById('transferFromLocked').textContent = '📍 ' + from;
+  let from = state.location;
+  const fromSelect = document.getElementById('transferFrom');
   const to = document.getElementById('transferTo');
-  to.innerHTML = warehouses.filter(w=>w!==from).map(w=>`<option>${w}</option>`).join('');
+  const updateLocations=()=>{from=fromSelect.value;to.innerHTML=warehouses.filter(w=>w!==from).map(w=>`<option>${w}</option>`).join('')};
+  fromSelect.innerHTML=warehouses.map(w=>`<option ${w===from?'selected':''}>${w}</option>`).join('');
+  updateLocations();
   const input = document.getElementById('transferSku');
+  fromSelect.onchange=()=>{if(state.transferItems.length&&!confirm('Changing the Move From warehouse will clear the scanned material. Continue?')){fromSelect.value=from;return}state.transferItems=[];state.location=fromSelect.value;locationSelect.value=state.location;updateLocations();drawTransfer();input.value='';input.focus();notify(`Move From changed to ${from}`)};
   const add = () => {
     const p=findProductByScan(input.value);
     if(!p) { notify('Material not found'); input.select(); return; }
