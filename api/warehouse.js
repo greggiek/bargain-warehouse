@@ -491,6 +491,19 @@ async function waitingPurchaseOrders(res,session){
   }))});
 }
 
+async function masterPurchaseOrders(res,session){
+  if(!session.permissions?.includes('create_docs'))return res.status(403).json({ok:false,error:'Logistics Coordinator access is required to view the purchase order master.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  const rows=await rest(base,key,'purchase_orders?select=id,po_number,status,order_date,expected_date,supplier_reference_number,created_at,updated_at,vendors(name),warehouse_locations(name),purchase_order_lines(ordered_qty,received_qty,products(name,sku))&order=created_at.desc&limit=1000');
+  const visible=rows.filter(row=>canAccessLocation(session,one(row.warehouse_locations)?.name||''));
+  return res.status(200).json({ok:true,purchaseOrders:visible.map(row=>({
+    id:row.id,poNumber:row.po_number,status:String(row.status||'draft').toLowerCase(),supplier:one(row.vendors)?.name||'Unknown vendor',warehouse:one(row.warehouse_locations)?.name||'',supplierRef:row.supplier_reference_number||'',orderDate:row.order_date||'',expectedDate:row.expected_date||'',createdAt:row.created_at||'',updatedAt:row.updated_at||'',
+    ordered:(row.purchase_order_lines||[]).reduce((sum,line)=>sum+Number(line.ordered_qty||0),0),
+    received:(row.purchase_order_lines||[]).reduce((sum,line)=>sum+Number(line.received_qty||0),0),
+    lines:(row.purchase_order_lines||[]).map(line=>{const product=one(line.products)||{};return{sku:product.sku||'',name:product.name||'',ordered:Number(line.ordered_qty||0),received:Number(line.received_qty||0)}})
+  }))});
+}
+
 async function waitingTransfers(res,session){
   const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
   const rows=await rest(base,key,'transfers?select=id,transfer_number,status,notes,problem_note,created_by_name,updated_at,from:warehouse_locations!transfers_from_location_id_fkey(name),to:warehouse_locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_qty,shipped_qty,received_qty,discrepancy_note,products(name,sku))&status=in.(awaiting_receipt,receiving,problem,qoblex_failed,qoblex_unknown)&order=updated_at.asc');
@@ -584,6 +597,7 @@ module.exports = async function (req, res) {
     if (action === 'clock' && req.method === 'POST') return clock(req, res, session);
     if (action === 'inventory' && req.method === 'GET') return inventory(res,session);
     if (action === 'waiting-pos' && req.method === 'GET') return waitingPurchaseOrders(res,session);
+    if (action === 'master-pos' && req.method === 'GET') return masterPurchaseOrders(res,session);
     if (action === 'waiting-transfers' && req.method === 'GET') return waitingTransfers(res,session);
     if (action === 'manage-transfer' && req.method === 'POST') return manageTransfer(req,res,session);
     if (action === 'manage-po' && req.method === 'POST') return managePurchaseOrder(req,res,session);
