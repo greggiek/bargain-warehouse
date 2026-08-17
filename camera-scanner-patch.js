@@ -2,7 +2,7 @@
    Enhances existing scan inputs without changing hardware-scanner behavior. */
 (function(){
   const scanSelector='input.scan-input[placeholder*="Scan"],input.scan-input[placeholder*="scan"]';
-  let stream=null,loop=0,detector=null,target=null;
+  let stream=null,loop=0,detector=null,target=null,zxingControls=null;
 
   const style=document.createElement('style');
   style.textContent=`
@@ -21,9 +21,21 @@
 
   function closeScanner(){
     cancelAnimationFrame(loop);loop=0;
+    try{zxingControls?.stop?.();}catch(_){}zxingControls=null;
     if(stream)stream.getTracks().forEach(t=>t.stop());
     stream=null;target=null;
     document.querySelector('.bm-camera-overlay')?.remove();
+  }
+  function loadZxing(){
+    if(window.ZXingBrowser)return Promise.resolve(window.ZXingBrowser);
+    if(window.bmZxingPromise)return window.bmZxingPromise;
+    window.bmZxingPromise=new Promise((resolve,reject)=>{
+      const script=document.createElement('script');script.src='https://unpkg.com/@zxing/browser@latest';script.crossOrigin='anonymous';
+      script.onload=()=>window.ZXingBrowser?resolve(window.ZXingBrowser):reject(new Error('Barcode reader did not load'));
+      script.onerror=()=>reject(new Error('Could not load the iPhone barcode reader'));
+      document.head.appendChild(script);
+    });
+    return window.bmZxingPromise;
   }
   function submit(value){
     if(!target)return;
@@ -36,7 +48,7 @@
     if(!window.isSecureContext)return 'Camera scanning requires the secure https:// app address.';
     if(err?.name==='NotAllowedError')return 'Camera permission is blocked. On iPhone: Settings → Safari → Camera → Allow. On Android Chrome: tap the lock icon → Permissions → Camera → Allow, then reload.';
     if(err?.name==='NotFoundError')return 'No rear camera was found on this device.';
-    if(!('BarcodeDetector' in window))return 'This browser cannot read barcodes from the camera. Open BM Warehouse in current Chrome or Safari, or use a Bluetooth scanner.';
+    if(err?.name==='UnsupportedError')return 'The barcode reader could not load. Check the internet connection, reload BM Warehouse, and try again.';
     return `Could not start the camera${err?.message?`: ${err.message}`:''}.`;
   }
   async function openScanner(input){
@@ -47,15 +59,17 @@
     const status=overlay.querySelector('.bm-camera-status'),help=overlay.querySelector('.bm-camera-help'),video=overlay.querySelector('video');
     try{
       if(!navigator.mediaDevices?.getUserMedia)throw new Error('Camera access is unavailable in this browser');
-      if(!('BarcodeDetector' in window))throw Object.assign(new Error('Barcode detection is unsupported'),{name:'UnsupportedError'});
-      detector=new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','upc_a','upc_e','itf','codabar','qr_code']});
-      stream=await navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false});
-      video.srcObject=stream;await video.play();status.textContent='Hold the barcode inside the green box.';
-      const detect=async()=>{
-        if(!stream)return;
-        try{const codes=await detector.detect(video);if(codes[0]?.rawValue){submit(codes[0].rawValue);return;}}catch(_){/* keep scanning */}
-        loop=requestAnimationFrame(detect);
-      };detect();
+      const constraints={video:{facingMode:{ideal:'environment'},width:{ideal:1280},height:{ideal:720}},audio:false};
+      if('BarcodeDetector' in window){
+        detector=new BarcodeDetector({formats:['code_128','code_39','ean_13','ean_8','upc_a','upc_e','itf','codabar','qr_code']});
+        stream=await navigator.mediaDevices.getUserMedia(constraints);video.srcObject=stream;await video.play();status.textContent='Hold the barcode inside the green box.';
+        const detect=async()=>{if(!stream)return;try{const codes=await detector.detect(video);if(codes[0]?.rawValue){submit(codes[0].rawValue);return;}}catch(_){}loop=requestAnimationFrame(detect)};detect();
+      }else{
+        status.textContent='Loading iPhone barcode reader…';
+        const ZXing=await loadZxing(),reader=new ZXing.BrowserMultiFormatReader();
+        zxingControls=await reader.decodeFromConstraints(constraints,video,(result)=>{if(result){const value=result.getText?.()||result.text;if(value)submit(value)}});
+        stream=video.srcObject;status.textContent='Hold the barcode inside the green box.';
+      }
     }catch(err){status.textContent='Camera scanner unavailable';help.style.display='block';help.textContent=errorMessage(err);}
   }
   function enhance(root=document){
