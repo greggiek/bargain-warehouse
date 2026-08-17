@@ -31,7 +31,7 @@
     const openTools=document.createElement('script');
     openTools.textContent=`
       const bmRole=${JSON.stringify(googleUser.bmRole)},bmLocation=${JSON.stringify(googleUser.bmLocation||'')},rolePermissions={administrator:['receive','transfer','adjust','pickpack','fulfillment','admin','create_docs'],developer:['receive','transfer','adjust','pickpack','fulfillment','admin','create_docs'],logistics_coordinator:['receive','transfer','adjust','pickpack','fulfillment','admin','create_docs'],warehouse_manager:['receive','transfer','adjust','pickpack','fulfillment','admin'],warehouse_employee:['receive','transfer','pickpack','fulfillment']},roleLabels={administrator:'Administrator',developer:'Developer',logistics_coordinator:'Logistics Coordinator',warehouse_manager:'Warehouse Manager',warehouse_employee:'Warehouse Employee'};
-      state.employee={...employees['2468'],name:${JSON.stringify(googleUser.bmDisplayName||googleUser.user_metadata?.full_name||googleUser.email||'Warehouse User')},email:${JSON.stringify(googleUser.email||'')},jobTitle:roleLabels[bmRole]||'Warehouse User',permissions:rolePermissions[bmRole]||[]};
+      state.employee={...employees['2468'],name:${JSON.stringify(googleUser.bmDisplayName||googleUser.user_metadata?.full_name||googleUser.email||'Warehouse User')},email:${JSON.stringify(googleUser.email||'')},role:roleLabels[bmRole]||'Warehouse Employee',roleKey:bmRole,jobTitle:roleLabels[bmRole]||'Warehouse User',permissions:rolePermissions[bmRole]||[]};
       if(bmRole!=='administrator')document.querySelector('[data-settings-route="user-permissions"]')?.remove();
       if(!['administrator','developer','logistics_coordinator'].includes(bmRole)&&bmLocation){
         state.location=bmLocation;
