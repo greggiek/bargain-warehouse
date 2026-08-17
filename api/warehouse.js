@@ -494,10 +494,10 @@ async function waitingPurchaseOrders(res,session){
 async function masterPurchaseOrders(res,session){
   if(!session.permissions?.includes('create_docs'))return res.status(403).json({ok:false,error:'Logistics Coordinator access is required to view the purchase order master.'});
   const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
-  const rows=await rest(base,key,'purchase_orders?select=id,po_number,status,order_date,expected_date,supplier_reference_number,created_at,updated_at,vendors(name),warehouse_locations(name),purchase_order_lines(ordered_qty,received_qty,products(name,sku))&order=created_at.desc&limit=1000');
+  const rows=await rest(base,key,'purchase_orders?select=id,po_number,status,order_date,expected_date,supplier_reference_number,created_at,vendors(name),warehouse_locations(name),purchase_order_lines(ordered_qty,received_qty,products(name,sku))&order=created_at.desc&limit=1000');
   const visible=rows.filter(row=>canAccessLocation(session,one(row.warehouse_locations)?.name||''));
   return res.status(200).json({ok:true,purchaseOrders:visible.map(row=>({
-    id:row.id,poNumber:row.po_number,status:String(row.status||'draft').toLowerCase(),supplier:one(row.vendors)?.name||'Unknown vendor',warehouse:one(row.warehouse_locations)?.name||'',supplierRef:row.supplier_reference_number||'',orderDate:row.order_date||'',expectedDate:row.expected_date||'',createdAt:row.created_at||'',updatedAt:row.updated_at||'',
+    id:row.id,poNumber:row.po_number,status:String(row.status||'draft').toLowerCase(),supplier:one(row.vendors)?.name||'Unknown vendor',warehouse:one(row.warehouse_locations)?.name||'',supplierRef:row.supplier_reference_number||'',orderDate:row.order_date||'',expectedDate:row.expected_date||'',createdAt:row.created_at||'',
     ordered:(row.purchase_order_lines||[]).reduce((sum,line)=>sum+Number(line.ordered_qty||0),0),
     received:(row.purchase_order_lines||[]).reduce((sum,line)=>sum+Number(line.received_qty||0),0),
     lines:(row.purchase_order_lines||[]).map(line=>{const product=one(line.products)||{};return{sku:product.sku||'',name:product.name||'',ordered:Number(line.ordered_qty||0),received:Number(line.received_qty||0)}})
