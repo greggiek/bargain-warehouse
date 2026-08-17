@@ -9,6 +9,12 @@ const WAREHOUSE_MANAGERS = new Set(['evener.umanzor@bargainmoulding.com']);
 const MANAGER_WAREHOUSE_ASSIGNMENTS = new Map([
   ['evener.umanzor@bargainmoulding.com', ['730 Windham Rd']]
 ]);
+const SHOPIFY_API_VERSION = '2026-07';
+const SHOPIFY_STORES = [
+  {key:'store_1',label:'Bargain Moulding',domain:'SHOPIFY_STORE_1_DOMAIN',clientId:'SHOPIFY_STORE_1_CLIENT_ID',clientSecret:'SHOPIFY_STORE_1_CLIENT_SECRET'},
+  {key:'store_2',label:'Bargain Moulding CT',domain:'SHOPIFY_STORE_2_DOMAIN',clientId:'SHOPIFY_STORE_2_CLIENT_ID',clientSecret:'SHOPIFY_STORE_2_CLIENT_SECRET'}
+];
+const shopifyTokenCache = new Map();
 
 function jsonHeaders(key) {
   return { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json', 'Content-Type': 'application/json' };
@@ -61,6 +67,42 @@ async function rest(base, key, path, options = {}) {
   const data = await response.json().catch(() => null);
   if (!response.ok) throw new Error(data?.message || `Database request failed (${response.status})`);
   return data;
+}
+function cleanShopifyDomain(value){return String(value||'').trim().replace(/^https?:\/\//,'').replace(/\/+$/,'')}
+async function shopifyAccess(store){
+  const cached=shopifyTokenCache.get(store.key);if(cached&&cached.expiresAt>Date.now()+60000)return cached;
+  const shop=cleanShopifyDomain(env(store.domain)),clientId=env(store.clientId),clientSecret=env(store.clientSecret);
+  const response=await fetch(`https://${shop}/admin/oauth/access_token`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'},body:new URLSearchParams({grant_type:'client_credentials',client_id:clientId,client_secret:clientSecret})});
+  const data=await response.json().catch(()=>null);if(!response.ok||!data?.access_token)throw new Error(`${store.label}: Shopify authentication failed (${response.status})`);
+  const value={shop,token:data.access_token,expiresAt:Date.now()+Math.max(300,Number(data.expires_in||3600))*1000};shopifyTokenCache.set(store.key,value);return value;
+}
+async function updateShopifyCost(store,inventoryItemId,cost){
+  const {shop,token}=await shopifyAccess(store),query=`mutation BMCostWriteback($id:ID!,$input:InventoryItemInput!){inventoryItemUpdate(id:$id,input:$input){inventoryItem{id unitCost{amount currencyCode}} userErrors{field message}}}`;
+  const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables:{id:inventoryItemId,input:{cost:Number(cost)}}})}),payload=await response.json().catch(()=>null);
+  if(!response.ok)throw new Error(`${store.label}: Shopify cost update failed (${response.status})`);
+  if(payload?.errors?.length)throw new Error(`${store.label}: ${payload.errors.map(error=>error.message).join('; ')}`);
+  const result=payload?.data?.inventoryItemUpdate,errors=result?.userErrors||[];if(errors.length)throw new Error(`${store.label}: ${errors.map(error=>error.message).join('; ')}`);
+  if(!result?.inventoryItem?.id)throw new Error(`${store.label}: Shopify returned no updated inventory item.`);
+  return result.inventoryItem;
+}
+async function patchCostWriteback(base,key,id,patch){return rest(base,key,`shopify_cost_writebacks?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({...patch,updated_at:new Date().toISOString()})})}
+async function pushCostWritebackRow(base,key,row){
+  const store=SHOPIFY_STORES.find(item=>item.key===row.source_store);if(!store){await patchCostWriteback(base,key,row.id,{status:'failed',attempts:Number(row.attempts||0)+1,last_error:`Unknown Shopify store ${row.source_store}`});return{...row,status:'failed',error:'Unknown Shopify store'} }
+  try{const item=await updateShopifyCost(store,row.shopify_inventory_item_id,row.moving_average_cost);await patchCostWriteback(base,key,row.id,{status:'success',attempts:Number(row.attempts||0)+1,last_error:null,shopify_response:item,pushed_at:new Date().toISOString()});return{...row,status:'success'}}
+  catch(error){await patchCostWriteback(base,key,row.id,{status:'failed',attempts:Number(row.attempts||0)+1,last_error:String(error.message||error).slice(0,1000)});return{...row,status:'failed',error:error.message}}
+}
+async function queueAndPushShopifyCosts(base,key,po,costUpdates,session){
+  const results=[];
+  for(const update of costUpdates||[]){
+    const sku=String(update.sku||'').trim().toUpperCase(),cost=Number(update.new_average_cost);if(!sku||!Number.isFinite(cost)||cost<0)continue;
+    const [products,mappings]=await Promise.all([
+      rest(base,key,`products?select=id,moving_average_cost&sku=eq.${encodeURIComponent(sku)}&limit=1`),
+      rest(base,key,`shopify_inventory_snapshot?select=source_store,source_store_label,shopify_inventory_item_id,sku&sku=ilike.${encodeURIComponent(sku)}&shopify_inventory_item_id=not.is.null`)
+    ]),targets=[...new Map(mappings.map(row=>[`${row.source_store}|${row.shopify_inventory_item_id}`,row])).values()];
+    if(!targets.length){const rows=await rest(base,key,'shopify_cost_writebacks?on_conflict=purchase_order_id,sku,source_store,shopify_inventory_item_id,moving_average_cost',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify({purchase_order_id:po.id,po_number:po.po_number,product_id:products[0]?.id||null,sku,moving_average_cost:cost,status:'unmatched',last_error:'SKU was not found in the latest Shopify inventory snapshot.',triggered_by_name:session.name,triggered_by_email:session.email||null})});results.push(rows[0]);continue}
+    for(const target of targets){const existing=await rest(base,key,`shopify_cost_writebacks?select=*&purchase_order_id=eq.${po.id}&sku=eq.${encodeURIComponent(sku)}&source_store=eq.${encodeURIComponent(target.source_store)}&shopify_inventory_item_id=eq.${encodeURIComponent(target.shopify_inventory_item_id)}&moving_average_cost=eq.${cost}&limit=1`);if(existing[0]?.status==='success'){results.push(existing[0]);continue}const rows=existing.length?existing:await rest(base,key,'shopify_cost_writebacks',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({purchase_order_id:po.id,po_number:po.po_number,product_id:products[0]?.id||null,sku,moving_average_cost:cost,source_store:target.source_store,source_store_label:target.source_store_label||target.source_store,shopify_inventory_item_id:target.shopify_inventory_item_id,status:'pending',last_error:null,triggered_by_name:session.name,triggered_by_email:session.email||null})}),row=rows[0];results.push(await pushCostWritebackRow(base,key,row))}
+  }
+  return{attempted:results.filter(row=>row.source_store).length,succeeded:results.filter(row=>row.status==='success').length,failed:results.filter(row=>row.status==='failed').length,unmatched:results.filter(row=>row.status==='unmatched').length,items:results.map(row=>({sku:row.sku,store:row.source_store_label||row.source_store||null,status:row.status,error:row.error||row.last_error||null}))};
 }
 function qoblexConfig() {
   return {
@@ -342,14 +384,30 @@ async function receivePurchaseOrder(req,res,session){
   const received=lines.map(line=>({sku:String(line.sku||'').trim().toUpperCase(),qty:Number(line.qty||0)})).filter(line=>line.sku&&line.qty>0);
   if(!received.length)return res.status(400).json({ok:false,error:'Enter at least one received quantity.'});
   const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
-  const poRows=await rest(base,key,`purchase_orders?select=id,warehouse_locations(name)&po_number=eq.${encodeURIComponent(poNumber)}&limit=1`);
+  const poRows=await rest(base,key,`purchase_orders?select=id,po_number,warehouse_locations(name)&po_number=eq.${encodeURIComponent(poNumber)}&limit=1`);
   if(!poRows[0])return res.status(404).json({ok:false,error:'Purchase order not found.'});
   const destination=one(poRows[0].warehouse_locations)?.name||'';
   if(!canAccessLocation(session,destination))return res.status(403).json({ok:false,error:`This purchase order belongs to ${destination||'another warehouse'}.`});
   const result=await rest(base,key,'rpc/receive_purchase_order',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({p_po_number:poNumber,p_lines:received,p_employee_name:session.name,p_employee_email:session.email||null})});
   const value=Array.isArray(result)?result[0]:result;
-  await writeActivity(session,{actionType:'PO_RECEIVED',documentType:'purchase_order',documentNumber:poNumber,warehouse:String(body.warehouse||''),description:`Received ${received.reduce((sum,line)=>sum+line.qty,0)} pieces on ${poNumber}`,status:value?.status||'partial',metadata:{lines:received,costUpdates:value?.cost_updates||[]}});
-  return res.status(200).json({ok:true,receipt:value});
+  let shopifyCostSync;try{shopifyCostSync=await queueAndPushShopifyCosts(base,key,poRows[0],value?.cost_updates||[],session)}catch(error){shopifyCostSync={attempted:0,succeeded:0,failed:1,unmatched:0,error:`Cost sync queue failed: ${error.message}`}}
+  await writeActivity(session,{actionType:'PO_RECEIVED',documentType:'purchase_order',documentNumber:poNumber,warehouse:String(body.warehouse||''),description:`Received ${received.reduce((sum,line)=>sum+line.qty,0)} pieces on ${poNumber}`,status:value?.status||'partial',metadata:{lines:received,costUpdates:value?.cost_updates||[],shopifyCostSync}});
+  return res.status(200).json({ok:true,receipt:value,shopifyCostSync});
+}
+
+async function shopifyCostStatus(res,session){
+  if(!session.permissions?.includes('create_docs'))return res.status(403).json({ok:false,error:'Logistics Coordinator access is required.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY'),rows=await rest(base,key,'shopify_cost_writebacks?select=id,po_number,sku,moving_average_cost,source_store_label,status,attempts,last_error,updated_at,pushed_at&order=updated_at.desc&limit=250');
+  return res.status(200).json({ok:true,summary:{pending:rows.filter(row=>row.status==='pending').length,failed:rows.filter(row=>row.status==='failed').length,unmatched:rows.filter(row=>row.status==='unmatched').length,success:rows.filter(row=>row.status==='success').length},writebacks:rows});
+}
+
+async function retryShopifyCosts(req,res,session){
+  if(!session.permissions?.includes('create_docs'))return res.status(403).json({ok:false,error:'Logistics Coordinator access is required.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY'),requested=Array.isArray(req.body?.ids)?req.body.ids.map(String):[],filter=requested.length?`&id=in.(${requested.map(encodeURIComponent).join(',')})`:'';
+  const rows=await rest(base,key,`shopify_cost_writebacks?select=*&status=in.(pending,failed)${filter}&order=updated_at.asc&limit=100`),results=[];
+  for(const row of rows){const products=await rest(base,key,`products?select=moving_average_cost&id=eq.${encodeURIComponent(row.product_id||'')}&limit=1`),current=Number(products[0]?.moving_average_cost);if(!Number.isFinite(current)||Math.abs(current-Number(row.moving_average_cost))>0.00009){await patchCostWriteback(base,key,row.id,{status:'superseded',last_error:'A newer BM Warehouse moving-average cost replaced this queued value.'});results.push({...row,status:'superseded'});continue}results.push(await pushCostWritebackRow(base,key,row))}
+  const summary={attempted:results.filter(row=>['success','failed'].includes(row.status)).length,succeeded:results.filter(row=>row.status==='success').length,failed:results.filter(row=>row.status==='failed').length,superseded:results.filter(row=>row.status==='superseded').length};
+  await writeActivity(session,{actionType:'SHOPIFY_COST_SYNC_RETRIED',documentType:'shopify_cost_writeback',description:`Retried ${summary.attempted} Shopify cost update${summary.attempted===1?'':'s'}`,status:summary.failed?'failed':'success',metadata:summary});return res.status(200).json({ok:true,summary});
 }
 
 async function purchaseOrderReference(res) {
@@ -598,6 +656,8 @@ module.exports = async function (req, res) {
     if (action === 'inventory' && req.method === 'GET') return inventory(res,session);
     if (action === 'waiting-pos' && req.method === 'GET') return waitingPurchaseOrders(res,session);
     if (action === 'master-pos' && req.method === 'GET') return masterPurchaseOrders(res,session);
+    if (action === 'shopify-cost-status' && req.method === 'GET') return shopifyCostStatus(res,session);
+    if (action === 'retry-shopify-costs' && req.method === 'POST') return retryShopifyCosts(req,res,session);
     if (action === 'waiting-transfers' && req.method === 'GET') return waitingTransfers(res,session);
     if (action === 'manage-transfer' && req.method === 'POST') return manageTransfer(req,res,session);
     if (action === 'manage-po' && req.method === 'POST') return managePurchaseOrder(req,res,session);
