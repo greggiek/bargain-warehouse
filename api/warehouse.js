@@ -107,6 +107,7 @@ const QOBLEX_LOCATION_IDS = new Map([
   ['riverhead', 20249],
   ['730 windham rd', 20947],
   ['730 windham', 20947],
+  ['annex warehouse', 21323],
   ['annex', 21323]
 ]);
 async function qoblexLocations() {
