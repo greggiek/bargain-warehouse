@@ -514,29 +514,11 @@ async function finishTransferCheck(req,res,session){
     discrepancies.push({transfer_id:transfer.id,transfer_line_id:null,discrepancy_type:['wrong_item','overage','damaged','other'].includes(type)?type:'other',sku:String(raw.sku||raw.value||'').slice(0,100)||null,barcode:String(raw.barcode||'').slice(0,100)||null,discrepancy_qty:Math.max(1,Number(raw.quantity||1)),note:String(raw.note||problemNote).slice(0,500)||null,reported_by_user_id:session.employeeId||null,reported_by_name:session.name,reported_by_email:session.email||null});
   }
   if(discrepancies.length)await rest(base,key,'transfer_discrepancies',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(discrepancies)});
-  const moving=receipt.filter(line=>line.received>0);
-  let qoblexTransfer=null;
-  try{
-    if(moving.length){
-      const [locations,...variants]=await Promise.all([qoblexLocations(),...moving.map(line=>qoblexVariantForSku(line.sku))]);
-      const sourceName=APP_LOCATION_NAMES[one(transfer.from)?.name]||one(transfer.from)?.name||'',destinationName=APP_LOCATION_NAMES[one(transfer.to)?.name]||one(transfer.to)?.name||'';
-      const source=qoblexLocationFor(locations,sourceName),destinationRow=qoblexLocationFor(locations,destinationName);
-      if(!source||!destinationRow)throw new Error(`Qoblex location mapping is missing for ${!source?sourceName:destinationName}.`);
-      qoblexTransfer=await qoblex('/v1/transfers',{method:'POST',body:JSON.stringify({source_location_id:Number(source.id),destination_location_id:Number(destinationRow.id),line_items:moving.map((line,index)=>({product_variant:{id:Number(variants[index].id)},quantity:line.received}))})});
-      const qoblexId=Number(qoblexTransfer?.id||qoblexTransfer?.transfer_id);
-      if(!Number.isFinite(qoblexId))throw new Error('Qoblex created the transfer but did not return its ID.');
-      for(let index=0;index<moving.length;index++)await rest(base,key,`transfer_lines?id=eq.${moving[index].lineId}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({qoblex_variant_id:Number(variants[index].id),qoblex_posted_qty:moving[index].received})});
-      await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:withProblem?'problem':'completed',received_at:now,qoblex_transfer_id:qoblexId,qoblex_post_status:'posted',qoblex_response:qoblexTransfer,updated_at:now})});
-    }else{
-      await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'problem',received_at:now,qoblex_post_status:'not_submitted',updated_at:now})});
-    }
-  }catch(error){
-    const uncertain=!error.status||error.status>=500;
-    await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:uncertain?'qoblex_unknown':'qoblex_failed',qoblex_post_status:uncertain?'unknown':'failed',qoblex_response:{error:error.message,status:error.status||null,data:error.qoblexData||null},updated_at:new Date().toISOString()})}).catch(()=>null);
-    return res.status(502).json({ok:false,error:uncertain?'Qoblex did not confirm whether the transfer posted. Do not retry; logistics must review it.':error.message,qoblexStatus:uncertain?'unknown':'failed'});
-  }
-  await writeActivity(session,{actionType:withProblem?'TRANSFER_RECEIVED_WITH_PROBLEM':'TRANSFER_RECEIVED',documentType:'transfer',documentNumber:transferNumber,warehouse:destination,description:`Received ${receipt.reduce((sum,line)=>sum+line.received,0)} pieces on ${transferNumber}${withProblem?` with ${missing} missing`:''}`,status:withProblem?'problem':'completed',metadata:{qoblexTransferId:qoblexTransfer?.id||null,lines:receipt,problemNote:withProblem?problemNote:null}});
-  return res.status(200).json({ok:true,transfer:{transferNumber,status:withProblem?'problem':'completed',qoblexTransferId:qoblexTransfer?.id||null,received:receipt.reduce((sum,line)=>sum+line.received,0),missing}});
+  const receivedTotal=receipt.reduce((sum,line)=>sum+line.received,0),finalStatus=withProblem?'problem':'completed';
+  await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:finalStatus,received_at:now,qoblex_transfer_id:null,qoblex_post_status:'not_submitted',qoblex_response:{shadowMode:true,inventoryPosted:false,message:'Recorded in BM Warehouse only'},updated_at:now})});
+  await writeActivity(session,{actionType:withProblem?'TRANSFER_SHADOW_RECEIVED_WITH_PROBLEM':'TRANSFER_SHADOW_RECEIVED',documentType:'transfer',documentNumber:transferNumber,warehouse:destination,description:`Shadow-mode receipt: recorded ${receivedTotal} pieces on ${transferNumber} in BM Warehouse only; inventory was not posted${withProblem?` with ${missing} missing`:''}`,status:finalStatus,metadata:{shadowMode:true,inventoryPosted:false,lines:receipt,problemNote:withProblem?problemNote:null}});
+  return res.status(200).json({ok:true,shadowMode:true,inventoryPosted:false,message:'Recorded in BM Warehouse — inventory not posted to Qoblex or Shopify.',transfer:{transferNumber,status:finalStatus,qoblexTransferId:null,received:receivedTotal,missing}});
+
 }
 
 async function transferProblems(res,session){
