@@ -202,4 +202,42 @@ revoke all on function public.complete_door_shop_work_order(bigint,text,text) fr
 revoke all on function public.create_door_shop_transfer(bigint,text,text) from public,anon,authenticated;
 grant execute on function public.start_door_shop_work_order(bigint,text,text) to service_role;
 grant execute on function public.complete_door_shop_work_order(bigint,text,text) to service_role;
-grant execute on function public.create_door_shop_transfer(bigint,text,text) to service_role;
+grant execute on function public.create_door_shop_transfer(bigint,text,text) to service_role;create table if not exists public.shopify_cost_writebacks (
+  id uuid primary key default gen_random_uuid(),
+  purchase_order_id uuid references public.purchase_orders(id) on delete set null,
+  po_number text not null,
+  product_id uuid references public.products(id) on delete set null,
+  sku text not null,
+  moving_average_cost numeric(14,4) not null check (moving_average_cost >= 0),
+  source_store text not null default '',
+  source_store_label text not null default '',
+  shopify_inventory_item_id text not null default '',
+  status text not null default 'pending' check (status in ('pending','success','failed','unmatched','superseded')),
+  attempts integer not null default 0 check (attempts >= 0),
+  last_error text,
+  shopify_response jsonb,
+  triggered_by_name text,
+  triggered_by_email text,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now(),
+  pushed_at timestamptz,
+  unique (purchase_order_id, sku, source_store, shopify_inventory_item_id, moving_average_cost)
+);
+
+create index if not exists shopify_cost_writebacks_status_idx
+  on public.shopify_cost_writebacks(status, updated_at desc);
+create index if not exists shopify_cost_writebacks_sku_idx
+  on public.shopify_cost_writebacks(sku, created_at desc);
+create index if not exists shopify_cost_writebacks_product_idx
+  on public.shopify_cost_writebacks(product_id)
+  where product_id is not null;
+create index if not exists shopify_cost_writebacks_purchase_order_idx
+  on public.shopify_cost_writebacks(purchase_order_id)
+  where purchase_order_id is not null;
+
+alter table public.shopify_cost_writebacks enable row level security;
+revoke all on public.shopify_cost_writebacks from anon, authenticated;
+grant all on public.shopify_cost_writebacks to service_role;
+
+comment on table public.shopify_cost_writebacks is
+  'Durable audit and retry queue for BM moving-average cost updates sent to Shopify.';
