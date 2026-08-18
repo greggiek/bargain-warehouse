@@ -59,6 +59,7 @@ module.exports = async function productSyncPreview(req, res) {
     let insertCount = 0;
     let updateCount = 0;
     let unchangedCount = 0;
+    let sourceVariantCount = 0;
 
     for (const item of shopify.normalized || []) {
       const sku = String(item.sku || '').trim();
@@ -86,6 +87,15 @@ module.exports = async function productSyncPreview(req, res) {
       if (action === 'update') updateCount += 1;
       if (action === 'unchanged') unchangedCount += 1;
 
+      const sources = (item.variants || []).map(variant => ({
+        storeKey: variant.sourceStore,
+        storeLabel: variant.sourceStoreLabel,
+        productId: variant.shopifyProductId,
+        variantId: variant.shopifyVariantId,
+        inventoryItemId: variant.shopifyInventoryItemId || null
+      })).filter(source => source.storeKey && source.productId && source.variantId);
+      sourceVariantCount += sources.length;
+
       candidates.push({
         action,
         sku,
@@ -93,11 +103,8 @@ module.exports = async function productSyncPreview(req, res) {
         barcode,
         uom: 'EA',
         active: true,
-        purchasePrice: existing ? Number(existing.purchase_price || 0) : 0,
-        movingAverageCost: existing ? Number(existing.moving_average_cost || 0) : 0,
-        sourceStores: Array.from(new Set(
-          (item.variants || []).map(variant => variant.sourceStoreLabel).filter(Boolean)
-        ))
+        sourceStores: Array.from(new Set(sources.map(source => source.storeLabel).filter(Boolean))),
+        sources
       });
     }
 
@@ -113,7 +120,8 @@ module.exports = async function productSyncPreview(req, res) {
         inserts: insertCount,
         updates: updateCount,
         unchanged: unchangedCount,
-        warnings: warnings.length
+        warnings: warnings.length,
+        sourceVariants: sourceVariantCount
       },
       candidates,
       warnings,
