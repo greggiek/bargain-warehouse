@@ -596,20 +596,20 @@ async function manageTransfer(req,res,session){
   const now=new Date().toISOString(),hasReceipt=(transfer.transfer_lines||[]).some(line=>Number(line.received_qty||0)>0);
   if(operation==='allocate'){
     if(transfer.status!=='draft')return res.status(409).json({ok:false,error:'Only a draft transfer can be allocated.'});
-    await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'allocated',updated_at:now})});
+    await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'allocated',allocated_at:now,allocated_by_name:session.name,allocated_by_email:session.email||null,updated_at:now})});
     await writeActivity(session,{actionType:'TRANSFER_ALLOCATED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Allocated material for ${transfer.transfer_number}`,status:'allocated'});
     return res.status(200).json({ok:true,status:'allocated'});
   }
   if(operation==='ship'){
     if(transfer.status!=='allocated')return res.status(409).json({ok:false,error:'Only an allocated transfer can be shipped.'});
     for(const line of transfer.transfer_lines||[])await rest(base,key,`transfer_lines?id=eq.${line.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({shipped_qty:Number(line.requested_qty||0)})});
-    await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'in_transit',shipped_at:now,updated_at:now})});
+    await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'in_transit',shipped_at:now,shipped_by_name:session.name,shipped_by_email:session.email||null,updated_at:now})});
     await writeActivity(session,{actionType:'TRANSFER_SHIPPED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Shipped ${transfer.transfer_number}; material is now in transit`,status:'in_transit'});
     return res.status(200).json({ok:true,status:'in_transit'});
   }
   if(operation==='cancel'){
     if(!['draft','allocated'].includes(transfer.status)||hasReceipt)return res.status(409).json({ok:false,error:'Only an unreceived draft or allocated transfer can be canceled.'});
-    await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'canceled',updated_at:now})});
+    await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'canceled',canceled_at:now,canceled_by_name:session.name,canceled_by_email:session.email||null,updated_at:now})});
     await writeActivity(session,{actionType:'TRANSFER_CANCELED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Canceled transfer ${transfer.transfer_number}`,status:'canceled',metadata:{previousStatus:transfer.status}});
     return res.status(200).json({ok:true,status:'canceled'});
   }
