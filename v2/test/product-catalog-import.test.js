@@ -38,4 +38,5 @@ test('catalog import requires explicit confirmation and is Shopify-only', () => 
   assert.match(source, /IMPORT_PRODUCTS/);
   assert.match(source, /administrator_role_required/);
   assert.match(source, /qoblexConnected:\s*false/);
+  assert.match(source, /headers:\s*req\.headers/);
 });
