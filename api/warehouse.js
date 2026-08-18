@@ -655,12 +655,28 @@ async function masterPurchaseOrders(res,session){
 
 async function waitingTransfers(res,session){
   const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
-  const rows=await rest(base,key,'transfers?select=id,transfer_number,status,notes,problem_note,created_by_name,updated_at,from:warehouse_locations!transfers_from_location_id_fkey(name),to:warehouse_locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_qty,shipped_qty,received_qty,discrepancy_note,products(name,sku))&status=in.(draft,allocated,in_transit,partially_received,awaiting_receipt,receiving,problem,qoblex_failed,qoblex_unknown)&order=updated_at.asc');
+  const rows=await rest(base,key,'transfers?select=id,transfer_number,status,notes,problem_note,created_by_name,updated_at,from:warehouse_locations!transfers_from_location_id_fkey(name),to:warehouse_locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_qty,shipped_qty,received_qty,damaged_qty,missing_qty,discrepancy_note,products(name,sku))&status=in.(draft,allocated,in_transit,partially_received,awaiting_receipt,receiving,problem,qoblex_failed,qoblex_unknown)&order=updated_at.asc');
   const visible=rows.filter(row=>canAccessLocation(session,APP_LOCATION_NAMES[one(row.to)?.name]||one(row.to)?.name||''));
   return res.status(200).json({ok:true,transfers:visible.map(row=>({
     id:row.id,ref:row.transfer_number,status:row.status,from:APP_LOCATION_NAMES[one(row.from)?.name]||one(row.from)?.name||'',to:APP_LOCATION_NAMES[one(row.to)?.name]||one(row.to)?.name||'',createdBy:row.created_by_name||'',note:row.notes||'',problemNote:row.problem_note||'',
-    lines:(row.transfer_lines||[]).map(line=>{const product=one(line.products)||{};return{id:line.id,sku:product.sku||'',name:product.name||product.sku||'',barcode:product.barcode||product.sku||'',expected:Number(line.requested_qty||0),received:Number(line.received_qty||0),discrepancyNote:line.discrepancy_note||''}})
+    lines:(row.transfer_lines||[]).map(line=>{const product=one(line.products)||{};return{id:line.id,sku:product.sku||'',name:product.name||product.sku||'',barcode:product.barcode||product.sku||'',expected:Number(line.requested_qty||0),shipped:Number(line.shipped_qty||0),received:Number(line.received_qty||0),damaged:Number(line.damaged_qty||0),missing:Number(line.missing_qty||Math.max(0,Number(line.shipped_qty||0)-Number(line.received_qty||0))),discrepancyNote:line.discrepancy_note||''}})
   }))});
+}
+
+async function inTransitInventory(res,session){
+  if(!session.permissions?.includes('create_docs'))return res.status(403).json({ok:false,error:'Logistics Coordinator access is required.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  const rows=await rest(base,key,'transfers?select=transfer_number,status,shipped_at,from:warehouse_locations!transfers_from_location_id_fkey(name),to:warehouse_locations!transfers_to_location_id_fkey(name),transfer_lines(shipped_qty,received_qty,damaged_qty,missing_qty,products(name,sku))&status=in.(in_transit,partially_received)&order=shipped_at.asc');
+  const items=[];
+  for(const transfer of rows)for(const line of transfer.transfer_lines||[]){const product=one(line.products)||{},shipped=Number(line.shipped_qty||0),received=Number(line.received_qty||0),damaged=Number(line.damaged_qty||0),missing=Math.max(0,Number(line.missing_qty||shipped-received));if(missing<=0)continue;items.push({transferNumber:transfer.transfer_number,status:transfer.status,sku:product.sku||'',name:product.name||product.sku||'',from:APP_LOCATION_NAMES[one(transfer.from)?.name]||one(transfer.from)?.name||'',to:APP_LOCATION_NAMES[one(transfer.to)?.name]||one(transfer.to)?.name||'',shipped,received,damaged,missing,shippedAt:transfer.shipped_at||''})}
+  return res.status(200).json({ok:true,summary:{transfers:new Set(items.map(item=>item.transferNumber)).size,skus:new Set(items.map(item=>item.sku)).size,pieces:items.reduce((sum,item)=>sum+item.missing,0)},items});
+}
+
+async function transferHistory(res,session){
+  if(!session.permissions?.includes('create_docs'))return res.status(403).json({ok:false,error:'Logistics Coordinator access is required.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
+  const events=await rest(base,key,'activity_events?select=created_at,user_name,user_email,action_type,document_number,warehouse,description,status,metadata&document_type=eq.transfer&order=created_at.desc&limit=500');
+  return res.status(200).json({ok:true,events:events.map(event=>({timestamp:event.created_at,employee:event.user_name||event.user_email||'Unknown employee',email:event.user_email||'',action:event.action_type||'',transferNumber:event.document_number||'',warehouse:event.warehouse||'',description:event.description||'',status:event.status||'',metadata:event.metadata||{}}))});
 }
 
 async function finishTransferCheck(req,res,session){
@@ -669,7 +685,7 @@ async function finishTransferCheck(req,res,session){
   if(!/^TR-[A-Z0-9-]{6,40}$/.test(transferNumber))return res.status(400).json({ok:false,error:'Invalid transfer number.'});
   if(withProblem&&!problemNote)return res.status(400).json({ok:false,error:'Explain what is wrong with the transfer.'});
   const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY');
-  const rows=await rest(base,key,`transfers?select=id,transfer_number,status,qoblex_transfer_id,from:warehouse_locations!transfers_from_location_id_fkey(id,name),to:warehouse_locations!transfers_to_location_id_fkey(id,name),transfer_lines(id,requested_qty,received_qty,qoblex_posted_qty,products(id,name,sku))&transfer_number=eq.${encodeURIComponent(transferNumber)}&limit=1`),transfer=rows[0];
+  const rows=await rest(base,key,`transfers?select=id,transfer_number,status,qoblex_transfer_id,from:warehouse_locations!transfers_from_location_id_fkey(id,name),to:warehouse_locations!transfers_to_location_id_fkey(id,name),transfer_lines(id,requested_qty,shipped_qty,received_qty,damaged_qty,missing_qty,qoblex_posted_qty,products(id,name,sku))&transfer_number=eq.${encodeURIComponent(transferNumber)}&limit=1`),transfer=rows[0];
   if(!transfer)return res.status(404).json({ok:false,error:'Transfer not found.'});
   const destination=APP_LOCATION_NAMES[one(transfer.to)?.name]||one(transfer.to)?.name||'';
   if(!canAccessLocation(session,destination))return res.status(403).json({ok:false,error:`This transfer belongs to ${destination||'another warehouse'}.`});
@@ -678,16 +694,17 @@ async function finishTransferCheck(req,res,session){
   if(!['in_transit','partially_received','awaiting_receipt','receiving','qoblex_failed'].includes(transfer.status))return res.status(409).json({ok:false,error:`Transfer cannot be received while its status is ${transfer.status}.`});
   const savedLines=transfer.transfer_lines||[],byId=new Map(submitted.map(line=>[String(line.id||''),line])),receipt=[];
   for(const line of savedLines){
-    const input=byId.get(String(line.id)),received=Number(input?.receivedQty||0),expected=Number(line.requested_qty||0),product=one(line.products)||{};
-    if(!Number.isFinite(received)||received<0||received>expected)return res.status(400).json({ok:false,error:`Received quantity for ${product.sku||'a line'} must be between 0 and ${expected}.`});
-    receipt.push({lineId:line.id,sku:String(product.sku||'').trim().toUpperCase(),name:product.name||product.sku||'',expected,received,note:String(input?.note||'').trim()});
+    const input=byId.get(String(line.id)),received=Number(input?.receivedQty||0),expected=Number(line.requested_qty||0),shipped=Number(line.shipped_qty||expected),damaged=Number(input?.damagedQty||0),product=one(line.products)||{};
+    if(!Number.isFinite(received)||received<0||received>shipped)return res.status(400).json({ok:false,error:`Received quantity for ${product.sku||'a line'} must be between 0 and ${shipped}.`});
+    if(!Number.isFinite(damaged)||damaged<0||damaged>received)return res.status(400).json({ok:false,error:`Damaged quantity for ${product.sku||'a line'} must be between 0 and ${received}.`});
+    receipt.push({lineId:line.id,sku:String(product.sku||'').trim().toUpperCase(),name:product.name||product.sku||'',expected,shipped,received,damaged,missing:Math.max(0,shipped-received),note:String(input?.note||'').trim()});
   }
-  const missing=receipt.reduce((sum,line)=>sum+Math.max(0,line.expected-line.received),0);
+  const missing=receipt.reduce((sum,line)=>sum+line.missing,0);
   if(withProblem&&!missing&&(!Array.isArray(body.problems)||body.problems.length===0))return res.status(400).json({ok:false,error:'No discrepancy was supplied.'});
   const now=new Date().toISOString();
   const claimed=await rest(base,key,`transfers?id=eq.${transfer.id}&status=in.(in_transit,partially_received,awaiting_receipt,receiving,qoblex_failed)&qoblex_transfer_id=is.null&select=id`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({status:'submitting',receiving_started_at:now,receiving_by_user_id:session.employeeId||null,receiving_by_name:session.name,receiving_by_email:session.email||null,problem_note:withProblem?problemNote:null,qoblex_post_status:'submitting',qoblex_submission_started_at:now,updated_at:now})});
   if(!claimed[0])return res.status(409).json({ok:false,error:'Another user is already finishing this transfer.'});
-  for(const line of receipt)await rest(base,key,`transfer_lines?id=eq.${line.lineId}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({received_qty:line.received,discrepancy_note:line.note||null})});
+  for(const line of receipt)await rest(base,key,`transfer_lines?id=eq.${line.lineId}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({received_qty:line.received,damaged_qty:line.damaged,missing_qty:line.missing,discrepancy_note:line.note||null})});
   await rest(base,key,`transfer_discrepancies?transfer_id=eq.${transfer.id}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});
   const discrepancies=receipt.filter(line=>line.received!==line.expected).map(line=>({transfer_id:transfer.id,transfer_line_id:line.lineId,discrepancy_type:'missing',sku:line.sku,expected_qty:line.expected,received_qty:line.received,discrepancy_qty:line.expected-line.received,note:line.note||problemNote,reported_by_user_id:session.employeeId||null,reported_by_name:session.name,reported_by_email:session.email||null}));
   for(const raw of Array.isArray(body.problems)?body.problems:[]){
@@ -751,6 +768,8 @@ module.exports = async function (req, res) {
     if (action === 'shopify-inventory-status' && req.method === 'GET') return shopifyInventoryStatus(res,session);
     if (action === 'retry-shopify-inventory' && req.method === 'POST') return retryShopifyInventory(req,res,session);
     if (action === 'waiting-transfers' && req.method === 'GET') return waitingTransfers(res,session);
+    if (action === 'in-transit-inventory' && req.method === 'GET') return inTransitInventory(res,session);
+    if (action === 'transfer-history' && req.method === 'GET') return transferHistory(res,session);
     if (action === 'manage-transfer' && req.method === 'POST') return manageTransfer(req,res,session);
     if (action === 'manage-po' && req.method === 'POST') return managePurchaseOrder(req,res,session);
     if (action === 'transfer-problems' && req.method === 'GET') return transferProblems(res,session);
