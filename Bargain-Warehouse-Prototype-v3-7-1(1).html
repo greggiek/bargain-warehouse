@@ -776,7 +776,7 @@ function renderTransferCheck(){
 function showTransferCheck(ref){
   const base=backendTransfers[normalizeTransferRef(ref)];
   if(!base) return notify('Transfer not found in prototype');
-  const tx={...base,lines:base.lines.map(l=>({...l,scanned:0})),problems:[]};
+  const tx={...base,lines:base.lines.map(l=>({...l,scanned:Number(l.received||0),startingReceived:Number(l.received||0)})),problems:[]};
   const work=document.getElementById('transferCheckWork');
   work.classList.remove('hidden');
   const expectedTotal=tx.lines.reduce((s,l)=>s+l.expected,0);
@@ -796,7 +796,7 @@ function showTransferCheck(ref){
     <div id="checkLines" class="line-list"></div>
     <div class="receive-footer">
       <div class="totals"><div><span class="muted">Lines Complete</span><strong id="checkComplete">0/${tx.lines.length}</strong></div><div><span class="muted">Problems</span><strong id="checkProblems">0</strong></div></div>
-      <div style="display:flex;gap:10px;flex-wrap:wrap"><button id="finishWithProblem" class="danger">Finish With Problem</button><button id="finishCheck" class="success" disabled>Finish Transfer Check</button></div>
+      <div style="display:flex;gap:10px;flex-wrap:wrap"><button id="finishWithProblem" class="danger">Finish With Problem</button><button id="savePartialReceipt" class="secondary" disabled>Save Partial Receipt</button><button id="finishCheck" class="success" disabled>Complete Receipt</button></div>
     </div>`;
   const scan=document.getElementById('checkItemScan');
   const feedback=document.getElementById('scanFeedback');
@@ -823,8 +823,9 @@ function showTransferCheck(ref){
   };
   document.getElementById('checkItemBtn').onclick=scanPiece;
   scan.onkeydown=e=>{if(e.key==='Enter')scanPiece();};
-  document.getElementById('finishWithProblem').onclick=()=>finishCheckedTransfer(tx,true);
-  document.getElementById('finishCheck').onclick=()=>finishCheckedTransfer(tx,false);
+  document.getElementById('finishWithProblem').onclick=()=>finishCheckedTransfer(tx,true,false);
+  document.getElementById('savePartialReceipt').onclick=()=>finishCheckedTransfer(tx,false,true);
+  document.getElementById('finishCheck').onclick=()=>finishCheckedTransfer(tx,false,false);
   function drawCheck(){
     const list=document.getElementById('checkLines');
     list.innerHTML=tx.lines.map(l=>{
@@ -838,30 +839,32 @@ function showTransferCheck(ref){
     document.getElementById('checkComplete').textContent=`${complete}/${tx.lines.length}`;
     document.getElementById('checkProblems').textContent=tx.problems.length;
     document.getElementById('finishCheck').disabled=remaining!==0;
+    document.getElementById('savePartialReceipt').disabled=remaining===0||tx.lines.every(l=>l.scanned===l.startingReceived);
   }
   drawCheck();
   work.scrollIntoView({behavior:'smooth',block:'start'}); setTimeout(()=>scan.focus(),180);
 }
 
-async function finishCheckedTransfer(tx,withProblem){
+async function finishCheckedTransfer(tx,withProblem,allowPartial=false){
   const expected=tx.lines.reduce((s,l)=>s+l.expected,0), scanned=tx.lines.reduce((s,l)=>s+l.scanned,0), missing=expected-scanned;
-  if(!withProblem && missing>0) return notify(`${missing} pieces still need to be scanned`);
+  if(!withProblem && missing>0 && !allowPartial) return notify(`${missing} pieces still need to be scanned`);
+  if(allowPartial&&tx.lines.every(l=>l.scanned===l.startingReceived))return notify('Scan at least one newly received piece first');
   if(withProblem && missing===0 && !tx.problems.length) return notify('Everything matches — use Finish Transfer Check');
   let note='';
   if(withProblem){note=window.prompt('What is wrong with this transfer? Example: 2 pieces short, damaged, wrong item.')||''; if(!note.trim()) return notify('Add a problem note before finishing');}
-  const finish=document.getElementById('finishCheck'),problem=document.getElementById('finishWithProblem');
-  finish.disabled=true;problem.disabled=true;const prior=withProblem?problem.textContent:finish.textContent;(withProblem?problem:finish).textContent='Saving in BM Warehouse…';
+  const finish=document.getElementById('finishCheck'),problem=document.getElementById('finishWithProblem'),partial=document.getElementById('savePartialReceipt');
+  finish.disabled=true;problem.disabled=true;partial.disabled=true;const active=withProblem?problem:allowPartial?partial:finish,prior=active.textContent;active.textContent='Saving in BM Warehouse…';
   try{
     const token=await window.bmGoogleAuth.accessToken();
     if(!token)throw new Error('Your session expired. Refresh and sign in again.');
     const response=await fetch('/api/warehouse?action=finish-transfer-check',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({transferNumber:tx.ref,withProblem,problemNote:note,lines:tx.lines.map(l=>({id:l.id,sku:l.sku,receivedQty:l.scanned,note:l.expected===l.scanned?'':note})),problems:tx.problems.map(p=>({type:p.type,value:p.value,quantity:1,note}))})});
     const data=await response.json().catch(()=>null);
     if(!response.ok)throw new Error(data?.error||'The transfer count could not be saved.');
-    const completed={type:'Transfer Check',ref:tx.ref,from:tx.from,to:tx.to,location:tx.to,employee:state.employee?.name||'Manager',date:new Date(),lines:tx.lines.map(l=>({sku:l.sku,name:l.name,qty:l.scanned,expected:l.expected})),total:scanned,expectedTotal:expected,missing,problems:tx.problems,note,status:withProblem?'Problem — Logistics Review':'Completed',serverRecorded:true,shadowMode:Boolean(data.shadowMode),inventoryPosted:Boolean(data.inventoryPosted),qoblexTransferId:null};
-    state.activity.unshift({type:'TRANSFER',text:`${tx.ref} checked by ${completed.employee} · ${withProblem?'problem reported':'all pieces match'}`,ref:tx.ref});
+    const completed={type:'Transfer Check',ref:tx.ref,from:tx.from,to:tx.to,location:tx.to,employee:state.employee?.name||'Manager',date:new Date(),lines:tx.lines.map(l=>({sku:l.sku,name:l.name,qty:l.scanned,expected:l.expected})),total:scanned,expectedTotal:expected,missing,problems:tx.problems,note,status:withProblem?'Problem — Logistics Review':missing?'Partially Received':'Completed',serverRecorded:true,shadowMode:Boolean(data.shadowMode),inventoryPosted:Boolean(data.inventoryPosted),qoblexTransferId:null};
+    state.activity.unshift({type:'TRANSFER',text:`${tx.ref} checked by ${completed.employee} · ${withProblem?'problem reported':missing?'partial receipt saved':'all pieces match'}`,ref:tx.ref});
     showTransferCheckCompletion(completed);
   }catch(error){
-    notify(error.message);problem.disabled=false;finish.disabled=missing!==0;(withProblem?problem:finish).textContent=prior;
+    notify(error.message);problem.disabled=false;partial.disabled=missing===0||tx.lines.every(l=>l.scanned===l.startingReceived);finish.disabled=missing!==0;active.textContent=prior;
   }
 }
 
