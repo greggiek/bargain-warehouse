@@ -776,7 +776,7 @@ function renderTransferCheck(){
 function showTransferCheck(ref){
   const base=backendTransfers[normalizeTransferRef(ref)];
   if(!base) return notify('Transfer not found in prototype');
-  const tx={...base,lines:base.lines.map(l=>({...l,scanned:Number(l.received||0),startingReceived:Number(l.received||0)})),problems:[]};
+  const tx={...base,lines:base.lines.map(l=>({...l,scanned:Number(l.received||0),startingReceived:Number(l.received||0),damaged:Number(l.damaged||0),startingDamaged:Number(l.damaged||0)})),problems:[]};
   const work=document.getElementById('transferCheckWork');
   work.classList.remove('hidden');
   const expectedTotal=tx.lines.reduce((s,l)=>s+l.expected,0);
@@ -831,8 +831,9 @@ function showTransferCheck(ref){
     list.innerHTML=tx.lines.map(l=>{
       const remain=l.expected-l.scanned;
       const cls=remain===0?'good':l.scanned>0?'need':'';
-      return `<div class="match-line ${cls}"><div><div class="eyebrow">${esc(l.sku)}</div><div class="name">${esc(l.name)}</div><div class="tiny">Barcode ${esc(l.barcode)}</div></div><div class="metric"><small>Expected</small><strong>${l.expected}</strong></div><div class="metric"><small>Scanned</small><strong>${l.scanned}</strong></div><div class="metric"><small>${remain===0?'Status':'Still Needed'}</small><strong>${remain===0?'✓ Complete':remain}</strong></div></div>`;
+      return `<div class="match-line ${cls}"><div><div class="eyebrow">${esc(l.sku)}</div><div class="name">${esc(l.name)}</div><div class="tiny">Barcode ${esc(l.barcode)}</div></div><div class="metric"><small>Expected</small><strong>${l.expected}</strong></div><div class="metric"><small>Received</small><strong>${l.scanned}</strong></div><div class="metric"><small>Damaged</small><strong>${l.damaged}</strong><button type="button" class="damage-line-btn" data-damage-sku="${esc(l.sku)}">Report</button></div><div class="metric"><small>${remain===0?'Status':'Still Needed'}</small><strong>${remain===0?'✓ Complete':remain}</strong></div></div>`;
     }).join('');
+    list.querySelectorAll('[data-damage-sku]').forEach(button=>button.onclick=()=>{const line=tx.lines.find(item=>String(item.sku)===String(button.dataset.damageSku));if(!line)return;const raw=prompt(`How many ${line.sku} pieces are damaged in total?`,line.damaged);if(raw===null)return;const qty=Number(raw);if(!Number.isFinite(qty)||qty<0||qty>line.scanned)return notify(`Damaged quantity must be between 0 and ${line.scanned}`);if(qty>line.damaged)tx.problems.push({type:'Damaged',sku:line.sku,value:line.sku,quantity:qty-line.damaged,time:new Date()});line.damaged=qty;drawCheck()});
     const scanned=tx.lines.reduce((s,l)=>s+l.scanned,0), remaining=expectedTotal-scanned, complete=tx.lines.filter(l=>l.scanned===l.expected).length;
     document.getElementById('checkScanned').textContent=scanned;
     document.getElementById('checkRemaining').textContent=remaining;
@@ -857,10 +858,10 @@ async function finishCheckedTransfer(tx,withProblem,allowPartial=false){
   try{
     const token=await window.bmGoogleAuth.accessToken();
     if(!token)throw new Error('Your session expired. Refresh and sign in again.');
-    const response=await fetch('/api/warehouse?action=finish-transfer-check',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({transferNumber:tx.ref,withProblem,problemNote:note,lines:tx.lines.map(l=>({id:l.id,sku:l.sku,receivedQty:l.scanned,note:l.expected===l.scanned?'':note})),problems:tx.problems.map(p=>({type:p.type,value:p.value,quantity:1,note}))})});
+    const response=await fetch('/api/warehouse?action=finish-transfer-check',{method:'POST',headers:{Authorization:`Bearer ${token}`,'Content-Type':'application/json'},body:JSON.stringify({transferNumber:tx.ref,withProblem,problemNote:note,lines:tx.lines.map(l=>({id:l.id,sku:l.sku,receivedQty:l.scanned,damagedQty:l.damaged,note:l.expected===l.scanned?'':note})),problems:tx.problems.map(p=>({type:p.type,sku:p.sku||p.value,value:p.value,quantity:Number(p.quantity||1),note}))})});
     const data=await response.json().catch(()=>null);
     if(!response.ok)throw new Error(data?.error||'The transfer count could not be saved.');
-    const completed={type:'Transfer Check',ref:tx.ref,from:tx.from,to:tx.to,location:tx.to,employee:state.employee?.name||'Manager',date:new Date(),lines:tx.lines.map(l=>({sku:l.sku,name:l.name,qty:l.scanned,expected:l.expected})),total:scanned,expectedTotal:expected,missing,problems:tx.problems,note,status:withProblem?'Problem — Logistics Review':missing?'Partially Received':'Completed',serverRecorded:true,shadowMode:Boolean(data.shadowMode),inventoryPosted:Boolean(data.inventoryPosted),qoblexTransferId:null};
+    const completed={type:'Transfer Check',ref:tx.ref,from:tx.from,to:tx.to,location:tx.to,employee:state.employee?.name||'Manager',date:new Date(),lines:tx.lines.map(l=>({sku:l.sku,name:l.name,qty:l.scanned,expected:l.expected,damaged:l.damaged,missing:Math.max(0,l.expected-l.scanned)})),total:scanned,expectedTotal:expected,missing,problems:tx.problems,note,status:withProblem?'Problem — Logistics Review':missing?'Partially Received':'Completed',serverRecorded:true,shadowMode:Boolean(data.shadowMode),inventoryPosted:Boolean(data.inventoryPosted),qoblexTransferId:null};
     state.activity.unshift({type:'TRANSFER',text:`${tx.ref} checked by ${completed.employee} · ${withProblem?'problem reported':missing?'partial receipt saved':'all pieces match'}`,ref:tx.ref});
     showTransferCheckCompletion(completed);
   }catch(error){
