@@ -9,6 +9,7 @@ create or replace function public.sync_shopify_catalog_mirror(
 returns table(created_count integer, refreshed_count integer, source_variant_count integer)
 language plpgsql
 security invoker
+set search_path = pg_catalog, public
 as $$
 declare
   v_created_count integer := 0;
