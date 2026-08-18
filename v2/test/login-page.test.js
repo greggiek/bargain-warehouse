@@ -5,10 +5,12 @@ const path = require('node:path');
 
 const page = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 
-test('login page uses the server-side authentication endpoints', () => {
-  assert.match(page, /\/api\/auth\/login/);
+test('login page uses Google and the server-side session endpoints', () => {
+  assert.match(page, /provider=google/);
+  assert.match(page, /\/api\/auth\/google-session/);
   assert.match(page, /\/api\/auth\/logout/);
   assert.match(page, /\/api\/auth\/me/);
+  assert.doesNotMatch(page, /type="password"/);
 });
 
 test('login page does not expose Supabase credentials', () => {
