@@ -66,6 +66,7 @@
     }
   </style>
   <script src="/inventory.js" defer></script>
+  <script src="/product-sync.js" defer></script>
 </head>
 <body>
   <div id="loginView" class="login-wrap" hidden>
@@ -84,6 +85,7 @@
       <nav aria-label="Primary">
         <button id="overviewNav" class="nav-item active" type="button">Overview</button>
         <button id="inventoryNav" class="nav-item" type="button">Inventory</button>
+        <button id="productSyncNav" class="nav-item" type="button">Product Sync</button>
         <span>Transfers</span>
         <span>Receiving</span>
         <span>Production</span>
@@ -119,6 +121,26 @@
             <tbody id="inventoryRows"></tbody>
           </table>
           <div class="inventory-foot"><span id="inventoryCount">0 SKUs</span><span>Shopify read-only · Qoblex disconnected</span></div>
+        </div>
+      </section>
+      <section id="productSyncView" hidden>
+        <div class="inventory-head">
+          <div><div class="eyebrow">Preview only</div><h1>Product master sync</h1><p class="muted">Compare Shopify SKUs with the clean V2 product table. This screen cannot write data.</p></div>
+          <button id="productSyncRefresh" class="button secondary" type="button">Refresh preview</button>
+        </div>
+        <div class="cards">
+          <section class="card"><span class="muted">Shopify SKUs</span><strong id="syncShopifyCount">—</strong></section>
+          <section class="card"><span class="muted">New products</span><strong id="syncInsertCount">—</strong></section>
+          <section class="card"><span class="muted">Updates</span><strong id="syncUpdateCount">—</strong></section>
+          <section class="card"><span class="muted">Warnings</span><strong id="syncWarningCount">—</strong></section>
+        </div>
+        <div id="productSyncStatus" class="inventory-status">Open Product Sync to generate a preview.</div>
+        <div class="inventory-table-wrap">
+          <table class="inventory-table">
+            <thead><tr><th>Action</th><th>SKU</th><th>Product</th><th>Barcode</th><th>Shopify stores</th></tr></thead>
+            <tbody id="productSyncRows"></tbody>
+          </table>
+          <div class="inventory-foot"><span>Preview only · no database writes</span><span>Shopify source · Qoblex disconnected</span></div>
         </div>
       </section>
     </main>
