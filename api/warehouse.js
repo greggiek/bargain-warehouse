@@ -159,6 +159,51 @@ async function queueAndPushShopifyInventory(base,key,po,destination,received,ses
   }
   return{attempted:results.filter(row=>row.source_store&&row.status!=='unmatched').length,succeeded:results.filter(row=>row.status==='success').length,failed:results.filter(row=>row.status==='failed').length,unmatched:results.filter(row=>row.status==='unmatched').length,items:results.map(row=>({sku:row.sku,store:row.source_store_label||null,location:row.shopify_location_name||null,quantity:Number(row.quantity_delta||0),status:row.status,error:row.error||row.last_error||null}))};
 }
+
+const SHOPIFY_TRANSFER_TEST = Object.freeze({
+  sku:'GREGS SHOES', quantity:1, fromLocation:'Annex Warehouse', toLocation:'Bohemia Main',
+  ship:{store:'store_2',locationId:'gid://shopify/Location/81193369657',locationName:'Annex (Retail) 730',delta:-1},
+  receive:{store:'store_1',locationId:'gid://shopify/Location/68088365268',locationName:'Bohemia Warehouse',delta:1}
+});
+function transferWritebackId(transferId,lineId,leg){
+  const hex=crypto.createHash('sha256').update(['bm-shopify-transfer-v1',transferId,lineId,leg].join('|')).digest('hex').slice(0,32);
+  return [hex.slice(0,8),hex.slice(8,12),'4'+hex.slice(13,16),'8'+hex.slice(17,20),hex.slice(20,32)].join('-');
+}
+function shopifyTransferTestMatch(transfer){
+  const from=one(transfer.from)?.name||'',to=one(transfer.to)?.name||'',lines=transfer.transfer_lines||[],line=lines[0],product=one(line?.products)||{};
+  return from===SHOPIFY_TRANSFER_TEST.fromLocation&&to===SHOPIFY_TRANSFER_TEST.toLocation&&lines.length===1&&String(product.sku||'').trim().toUpperCase()===SHOPIFY_TRANSFER_TEST.sku&&Number(line.requested_qty)===SHOPIFY_TRANSFER_TEST.quantity?{line,product}:null;
+}
+async function adjustShopifyTransferInventory(row){
+  const store=SHOPIFY_STORES.find(item=>item.key===row.source_store);if(!store)throw new Error('Unknown Shopify store '+row.source_store);
+  const {shop,token}=await shopifyAccess(store);
+  const query='mutation BMTransferInventory($input:InventoryAdjustQuantitiesInput!,$idempotencyKey:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$idempotencyKey){inventoryAdjustmentGroup{createdAt reason referenceDocumentUri changes{name delta}} userErrors{field message}}}';
+  const variables={idempotencyKey:row.id,input:{reason:'correction',name:'available',referenceDocumentUri:'bmwarehouse://transfer/'+encodeURIComponent(row.transfer_number)+'/'+row.leg+'/'+row.id,changes:[{delta:Number(row.quantity_delta),inventoryItemId:row.shopify_inventory_item_id,locationId:row.shopify_location_id}]}};
+  const response=await fetch('https://'+shop+'/admin/api/'+SHOPIFY_API_VERSION+'/graphql.json',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables})}),payload=await response.json().catch(()=>null);
+  if(!response.ok)throw new Error(store.label+': Shopify transfer quantity update failed ('+response.status+')');
+  if(payload?.errors?.length)throw new Error(store.label+': '+payload.errors.map(error=>error.message).join('; '));
+  const result=payload?.data?.inventoryAdjustQuantities,errors=result?.userErrors||[];if(errors.length)throw new Error(store.label+': '+errors.map(error=>error.message).join('; '));
+  if(!result?.inventoryAdjustmentGroup)throw new Error(store.label+': Shopify returned no inventory adjustment group.');
+  return result.inventoryAdjustmentGroup;
+}
+async function pushShopifyTransferLeg(base,key,transfer,leg,session){
+  const match=shopifyTransferTestMatch(transfer);if(!match)return{applies:false};
+  const target=SHOPIFY_TRANSFER_TEST[leg],id=transferWritebackId(transfer.id,match.line.id,leg);
+  const existing=await rest(base,key,'shopify_transfer_writebacks?select=*&id=eq.'+encodeURIComponent(id)+'&limit=1');
+  if(existing[0]?.status==='success')return{applies:true,status:'success',replayed:true,row:existing[0]};
+  let inventoryItemId=existing[0]?.shopify_inventory_item_id||null;
+  if(!inventoryItemId)inventoryItemId=await liveShopifyInventoryItem(target.store,SHOPIFY_TRANSFER_TEST.sku);
+  const payload={id,transfer_id:transfer.id,transfer_line_id:match.line.id,transfer_number:transfer.transfer_number,sku:SHOPIFY_TRANSFER_TEST.sku,leg,quantity_delta:target.delta,source_store:target.store,source_store_label:SHOPIFY_STORES.find(item=>item.key===target.store)?.label||target.store,shopify_inventory_item_id:inventoryItemId,shopify_location_id:target.locationId,shopify_location_name:target.locationName,status:'pending',last_error:null,triggered_by_name:session.name,triggered_by_email:session.email||null,updated_at:new Date().toISOString()};
+  const rows=await rest(base,key,'shopify_transfer_writebacks?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(payload)}),row=rows[0];
+  try{
+    const adjustment=await adjustShopifyTransferInventory(row);
+    await rest(base,key,'shopify_transfer_writebacks?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'success',attempts:Number(row.attempts||0)+1,last_error:null,shopify_response:adjustment,pushed_at:new Date().toISOString(),updated_at:new Date().toISOString()})});
+    return{applies:true,status:'success',row:{...row,status:'success'}};
+  }catch(error){
+    await rest(base,key,'shopify_transfer_writebacks?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'failed',attempts:Number(row.attempts||0)+1,last_error:String(error.message||error).slice(0,1000),updated_at:new Date().toISOString()})});
+    return{applies:true,status:'failed',error:error.message};
+  }
+}
+
 function qoblexConfig() {
   return {
     base: env('QOBLEX_BASE_URL').replace(/\/+$/, ''),
@@ -592,7 +637,7 @@ const APP_LOCATION_NAMES={'Amityville Main':'336 Bayview','Bohemia Main':'Bargai
 
 async function manageTransfer(req,res,session){
   if(!requireCoordinator(session,res))return;const body=req.body||{},id=String(body.id||''),operation=String(body.operation||'');if(!id||!['update','delete','allocate','ship','cancel'].includes(operation))return res.status(400).json({ok:false,error:'Choose a valid transfer action.'});
-  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY'),rows=await rest(base,key,`transfers?select=id,transfer_number,status,qoblex_transfer_id,from_location_id,to_location_id,notes,transfer_lines(id,requested_qty,shipped_qty,received_qty)&id=eq.${encodeURIComponent(id)}&limit=1`),transfer=rows[0];if(!transfer)return res.status(404).json({ok:false,error:'Transfer not found.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY'),rows=await rest(base,key,`transfers?select=id,transfer_number,status,qoblex_transfer_id,from_location_id,to_location_id,notes,from:warehouse_locations!transfers_from_location_id_fkey(name),to:warehouse_locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_qty,shipped_qty,received_qty,products(name,sku))&id=eq.${encodeURIComponent(id)}&limit=1`),transfer=rows[0];if(!transfer)return res.status(404).json({ok:false,error:'Transfer not found.'});
   const now=new Date().toISOString(),hasReceipt=(transfer.transfer_lines||[]).some(line=>Number(line.received_qty||0)>0);
   if(operation==='allocate'){
     if(transfer.status!=='draft')return res.status(409).json({ok:false,error:'Only a draft transfer can be allocated.'});
@@ -602,10 +647,12 @@ async function manageTransfer(req,res,session){
   }
   if(operation==='ship'){
     if(transfer.status!=='allocated')return res.status(409).json({ok:false,error:'Only an allocated transfer can be shipped.'});
+    const shopify=await pushShopifyTransferLeg(base,key,transfer,'ship',session);
+    if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not deduct the test unit from Annex. The BM transfer was not shipped. '+shopify.error,shopify});
     for(const line of transfer.transfer_lines||[])await rest(base,key,`transfer_lines?id=eq.${line.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({shipped_qty:Number(line.requested_qty||0)})});
     await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'in_transit',shipped_at:now,shipped_by_name:session.name,shipped_by_email:session.email||null,updated_at:now})});
-    await writeActivity(session,{actionType:'TRANSFER_SHIPPED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Shipped ${transfer.transfer_number}; material is now in transit`,status:'in_transit'});
-    return res.status(200).json({ok:true,status:'in_transit'});
+    await writeActivity(session,{actionType:shopify.applies?'TRANSFER_SHIPPED_SHOPIFY_TEST':'TRANSFER_SHIPPED',documentType:'transfer',documentNumber:transfer.transfer_number,description:shopify.applies?`Shipped ${transfer.transfer_number}; Shopify deducted 1 GREGS SHOES from Annex (Retail) 730`:`Shipped ${transfer.transfer_number}; material is now in transit`,status:'in_transit',metadata:{shopifyTest:Boolean(shopify.applies),shopifyLeg:shopify.applies?'ship':null}});
+    return res.status(200).json({ok:true,status:'in_transit',shopifyTest:Boolean(shopify.applies),shopify});
   }
   if(operation==='cancel'){
     if(!['draft','allocated'].includes(transfer.status)||hasReceipt)return res.status(409).json({ok:false,error:'Only an unreceived draft or allocated transfer can be canceled.'});
@@ -700,6 +747,8 @@ async function finishTransferCheck(req,res,session){
     receipt.push({lineId:line.id,sku:String(product.sku||'').trim().toUpperCase(),name:product.name||product.sku||'',expected,shipped,received,damaged,missing:Math.max(0,shipped-received),note:String(input?.note||'').trim()});
   }
   const missing=receipt.reduce((sum,line)=>sum+line.missing,0),totalDamaged=receipt.reduce((sum,line)=>sum+line.damaged,0);
+  const shopifyTest=shopifyTransferTestMatch(transfer);if(shopifyTest&&(receipt.length!==1||receipt[0].received!==1||receipt[0].damaged!==0))return res.status(400).json({ok:false,error:'The allowlisted Shopify test must receive exactly 1 undamaged GREGS SHOES unit.'});
+  const shopify=await pushShopifyTransferLeg(base,key,transfer,'receive',session);if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not add the test unit to Bohemia. The BM receipt was not completed. '+shopify.error,shopify});
   if(withProblem&&!missing&&(!Array.isArray(body.problems)||body.problems.length===0))return res.status(400).json({ok:false,error:'No discrepancy was supplied.'});
   const now=new Date().toISOString();
   const claimed=await rest(base,key,`transfers?id=eq.${transfer.id}&status=in.(in_transit,partially_received,awaiting_receipt,receiving,qoblex_failed)&qoblex_transfer_id=is.null&select=id`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({status:'submitting',receiving_started_at:now,receiving_by_user_id:session.employeeId||null,receiving_by_name:session.name,receiving_by_email:session.email||null,problem_note:withProblem?problemNote:totalDamaged?`${totalDamaged} damaged piece${totalDamaged===1?'':'s'} require Logistics review`:null,qoblex_post_status:'submitting',qoblex_submission_started_at:now,updated_at:now})});
@@ -715,7 +764,7 @@ async function finishTransferCheck(req,res,session){
   const receivedTotal=receipt.reduce((sum,line)=>sum+line.received,0),finalStatus=withProblem||totalDamaged>0?'problem':missing?'partially_received':'completed';
   await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:finalStatus,received_at:finalStatus==='completed'?now:null,qoblex_transfer_id:null,qoblex_post_status:'not_submitted',qoblex_response:{shadowMode:true,inventoryPosted:false,message:'Recorded in BM Warehouse only'},updated_at:now})});
   await writeActivity(session,{actionType:finalStatus==='problem'?'TRANSFER_NEEDS_LOGISTICS_REVIEW':missing?'TRANSFER_PARTIALLY_RECEIVED':'TRANSFER_SHADOW_RECEIVED',documentType:'transfer',documentNumber:transferNumber,warehouse:destination,description:`Recorded ${receivedTotal} pieces on ${transferNumber}; ${missing?`${missing} remain in transit`:'transfer completed'}`,status:finalStatus,metadata:{shadowMode:true,inventoryPosted:false,lines:receipt,problemNote:finalStatus==='problem'?(problemNote||`${totalDamaged} damaged`):null}});
-  return res.status(200).json({ok:true,shadowMode:true,inventoryPosted:false,message:'Recorded in BM Warehouse — inventory not posted to Qoblex or Shopify.',transfer:{transferNumber,status:finalStatus,qoblexTransferId:null,received:receivedTotal,missing}});
+  return res.status(200).json({ok:true,shadowMode:!shopify.applies,inventoryPosted:Boolean(shopify.applies),shopifyTest:Boolean(shopify.applies),message:shopify.applies?'Shopify added 1 GREGS SHOES to Bohemia and BM Warehouse completed the transfer.':'Recorded in BM Warehouse — inventory not posted to Qoblex or Shopify.',transfer:{transferNumber,status:finalStatus,qoblexTransferId:null,received:receivedTotal,missing}});
 
 }
 
