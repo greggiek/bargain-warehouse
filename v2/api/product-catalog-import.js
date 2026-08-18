@@ -21,7 +21,7 @@ async function collectPreview(req) {
         }
       }
     };
-    Promise.resolve(productPreview({ ...req, method: 'GET' }, response)).catch(reject);
+    Promise.resolve(productPreview({ method: 'GET', headers: req.headers }, response)).catch(reject);
   });
 }
 
