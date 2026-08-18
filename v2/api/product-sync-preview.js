@@ -56,6 +56,7 @@ module.exports = async function productSyncPreview(req, res) {
 
     const candidates = [];
     const warnings = [];
+    const barcodeOwners = new Map();
     let insertCount = 0;
     let updateCount = 0;
     let unchangedCount = 0;
@@ -71,6 +72,14 @@ module.exports = async function productSyncPreview(req, res) {
       const barcode = barcodes.length === 1 ? barcodes[0] : null;
       if (barcodes.length > 1) {
         warnings.push({ sku, type: 'multiple_barcodes', values: barcodes });
+      }
+      if (barcode) {
+        const firstSku = barcodeOwners.get(barcode);
+        if (firstSku && firstSku !== sku) {
+          warnings.push({ sku, type: 'duplicate_barcode', barcode, firstSku });
+        } else {
+          barcodeOwners.set(barcode, sku);
+        }
       }
 
       const existing = bySku.get(sku.toUpperCase());
