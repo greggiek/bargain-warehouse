@@ -38,7 +38,7 @@ module.exports = async function me(req, res) {
 
     const user = users[0];
     const accessResponse = await fetch(
-      `${url}/rest/v1/user_location_access?user_id=eq.${user.id}&select=location_id,can_view,can_adjust,can_transfer,locations(id,code,name,warehouse_id)`,
+      `${url}/rest/v1/user_location_access?user_id=eq.${user.id}&select=location_id,can_manage,locations(id,code,name,warehouse_id)`,
       { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) }
     );
     if (!accessResponse.ok) throw new Error('location access lookup failed');
