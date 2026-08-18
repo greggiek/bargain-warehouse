@@ -14,6 +14,16 @@ const SHOPIFY_STORES = [
   {key:'store_1',label:'Bargain Moulding',domain:'SHOPIFY_STORE_1_DOMAIN',clientId:'SHOPIFY_STORE_1_CLIENT_ID',clientSecret:'SHOPIFY_STORE_1_CLIENT_SECRET'},
   {key:'store_2',label:'Bargain Moulding CT',domain:'SHOPIFY_STORE_2_DOMAIN',clientId:'SHOPIFY_STORE_2_CLIENT_ID',clientSecret:'SHOPIFY_STORE_2_CLIENT_SECRET'}
 ];
+const SHOPIFY_RECEIPT_DESTINATIONS = new Map([
+  ['336 Bayview', {store:'store_1',locationName:'Bayview Warehouse',locationId:'gid://shopify/Location/71626326228'}],
+  ['Amityville Main', {store:'store_1',locationName:'Bayview Warehouse',locationId:'gid://shopify/Location/71626326228'}],
+  ['Bargain Moulding (Bohemia)', {store:'store_1',locationName:'Bohemia Warehouse',locationId:'gid://shopify/Location/68088365268'}],
+  ['Bohemia Main', {store:'store_1',locationName:'Bohemia Warehouse',locationId:'gid://shopify/Location/68088365268'}],
+  ['1133 Old Country (Riverhead)', {store:'store_1',locationName:'Riverhead Warehouse',locationId:'gid://shopify/Location/79359705300'}],
+  ['Riverhead Main', {store:'store_1',locationName:'Riverhead Warehouse',locationId:'gid://shopify/Location/79359705300'}],
+  ['730 Windham Rd', {store:'store_2',locationName:'730 Windham Rd',locationId:'gid://shopify/Location/79725625401'}],
+  ['Annex Warehouse', {store:'store_2',locationName:'Annex (Retail) 730',locationId:'gid://shopify/Location/81193369657'}]
+]);
 const shopifyTokenCache = new Map();
 
 function jsonHeaders(key) {
@@ -76,6 +86,17 @@ async function shopifyAccess(store){
   const data=await response.json().catch(()=>null);if(!response.ok||!data?.access_token)throw new Error(`${store.label}: Shopify authentication failed (${response.status})`);
   const value={shop,token:data.access_token,expiresAt:Date.now()+Math.max(300,Number(data.expires_in||3600))*1000};shopifyTokenCache.set(store.key,value);return value;
 }
+async function liveShopifyInventoryItem(storeKey,rawSku){
+  const store=SHOPIFY_STORES.find(item=>item.key===storeKey);if(!store)throw new Error(`Unknown Shopify store ${storeKey}`);
+  const {shop,token}=await shopifyAccess(store),sku=String(rawSku||'').trim().toUpperCase();
+  const query=`query BMVariantBySku($query:String!){productVariants(first:20,query:$query){nodes{sku inventoryItem{id}}}}`;
+  const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables:{query:`sku:${JSON.stringify(sku)}`}})}),payload=await response.json().catch(()=>null);
+  if(!response.ok)throw new Error(`${store.label}: Shopify SKU lookup failed (${response.status})`);
+  if(payload?.errors?.length)throw new Error(`${store.label}: ${payload.errors.map(error=>error.message).join('; ')}`);
+  const exact=(payload?.data?.productVariants?.nodes||[]).filter(node=>String(node.sku||'').trim().toUpperCase()===sku);
+  if(exact.length!==1)throw new Error(exact.length?`${store.label}: More than one Shopify variant uses SKU ${sku}.`:`${store.label}: SKU ${sku} was not found.`);
+  return exact[0].inventoryItem?.id||null;
+}
 async function updateShopifyCost(store,inventoryItemId,cost){
   const {shop,token}=await shopifyAccess(store),query=`mutation BMCostWriteback($id:ID!,$input:InventoryItemInput!){inventoryItemUpdate(id:$id,input:$input){inventoryItem{id unitCost{amount currencyCode}} userErrors{field message}}}`;
   const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables:{id:inventoryItemId,input:{cost:Number(cost)}}})}),payload=await response.json().catch(()=>null);
@@ -103,6 +124,40 @@ async function queueAndPushShopifyCosts(base,key,po,costUpdates,session){
     for(const target of targets){const existing=await rest(base,key,`shopify_cost_writebacks?select=*&purchase_order_id=eq.${po.id}&sku=eq.${encodeURIComponent(sku)}&source_store=eq.${encodeURIComponent(target.source_store)}&shopify_inventory_item_id=eq.${encodeURIComponent(target.shopify_inventory_item_id)}&moving_average_cost=eq.${cost}&limit=1`);if(existing[0]?.status==='success'){results.push(existing[0]);continue}const rows=existing.length?existing:await rest(base,key,'shopify_cost_writebacks',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({purchase_order_id:po.id,po_number:po.po_number,product_id:products[0]?.id||null,sku,moving_average_cost:cost,source_store:target.source_store,source_store_label:target.source_store_label||target.source_store,shopify_inventory_item_id:target.shopify_inventory_item_id,status:'pending',last_error:null,triggered_by_name:session.name,triggered_by_email:session.email||null})}),row=rows[0];results.push(await pushCostWritebackRow(base,key,row))}
   }
   return{attempted:results.filter(row=>row.source_store).length,succeeded:results.filter(row=>row.status==='success').length,failed:results.filter(row=>row.status==='failed').length,unmatched:results.filter(row=>row.status==='unmatched').length,items:results.map(row=>({sku:row.sku,store:row.source_store_label||row.source_store||null,status:row.status,error:row.error||row.last_error||null}))};
+}
+async function patchInventoryWriteback(base,key,id,patch){return rest(base,key,`shopify_inventory_writebacks?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({...patch,updated_at:new Date().toISOString()})})}
+async function adjustShopifyInventory(row){
+  const store=SHOPIFY_STORES.find(item=>item.key===row.source_store);if(!store)throw new Error(`Unknown Shopify store ${row.source_store}`);
+  const {shop,token}=await shopifyAccess(store);
+  const query=`mutation BMInventoryReceipt($input:InventoryAdjustQuantitiesInput!,$idempotencyKey:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$idempotencyKey){inventoryAdjustmentGroup{createdAt reason referenceDocumentUri changes{name delta}} userErrors{field message}}}`;
+  const variables={idempotencyKey:row.id,input:{reason:'correction',name:'available',referenceDocumentUri:`bmwarehouse://purchase-order/${encodeURIComponent(row.po_number)}/receipt/${row.id}`,changes:[{delta:Number(row.quantity_delta),inventoryItemId:row.shopify_inventory_item_id,locationId:row.shopify_location_id}]}};
+  const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables})}),payload=await response.json().catch(()=>null);
+  if(!response.ok)throw new Error(`${store.label}: Shopify quantity update failed (${response.status})`);
+  if(payload?.errors?.length)throw new Error(`${store.label}: ${payload.errors.map(error=>error.message).join('; ')}`);
+  const result=payload?.data?.inventoryAdjustQuantities,errors=result?.userErrors||[];if(errors.length)throw new Error(`${store.label}: ${errors.map(error=>error.message).join('; ')}`);
+  if(!result?.inventoryAdjustmentGroup)throw new Error(`${store.label}: Shopify returned no inventory adjustment group.`);
+  return result.inventoryAdjustmentGroup;
+}
+async function pushInventoryWritebackRow(base,key,row){
+  try{const adjustment=await adjustShopifyInventory(row);await patchInventoryWriteback(base,key,row.id,{status:'success',attempts:Number(row.attempts||0)+1,last_error:null,shopify_response:adjustment,pushed_at:new Date().toISOString()});return{...row,status:'success'}}
+  catch(error){await patchInventoryWriteback(base,key,row.id,{status:'failed',attempts:Number(row.attempts||0)+1,last_error:String(error.message||error).slice(0,1000)});return{...row,status:'failed',error:error.message}}
+}
+async function queueAndPushShopifyInventory(base,key,po,destination,received,session){
+  const location=SHOPIFY_RECEIPT_DESTINATIONS.get(destination),results=[];
+  if(!location)return{attempted:0,succeeded:0,failed:0,unmatched:received.length,items:received.map(line=>({sku:line.sku,status:'unmatched',error:`No Shopify destination is configured for ${destination}.`}))};
+  for(const line of received){
+    const sku=String(line.sku||'').trim().toUpperCase(),quantity=Number(line.qty);if(!sku||!Number.isFinite(quantity)||quantity<=0)continue;
+    const [products,mappings]=await Promise.all([
+      rest(base,key,`products?select=id&sku=eq.${encodeURIComponent(sku)}&limit=1`),
+      rest(base,key,`shopify_inventory_snapshot?select=source_store,source_store_label,shopify_inventory_item_id,shopify_location_id,location_name&source_store=eq.${encodeURIComponent(location.store)}&location_name=eq.${encodeURIComponent(location.locationName)}&sku=ilike.${encodeURIComponent(sku)}&limit=1`)
+    ]);let mapping=mappings[0];
+    if(!mapping){try{const inventoryItemId=await liveShopifyInventoryItem(location.store,sku);if(inventoryItemId)mapping={source_store:location.store,source_store_label:SHOPIFY_STORES.find(item=>item.key===location.store)?.label||location.store,shopify_inventory_item_id:inventoryItemId,shopify_location_id:location.locationId,location_name:location.locationName}}catch(error){mapping={lookup_error:error.message}}}
+    const rowId=crypto.randomUUID();
+    const matched=Boolean(mapping?.shopify_inventory_item_id&&mapping?.shopify_location_id);
+    const rows=await rest(base,key,'shopify_inventory_writebacks',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({id:rowId,purchase_order_id:po.id,po_number:po.po_number,product_id:products[0]?.id||null,sku,quantity_delta:quantity,warehouse_location:destination,source_store:location.store,source_store_label:mapping?.source_store_label||SHOPIFY_STORES.find(item=>item.key===location.store)?.label||location.store,shopify_inventory_item_id:mapping?.shopify_inventory_item_id||'',shopify_location_id:mapping?.shopify_location_id||location.locationId||'',shopify_location_name:location.locationName,status:matched?'pending':'unmatched',last_error:matched?null:(mapping?.lookup_error||'SKU/location was not found in Shopify.'),triggered_by_name:session.name,triggered_by_email:session.email||null})});
+    results.push(matched?await pushInventoryWritebackRow(base,key,rows[0]):rows[0]);
+  }
+  return{attempted:results.filter(row=>row.source_store&&row.status!=='unmatched').length,succeeded:results.filter(row=>row.status==='success').length,failed:results.filter(row=>row.status==='failed').length,unmatched:results.filter(row=>row.status==='unmatched').length,items:results.map(row=>({sku:row.sku,store:row.source_store_label||null,location:row.shopify_location_name||null,quantity:Number(row.quantity_delta||0),status:row.status,error:row.error||row.last_error||null}))};
 }
 function qoblexConfig() {
   return {
@@ -391,8 +446,9 @@ async function receivePurchaseOrder(req,res,session){
   const result=await rest(base,key,'rpc/receive_purchase_order',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({p_po_number:poNumber,p_lines:received,p_employee_name:session.name,p_employee_email:session.email||null})});
   const value=Array.isArray(result)?result[0]:result;
   let shopifyCostSync;try{shopifyCostSync=await queueAndPushShopifyCosts(base,key,poRows[0],value?.cost_updates||[],session)}catch(error){shopifyCostSync={attempted:0,succeeded:0,failed:1,unmatched:0,error:`Cost sync queue failed: ${error.message}`}}
-  await writeActivity(session,{actionType:'PO_RECEIVED',documentType:'purchase_order',documentNumber:poNumber,warehouse:String(body.warehouse||''),description:`Received ${received.reduce((sum,line)=>sum+line.qty,0)} pieces on ${poNumber}`,status:value?.status||'partial',metadata:{lines:received,costUpdates:value?.cost_updates||[],shopifyCostSync}});
-  return res.status(200).json({ok:true,receipt:value,shopifyCostSync});
+  let shopifyInventorySync;try{shopifyInventorySync=await queueAndPushShopifyInventory(base,key,poRows[0],destination,received,session)}catch(error){shopifyInventorySync={attempted:0,succeeded:0,failed:1,unmatched:0,error:`Inventory sync queue failed: ${error.message}`}}
+  await writeActivity(session,{actionType:'PO_RECEIVED',documentType:'purchase_order',documentNumber:poNumber,warehouse:destination,description:`Received ${received.reduce((sum,line)=>sum+line.qty,0)} pieces on ${poNumber}`,status:value?.status||'partial',metadata:{lines:received,costUpdates:value?.cost_updates||[],shopifyCostSync,shopifyInventorySync}});
+  return res.status(200).json({ok:true,receipt:value,shopifyCostSync,shopifyInventorySync});
 }
 
 async function shopifyCostStatus(res,session){
@@ -408,6 +464,21 @@ async function retryShopifyCosts(req,res,session){
   for(const row of rows){const products=await rest(base,key,`products?select=moving_average_cost&id=eq.${encodeURIComponent(row.product_id||'')}&limit=1`),current=Number(products[0]?.moving_average_cost);if(!Number.isFinite(current)||Math.abs(current-Number(row.moving_average_cost))>0.00009){await patchCostWriteback(base,key,row.id,{status:'superseded',last_error:'A newer BM Warehouse moving-average cost replaced this queued value.'});results.push({...row,status:'superseded'});continue}results.push(await pushCostWritebackRow(base,key,row))}
   const summary={attempted:results.filter(row=>['success','failed'].includes(row.status)).length,succeeded:results.filter(row=>row.status==='success').length,failed:results.filter(row=>row.status==='failed').length,superseded:results.filter(row=>row.status==='superseded').length};
   await writeActivity(session,{actionType:'SHOPIFY_COST_SYNC_RETRIED',documentType:'shopify_cost_writeback',description:`Retried ${summary.attempted} Shopify cost update${summary.attempted===1?'':'s'}`,status:summary.failed?'failed':'success',metadata:summary});return res.status(200).json({ok:true,summary});
+}
+
+async function shopifyInventoryStatus(res,session){
+  if(!session.permissions?.includes('create_docs'))return res.status(403).json({ok:false,error:'Logistics Coordinator access is required.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY'),rows=await rest(base,key,'shopify_inventory_writebacks?select=id,po_number,sku,quantity_delta,warehouse_location,source_store_label,shopify_location_name,status,attempts,last_error,updated_at,pushed_at&order=updated_at.desc&limit=250');
+  return res.status(200).json({ok:true,summary:{pending:rows.filter(row=>row.status==='pending').length,failed:rows.filter(row=>row.status==='failed').length,unmatched:rows.filter(row=>row.status==='unmatched').length,success:rows.filter(row=>row.status==='success').length},writebacks:rows});
+}
+
+async function retryShopifyInventory(req,res,session){
+  if(!session.permissions?.includes('create_docs'))return res.status(403).json({ok:false,error:'Logistics Coordinator access is required.'});
+  const base=env('BM_WAREHOUSE_SUPABASE_URL'),key=env('BM_WAREHOUSE_SUPABASE_SERVICE_ROLE_KEY'),requested=Array.isArray(req.body?.ids)?req.body.ids.map(String):[],filter=requested.length?`&id=in.(${requested.map(encodeURIComponent).join(',')})`:'';
+  const rows=await rest(base,key,`shopify_inventory_writebacks?select=*&status=in.(pending,failed)${filter}&order=updated_at.asc&limit=100`),results=[];
+  for(const row of rows)results.push(await pushInventoryWritebackRow(base,key,row));
+  const summary={attempted:results.length,succeeded:results.filter(row=>row.status==='success').length,failed:results.filter(row=>row.status==='failed').length};
+  await writeActivity(session,{actionType:'SHOPIFY_INVENTORY_SYNC_RETRIED',documentType:'shopify_inventory_writeback',description:`Retried ${summary.attempted} Shopify material update${summary.attempted===1?'':'s'}`,status:summary.failed?'failed':'success',metadata:summary});return res.status(200).json({ok:true,summary});
 }
 
 async function purchaseOrderReference(res) {
@@ -658,6 +729,8 @@ module.exports = async function (req, res) {
     if (action === 'master-pos' && req.method === 'GET') return masterPurchaseOrders(res,session);
     if (action === 'shopify-cost-status' && req.method === 'GET') return shopifyCostStatus(res,session);
     if (action === 'retry-shopify-costs' && req.method === 'POST') return retryShopifyCosts(req,res,session);
+    if (action === 'shopify-inventory-status' && req.method === 'GET') return shopifyInventoryStatus(res,session);
+    if (action === 'retry-shopify-inventory' && req.method === 'POST') return retryShopifyInventory(req,res,session);
     if (action === 'waiting-transfers' && req.method === 'GET') return waitingTransfers(res,session);
     if (action === 'manage-transfer' && req.method === 'POST') return manageTransfer(req,res,session);
     if (action === 'manage-po' && req.method === 'POST') return managePurchaseOrder(req,res,session);
