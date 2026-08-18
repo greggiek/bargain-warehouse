@@ -82,8 +82,10 @@
     const inventory = view === 'inventory';
     document.getElementById('overviewView').hidden = inventory;
     document.getElementById('inventoryView').hidden = !inventory;
+    document.getElementById('productSyncView').hidden = true;
     document.getElementById('overviewNav').classList.toggle('active', !inventory);
     document.getElementById('inventoryNav').classList.toggle('active', inventory);
+    document.getElementById('productSyncNav').classList.remove('active');
     if (inventory && !loaded) load();
   }
 
