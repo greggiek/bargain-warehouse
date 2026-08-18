@@ -1,5 +1,6 @@
 const crypto = require('node:crypto');
 const bcrypt = require('bcryptjs');
+const { SHOPIFY_TRANSFER_TEST, shopifyTransferTestMatch, transferWritebackId, validateShopifyTransferReceipt } = require('./lib/shopify-transfer-policy');
 
 const COOKIE = 'bm_warehouse_session';
 const MAX_AGE = 60 * 60 * 12;
@@ -170,20 +171,6 @@ async function queueAndPushShopifyInventory(base,key,po,destination,received,ses
   return{attempted:results.filter(row=>row.source_store&&row.status!=='unmatched').length,succeeded:results.filter(row=>row.status==='success').length,failed:results.filter(row=>row.status==='failed').length,unmatched:results.filter(row=>row.status==='unmatched').length,items:results.map(row=>({sku:row.sku,store:row.source_store_label||null,location:row.shopify_location_name||null,quantity:Number(row.quantity_delta||0),status:row.status,error:row.error||row.last_error||null}))};
 }
 
-const SHOPIFY_TRANSFER_TEST = Object.freeze({
-  sku:'GREGS SHOES', quantity:1, fromLocation:'Annex Warehouse', toLocation:'Bohemia Main',
-  allocate:{store:'store_2',locationId:'gid://shopify/Location/81193369657',locationName:'Annex (Retail) 730',delta:-1},
-  release:{store:'store_2',locationId:'gid://shopify/Location/81193369657',locationName:'Annex (Retail) 730',delta:1},
-  receive:{store:'store_1',locationId:'gid://shopify/Location/68088365268',locationName:'Bohemia Warehouse',delta:1}
-});
-function transferWritebackId(transferId,lineId,leg){
-  const hex=crypto.createHash('sha256').update(['bm-shopify-transfer-v1',transferId,lineId,leg].join('|')).digest('hex').slice(0,32);
-  return [hex.slice(0,8),hex.slice(8,12),'4'+hex.slice(13,16),'8'+hex.slice(17,20),hex.slice(20,32)].join('-');
-}
-function shopifyTransferTestMatch(transfer){
-  const from=one(transfer.from)?.name||'',to=one(transfer.to)?.name||'',lines=transfer.transfer_lines||[],line=lines[0],product=one(line?.products)||{};
-  return from===SHOPIFY_TRANSFER_TEST.fromLocation&&to===SHOPIFY_TRANSFER_TEST.toLocation&&lines.length===1&&String(product.sku||'').trim().toUpperCase()===SHOPIFY_TRANSFER_TEST.sku&&Number(line.requested_qty)===SHOPIFY_TRANSFER_TEST.quantity?{line,product}:null;
-}
 async function adjustShopifyTransferInventory(row){
   const store=SHOPIFY_STORES.find(item=>item.key===row.source_store);if(!store)throw new Error('Unknown Shopify store '+row.source_store);
   const {shop,token}=await shopifyAccess(store);
@@ -764,7 +751,7 @@ async function finishTransferCheck(req,res,session){
   }
   const missing=receipt.reduce((sum,line)=>sum+line.missing,0),totalDamaged=receipt.reduce((sum,line)=>sum+line.damaged,0);
   if(withProblem&&!missing&&(!Array.isArray(body.problems)||body.problems.length===0))return res.status(400).json({ok:false,error:'No discrepancy was supplied.'});
-  const shopifyTest=shopifyTransferTestMatch(transfer);if(shopifyTest&&(receipt.length!==1||receipt[0].received!==1||receipt[0].damaged!==0))return res.status(400).json({ok:false,error:'The allowlisted Shopify test must receive exactly 1 undamaged GREGS SHOES unit.'});
+  const shopifyReceiptError=validateShopifyTransferReceipt(transfer,receipt);if(shopifyReceiptError)return res.status(400).json({ok:false,error:shopifyReceiptError});
   const shopify=await pushShopifyTransferLeg(base,key,transfer,'receive',session);if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not add the test unit to Bohemia. The BM receipt was not completed. '+shopify.error,shopify});
   const now=new Date().toISOString();
   const claimed=await rest(base,key,`transfers?id=eq.${transfer.id}&status=in.(in_transit,partially_received,awaiting_receipt,receiving,qoblex_failed)&qoblex_transfer_id=is.null&select=id`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({status:'submitting',receiving_started_at:now,receiving_by_user_id:session.employeeId||null,receiving_by_name:session.name,receiving_by_email:session.email||null,problem_note:withProblem?problemNote:totalDamaged?`${totalDamaged} damaged piece${totalDamaged===1?'':'s'} require Logistics review`:null,qoblex_post_status:'submitting',qoblex_submission_started_at:now,updated_at:now})});
