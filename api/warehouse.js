@@ -2,6 +2,7 @@ const crypto = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const { SHOPIFY_TRANSFER_TEST, shopifyTransferTestMatch, transferWritebackId, validateShopifyTransferReceipt } = require('./lib/shopify-transfer-policy');
 const { createShopifyClient } = require('./lib/shopify-client');
+const { createShopifyTransferWritebackLedger } = require('./lib/shopify-transfer-writeback-ledger');
 
 const COOKIE = 'bm_warehouse_session';
 const MAX_AGE = 60 * 60 * 12;
@@ -157,21 +158,22 @@ async function adjustShopifyTransferInventory(row){
 }
 async function pushShopifyTransferLeg(base,key,transfer,leg,session){
   const match=shopifyTransferTestMatch(transfer);if(!match)return{applies:false};
-  if(leg==='release'){const allocatedId=transferWritebackId(transfer.id,match.line.id,'allocate'),allocated=await rest(base,key,'shopify_transfer_writebacks?select=status&id=eq.'+encodeURIComponent(allocatedId)+'&limit=1');if(allocated[0]?.status!=='success')return{applies:false,reason:'No Shopify allocation exists to release.'};}
+  const ledger=createShopifyTransferWritebackLedger({request:(path,options)=>rest(base,key,path,options)});
+  if(leg==='release'){const allocatedId=transferWritebackId(transfer.id,match.line.id,'allocate'),allocated=await ledger.find(allocatedId,'status');if(allocated?.status!=='success')return{applies:false,reason:'No Shopify allocation exists to release.'};}
   const target=SHOPIFY_TRANSFER_TEST[leg],id=transferWritebackId(transfer.id,match.line.id,leg);
-  const existing=await rest(base,key,'shopify_transfer_writebacks?select=*&id=eq.'+encodeURIComponent(id)+'&limit=1');
-  if(existing[0]?.status==='success')return{applies:true,status:'success',replayed:true,row:existing[0]};
-  let inventoryItemId=existing[0]?.shopify_inventory_item_id||null;
+  const existing=await ledger.find(id);
+  if(existing?.status==='success')return{applies:true,status:'success',replayed:true,row:existing};
+  let inventoryItemId=existing?.shopify_inventory_item_id||null;
   if(!inventoryItemId)inventoryItemId=await shopifyClient.inventoryItemForSku(target.store,SHOPIFY_TRANSFER_TEST.sku);
-  const payload={id,transfer_id:transfer.id,transfer_line_id:match.line.id,transfer_number:transfer.transfer_number,sku:SHOPIFY_TRANSFER_TEST.sku,leg,quantity_delta:target.delta,source_store:target.store,source_store_label:SHOPIFY_STORES.find(item=>item.key===target.store)?.label||target.store,shopify_inventory_item_id:inventoryItemId,shopify_location_id:target.locationId,shopify_location_name:target.locationName,status:'pending',last_error:null,triggered_by_name:session.name,triggered_by_email:session.email||null,updated_at:new Date().toISOString()};
-  const rows=await rest(base,key,'shopify_transfer_writebacks?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(payload)});let row=rows[0];
+  const payload={id,transfer_id:transfer.id,transfer_line_id:match.line.id,transfer_number:transfer.transfer_number,sku:SHOPIFY_TRANSFER_TEST.sku,leg,quantity_delta:target.delta,source_store:target.store,source_store_label:SHOPIFY_STORES.find(item=>item.key===target.store)?.label||target.store,shopify_inventory_item_id:inventoryItemId,shopify_location_id:target.locationId,shopify_location_name:target.locationName,status:'pending',last_error:null,triggered_by_name:session.name,triggered_by_email:session.email||null};
+  let row=await ledger.upsert(payload);
   try{
-    if(!Number.isInteger(row.change_from_quantity)){const current=await shopifyClient.availableQuantity(target.store,inventoryItemId,target.locationId);await rest(base,key,'shopify_transfer_writebacks?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({change_from_quantity:current,updated_at:new Date().toISOString()})});row={...row,change_from_quantity:current};}
+    if(!Number.isInteger(row.change_from_quantity)){const current=await shopifyClient.availableQuantity(target.store,inventoryItemId,target.locationId);row=await ledger.recordBaseline(row,current);}
     const adjustment=await adjustShopifyTransferInventory(row);
-    await rest(base,key,'shopify_transfer_writebacks?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'success',attempts:Number(row.attempts||0)+1,last_error:null,shopify_response:adjustment,pushed_at:new Date().toISOString(),updated_at:new Date().toISOString()})});
+    await ledger.markSuccess(row,adjustment);
     return{applies:true,status:'success',row:{...row,status:'success'}};
   }catch(error){
-    await rest(base,key,'shopify_transfer_writebacks?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'failed',attempts:Number(row.attempts||0)+1,last_error:String(error.message||error).slice(0,1000),updated_at:new Date().toISOString()})});
+    await ledger.markFailed(row,error);
     return{applies:true,status:'failed',error:error.message};
   }
 }
