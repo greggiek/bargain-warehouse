@@ -140,7 +140,7 @@ async function adjustShopifyInventory(row){
   const store=SHOPIFY_STORES.find(item=>item.key===row.source_store);if(!store)throw new Error(`Unknown Shopify store ${row.source_store}`);
   const {shop,token}=await shopifyAccess(store);
   const query=`mutation BMInventoryReceipt($input:InventoryAdjustQuantitiesInput!,$idempotencyKey:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$idempotencyKey){inventoryAdjustmentGroup{createdAt reason referenceDocumentUri changes{name delta}} userErrors{field message}}}`;
-  const variables={idempotencyKey:row.id,input:{reason:'correction',name:'available',referenceDocumentUri:`bmwarehouse://purchase-order/${encodeURIComponent(row.po_number)}/receipt/${row.id}`,changes:[{delta:Number(row.quantity_delta),changeFromQuantity:Number(row.change_from_quantity),inventoryItemId:row.shopify_inventory_item_id,locationId:row.shopify_location_id}]}};
+  const variables={idempotencyKey:row.id,input:{reason:'correction',name:'available',referenceDocumentUri:`bmwarehouse://purchase-order/${encodeURIComponent(row.po_number)}/receipt/${row.id}`,changes:[{delta:Number(row.quantity_delta),inventoryItemId:row.shopify_inventory_item_id,locationId:row.shopify_location_id}]}};
   const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables})}),payload=await response.json().catch(()=>null);
   if(!response.ok)throw new Error(`${store.label}: Shopify quantity update failed (${response.status})`);
   if(payload?.errors?.length)throw new Error(`${store.label}: ${payload.errors.map(error=>error.message).join('; ')}`);
@@ -188,7 +188,7 @@ async function adjustShopifyTransferInventory(row){
   const store=SHOPIFY_STORES.find(item=>item.key===row.source_store);if(!store)throw new Error('Unknown Shopify store '+row.source_store);
   const {shop,token}=await shopifyAccess(store);
   const query='mutation BMTransferInventory($input:InventoryAdjustQuantitiesInput!,$idempotencyKey:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$idempotencyKey){inventoryAdjustmentGroup{createdAt reason referenceDocumentUri changes{name delta}} userErrors{field message}}}';
-  const variables={idempotencyKey:row.id,input:{reason:'correction',name:'available',referenceDocumentUri:'bmwarehouse://transfer/'+encodeURIComponent(row.transfer_number)+'/'+row.leg+'/'+row.id,changes:[{delta:Number(row.quantity_delta),inventoryItemId:row.shopify_inventory_item_id,locationId:row.shopify_location_id}]}};
+  const variables={idempotencyKey:row.id,input:{reason:'correction',name:'available',referenceDocumentUri:'bmwarehouse://transfer/'+encodeURIComponent(row.transfer_number)+'/'+row.leg+'/'+row.id,changes:[{delta:Number(row.quantity_delta),changeFromQuantity:Number(row.change_from_quantity),inventoryItemId:row.shopify_inventory_item_id,locationId:row.shopify_location_id}]}};
   const response=await fetch('https://'+shop+'/admin/api/'+SHOPIFY_API_VERSION+'/graphql.json',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables})}),payload=await response.json().catch(()=>null);
   if(!response.ok)throw new Error(store.label+': Shopify transfer quantity update failed ('+response.status+')');
   if(payload?.errors?.length)throw new Error(store.label+': '+payload.errors.map(error=>error.message).join('; '));
