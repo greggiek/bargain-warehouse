@@ -97,6 +97,16 @@ async function liveShopifyInventoryItem(storeKey,rawSku){
   if(exact.length!==1)throw new Error(exact.length?`${store.label}: More than one Shopify variant uses SKU ${sku}.`:`${store.label}: SKU ${sku} was not found.`);
   return exact[0].inventoryItem?.id||null;
 }
+async function liveShopifyAvailableQuantity(storeKey,inventoryItemId,locationId){
+  const store=SHOPIFY_STORES.find(item=>item.key===storeKey);if(!store)throw new Error(`Unknown Shopify store ${storeKey}`);
+  const {shop,token}=await shopifyAccess(store),query=`query BMAvailableAtLocation($item:ID!,$location:ID!){inventoryItem(id:$item){inventoryLevel(locationId:$location){quantities(names:["available"]){name quantity}}}}`;
+  const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables:{item:inventoryItemId,location:locationId}})}),payload=await response.json().catch(()=>null);
+  if(!response.ok)throw new Error(`${store.label}: Shopify available-quantity lookup failed (${response.status})`);
+  if(payload?.errors?.length)throw new Error(`${store.label}: ${payload.errors.map(error=>error.message).join('; ')}`);
+  const quantity=(payload?.data?.inventoryItem?.inventoryLevel?.quantities||[]).find(item=>item.name==='available')?.quantity;
+  if(!Number.isInteger(quantity))throw new Error(`${store.label}: Shopify returned no available quantity for this location.`);
+  return quantity;
+}
 async function updateShopifyCost(store,inventoryItemId,cost){
   const {shop,token}=await shopifyAccess(store),query=`mutation BMCostWriteback($id:ID!,$input:InventoryItemInput!){inventoryItemUpdate(id:$id,input:$input){inventoryItem{id unitCost{amount currencyCode}} userErrors{field message}}}`;
   const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables:{id:inventoryItemId,input:{cost:Number(cost)}}})}),payload=await response.json().catch(()=>null);
@@ -130,7 +140,7 @@ async function adjustShopifyInventory(row){
   const store=SHOPIFY_STORES.find(item=>item.key===row.source_store);if(!store)throw new Error(`Unknown Shopify store ${row.source_store}`);
   const {shop,token}=await shopifyAccess(store);
   const query=`mutation BMInventoryReceipt($input:InventoryAdjustQuantitiesInput!,$idempotencyKey:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$idempotencyKey){inventoryAdjustmentGroup{createdAt reason referenceDocumentUri changes{name delta}} userErrors{field message}}}`;
-  const variables={idempotencyKey:row.id,input:{reason:'correction',name:'available',referenceDocumentUri:`bmwarehouse://purchase-order/${encodeURIComponent(row.po_number)}/receipt/${row.id}`,changes:[{delta:Number(row.quantity_delta),inventoryItemId:row.shopify_inventory_item_id,locationId:row.shopify_location_id}]}};
+  const variables={idempotencyKey:row.id,input:{reason:'correction',name:'available',referenceDocumentUri:`bmwarehouse://purchase-order/${encodeURIComponent(row.po_number)}/receipt/${row.id}`,changes:[{delta:Number(row.quantity_delta),changeFromQuantity:Number(row.change_from_quantity),inventoryItemId:row.shopify_inventory_item_id,locationId:row.shopify_location_id}]}};
   const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables})}),payload=await response.json().catch(()=>null);
   if(!response.ok)throw new Error(`${store.label}: Shopify quantity update failed (${response.status})`);
   if(payload?.errors?.length)throw new Error(`${store.label}: ${payload.errors.map(error=>error.message).join('; ')}`);
@@ -162,7 +172,8 @@ async function queueAndPushShopifyInventory(base,key,po,destination,received,ses
 
 const SHOPIFY_TRANSFER_TEST = Object.freeze({
   sku:'GREGS SHOES', quantity:1, fromLocation:'Annex Warehouse', toLocation:'Bohemia Main',
-  ship:{store:'store_2',locationId:'gid://shopify/Location/81193369657',locationName:'Annex (Retail) 730',delta:-1},
+  allocate:{store:'store_2',locationId:'gid://shopify/Location/81193369657',locationName:'Annex (Retail) 730',delta:-1},
+  release:{store:'store_2',locationId:'gid://shopify/Location/81193369657',locationName:'Annex (Retail) 730',delta:1},
   receive:{store:'store_1',locationId:'gid://shopify/Location/68088365268',locationName:'Bohemia Warehouse',delta:1}
 });
 function transferWritebackId(transferId,lineId,leg){
@@ -187,14 +198,16 @@ async function adjustShopifyTransferInventory(row){
 }
 async function pushShopifyTransferLeg(base,key,transfer,leg,session){
   const match=shopifyTransferTestMatch(transfer);if(!match)return{applies:false};
+  if(leg==='release'){const allocatedId=transferWritebackId(transfer.id,match.line.id,'allocate'),allocated=await rest(base,key,'shopify_transfer_writebacks?select=status&id=eq.'+encodeURIComponent(allocatedId)+'&limit=1');if(allocated[0]?.status!=='success')return{applies:false,reason:'No Shopify allocation exists to release.'};}
   const target=SHOPIFY_TRANSFER_TEST[leg],id=transferWritebackId(transfer.id,match.line.id,leg);
   const existing=await rest(base,key,'shopify_transfer_writebacks?select=*&id=eq.'+encodeURIComponent(id)+'&limit=1');
   if(existing[0]?.status==='success')return{applies:true,status:'success',replayed:true,row:existing[0]};
   let inventoryItemId=existing[0]?.shopify_inventory_item_id||null;
   if(!inventoryItemId)inventoryItemId=await liveShopifyInventoryItem(target.store,SHOPIFY_TRANSFER_TEST.sku);
   const payload={id,transfer_id:transfer.id,transfer_line_id:match.line.id,transfer_number:transfer.transfer_number,sku:SHOPIFY_TRANSFER_TEST.sku,leg,quantity_delta:target.delta,source_store:target.store,source_store_label:SHOPIFY_STORES.find(item=>item.key===target.store)?.label||target.store,shopify_inventory_item_id:inventoryItemId,shopify_location_id:target.locationId,shopify_location_name:target.locationName,status:'pending',last_error:null,triggered_by_name:session.name,triggered_by_email:session.email||null,updated_at:new Date().toISOString()};
-  const rows=await rest(base,key,'shopify_transfer_writebacks?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(payload)}),row=rows[0];
+  const rows=await rest(base,key,'shopify_transfer_writebacks?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(payload)});let row=rows[0];
   try{
+    if(!Number.isInteger(row.change_from_quantity)){const current=await liveShopifyAvailableQuantity(target.store,inventoryItemId,target.locationId);await rest(base,key,'shopify_transfer_writebacks?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({change_from_quantity:current,updated_at:new Date().toISOString()})});row={...row,change_from_quantity:current};}
     const adjustment=await adjustShopifyTransferInventory(row);
     await rest(base,key,'shopify_transfer_writebacks?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'success',attempts:Number(row.attempts||0)+1,last_error:null,shopify_response:adjustment,pushed_at:new Date().toISOString(),updated_at:new Date().toISOString()})});
     return{applies:true,status:'success',row:{...row,status:'success'}};
@@ -641,24 +654,27 @@ async function manageTransfer(req,res,session){
   const now=new Date().toISOString(),hasReceipt=(transfer.transfer_lines||[]).some(line=>Number(line.received_qty||0)>0);
   if(operation==='allocate'){
     if(transfer.status!=='draft')return res.status(409).json({ok:false,error:'Only a draft transfer can be allocated.'});
+    const shopify=await pushShopifyTransferLeg(base,key,transfer,'allocate',session);
+    if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not reserve the test unit at Annex. The BM transfer remains Draft. '+shopify.error,shopify});
     await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'allocated',allocated_at:now,allocated_by_name:session.name,allocated_by_email:session.email||null,updated_at:now})});
-    await writeActivity(session,{actionType:'TRANSFER_ALLOCATED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Allocated material for ${transfer.transfer_number}`,status:'allocated'});
-    return res.status(200).json({ok:true,status:'allocated'});
+    await writeActivity(session,{actionType:shopify.applies?'TRANSFER_ALLOCATED_SHOPIFY_TEST':'TRANSFER_ALLOCATED',documentType:'transfer',documentNumber:transfer.transfer_number,description:shopify.applies?`Allocated ${transfer.transfer_number}; Shopify reserved 1 GREGS SHOES at Annex (Retail) 730`:`Allocated material for ${transfer.transfer_number}`,status:'allocated',metadata:{shopifyTest:Boolean(shopify.applies),shopifyLeg:shopify.applies?'allocate':null}});
+    return res.status(200).json({ok:true,status:'allocated',shopifyTest:Boolean(shopify.applies),shopify});
   }
   if(operation==='ship'){
     if(transfer.status!=='allocated')return res.status(409).json({ok:false,error:'Only an allocated transfer can be shipped.'});
-    const shopify=await pushShopifyTransferLeg(base,key,transfer,'ship',session);
-    if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not deduct the test unit from Annex. The BM transfer was not shipped. '+shopify.error,shopify});
+    const shopify=await pushShopifyTransferLeg(base,key,transfer,'allocate',session);
+    if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not reserve the test unit at Annex. The BM transfer was not shipped. '+shopify.error,shopify});
     for(const line of transfer.transfer_lines||[])await rest(base,key,`transfer_lines?id=eq.${line.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({shipped_qty:Number(line.requested_qty||0)})});
     await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'in_transit',shipped_at:now,shipped_by_name:session.name,shipped_by_email:session.email||null,updated_at:now})});
-    await writeActivity(session,{actionType:shopify.applies?'TRANSFER_SHIPPED_SHOPIFY_TEST':'TRANSFER_SHIPPED',documentType:'transfer',documentNumber:transfer.transfer_number,description:shopify.applies?`Shipped ${transfer.transfer_number}; Shopify deducted 1 GREGS SHOES from Annex (Retail) 730`:`Shipped ${transfer.transfer_number}; material is now in transit`,status:'in_transit',metadata:{shopifyTest:Boolean(shopify.applies),shopifyLeg:shopify.applies?'ship':null}});
+    await writeActivity(session,{actionType:shopify.applies?'TRANSFER_SHIPPED_SHOPIFY_TEST':'TRANSFER_SHIPPED',documentType:'transfer',documentNumber:transfer.transfer_number,description:shopify.applies?`Shipped ${transfer.transfer_number}; Shopify deducted 1 GREGS SHOES from Annex (Retail) 730`:`Shipped ${transfer.transfer_number}; material is now in transit`,status:'in_transit',metadata:{shopifyTest:Boolean(shopify.applies),shopifyLeg:shopify.applies?'allocate':null}});
     return res.status(200).json({ok:true,status:'in_transit',shopifyTest:Boolean(shopify.applies),shopify});
   }
   if(operation==='cancel'){
     if(!['draft','allocated'].includes(transfer.status)||hasReceipt)return res.status(409).json({ok:false,error:'Only an unreceived draft or allocated transfer can be canceled.'});
+    let shopify={applies:false};if(transfer.status==='allocated'){shopify=await pushShopifyTransferLeg(base,key,transfer,'release',session);if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not release the reserved test unit. The BM transfer was not canceled. '+shopify.error,shopify});}
     await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'canceled',canceled_at:now,canceled_by_name:session.name,canceled_by_email:session.email||null,updated_at:now})});
-    await writeActivity(session,{actionType:'TRANSFER_CANCELED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Canceled transfer ${transfer.transfer_number}`,status:'canceled',metadata:{previousStatus:transfer.status}});
-    return res.status(200).json({ok:true,status:'canceled'});
+    await writeActivity(session,{actionType:'TRANSFER_CANCELED',documentType:'transfer',documentNumber:transfer.transfer_number,description:shopify.applies?`Canceled ${transfer.transfer_number}; Shopify released 1 GREGS SHOES back to Annex`:`Canceled transfer ${transfer.transfer_number}`,status:'canceled',metadata:{previousStatus:transfer.status,shopifyTest:Boolean(shopify.applies)}});
+    return res.status(200).json({ok:true,status:'canceled',shopifyTest:Boolean(shopify.applies),shopify});
   }
   const locked=!['draft','allocated'].includes(transfer.status)||transfer.qoblex_transfer_id||hasReceipt;if(locked)return res.status(409).json({ok:false,error:'Only an unreceived draft or allocated transfer can be edited.'});
   if(operation==='delete'){if(transfer.status!=='draft')return res.status(409).json({ok:false,error:'Only a draft transfer can be deleted. Cancel an allocated transfer instead.'});await rest(base,key,`transfer_lines?transfer_id=eq.${transfer.id}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});await writeActivity(session,{actionType:'TRANSFER_DELETED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Deleted draft transfer ${transfer.transfer_number}`,status:'deleted'});return res.status(200).json({ok:true,deleted:true})}
