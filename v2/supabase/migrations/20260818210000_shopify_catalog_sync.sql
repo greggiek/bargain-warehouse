@@ -36,17 +36,24 @@ begin
     from raw_catalog
     order by sku_key, sku
   ),
-  existing as (
+  existing_base as (
     select catalog.*, products.id as existing_product_id, products.barcode as existing_barcode
     from catalog
     left join public.products
       on upper(trim(products.sku)) = catalog.sku_key
+  ),
+  existing as (
+    select
+      existing_base.*,
+      row_number() over (partition by incoming_barcode order by sku_key) as incoming_barcode_rank
+    from existing_base
   ),
   safe_catalog as (
     select
       existing.*,
       case
         when incoming_barcode is null then existing_barcode
+        when incoming_barcode_rank > 1 then existing_barcode
         when exists (
           select 1
           from public.products other_product
