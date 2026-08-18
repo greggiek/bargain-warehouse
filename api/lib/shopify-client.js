@@ -59,6 +59,7 @@ function createShopifyClient({ stores, apiVersion, getEnv, fetchImpl = fetch }) 
   async function inventoryItemForSku(storeKey, rawSku) {
     const store = storeFor(storeKey);
     const sku = String(rawSku || '').trim().toUpperCase();
+    if (!sku) throw new Error(`${store.label}: SKU is required.`);
     const query = `query BMVariantBySku($query:String!){productVariants(first:20,query:$query){nodes{sku inventoryItem{id}}}}`;
     const payload = await graphql(store, query, { query: `sku:${JSON.stringify(sku)}` }, 'SKU lookup');
     const exact = (payload?.data?.productVariants?.nodes || [])
