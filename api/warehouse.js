@@ -188,6 +188,7 @@ async function adjustShopifyTransferInventory(row){
 }
 async function pushShopifyTransferLeg(base,key,transfer,leg,session){
   const match=shopifyTransferTestMatch(transfer);if(!match)return{applies:false};
+  if(leg==='release'){const allocatedId=transferWritebackId(transfer.id,match.line.id,'allocate'),allocated=await rest(base,key,'shopify_transfer_writebacks?select=status&id=eq.'+encodeURIComponent(allocatedId)+'&limit=1');if(allocated[0]?.status!=='success')return{applies:false,reason:'No Shopify allocation exists to release.'};}
   const target=SHOPIFY_TRANSFER_TEST[leg],id=transferWritebackId(transfer.id,match.line.id,leg);
   const existing=await rest(base,key,'shopify_transfer_writebacks?select=*&id=eq.'+encodeURIComponent(id)+'&limit=1');
   if(existing[0]?.status==='success')return{applies:true,status:'success',replayed:true,row:existing[0]};
