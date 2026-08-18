@@ -61,7 +61,34 @@
     if (!loaded) loadPreview();
   }
 
+  async function syncCatalog() {
+    if (!window.confirm('Sync Shopify into the V2 catalog mirror now? This only creates or refreshes V2 mirror records. It will not change Shopify, inventory, or Qoblex.')) return;
+    const syncButton = document.getElementById('productSyncRun');
+    const status = document.getElementById('productSyncStatus');
+    syncButton.disabled = true;
+    status.textContent = 'Syncing Shopify into the V2 catalog mirror…';
+    status.className = 'inventory-status';
+    try {
+      const response = await fetch('/api/shopify-catalog-sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ confirmation: 'SYNC_SHOPIFY_CATALOG' })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Shopify catalog sync failed');
+      loaded = false;
+      await loadPreview();
+      status.textContent = `Shopify mirror synced · created ${data.synced.created.toLocaleString()} · refreshed ${data.synced.refreshed.toLocaleString()} · linked ${data.synced.sourceVariants.toLocaleString()} source variants · ${data.synced.warnings.toLocaleString()} warnings`;
+    } catch (error) {
+      status.textContent = `Shopify catalog sync failed: ${error.message}`;
+      status.className = 'inventory-status error';
+    } finally {
+      syncButton.disabled = false;
+    }
+  }
 
   document.getElementById('productSyncNav').addEventListener('click', show);
   document.getElementById('productSyncRefresh').addEventListener('click', loadPreview);
+  document.getElementById('productSyncRun').addEventListener('click', syncCatalog);
 })();
