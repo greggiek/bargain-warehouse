@@ -61,6 +61,33 @@
     if (!loaded) loadPreview();
   }
 
+  async function importCatalog() {
+    if (!window.confirm('Import the reviewed Shopify product catalog into BM Warehouse V2? This creates or updates V2 products only. It will not change Shopify, inventory balances, movements, or Qoblex.')) return;
+    const button = document.getElementById('productSyncImport');
+    const status = document.getElementById('productSyncStatus');
+    button.disabled = true;
+    status.textContent = 'Importing the reviewed product catalog into V2…';
+    status.className = 'inventory-status';
+    try {
+      const response = await fetch('/api/product-catalog-import', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'same-origin',
+        body: JSON.stringify({ confirmation: 'IMPORT_PRODUCTS' })
+      });
+      const data = await response.json();
+      if (!response.ok || !data.ok) throw new Error(data.error || 'Product import failed');
+      status.textContent = `Imported ${data.imported.inserted.toLocaleString()} products · updated ${data.imported.updated.toLocaleString()} · ${data.imported.warnings.toLocaleString()} barcode warnings remain unresolved`;
+      await loadPreview();
+    } catch (error) {
+      status.textContent = `Product import failed: ${error.message}`;
+      status.className = 'inventory-status error';
+    } finally {
+      button.disabled = false;
+    }
+  }
+
   document.getElementById('productSyncNav').addEventListener('click', show);
   document.getElementById('productSyncRefresh').addEventListener('click', loadPreview);
+  document.getElementById('productSyncImport').addEventListener('click', importCatalog);
 })();
