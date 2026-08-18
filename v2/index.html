@@ -14,7 +14,7 @@
     }
     * { box-sizing: border-box; }
     body { margin: 0; min-height: 100vh; background: radial-gradient(circle at 15% 0%, #122748 0, var(--bg) 38%); color: var(--text); }
-    button, input { font: inherit; }
+    button { font: inherit; }
     button { cursor: pointer; }
     .shell { min-height: 100vh; display: grid; grid-template-columns: 260px 1fr; }
     aside { padding: 28px 20px; border-right: 1px solid var(--line); background: #091524cc; }
@@ -40,10 +40,8 @@
     .login-wrap { min-height: 100vh; display: grid; place-items: center; padding: 24px; }
     .login { width: min(430px, 100%); padding: 34px; border: 1px solid var(--line); border-radius: 20px; background: var(--panel); box-shadow: 0 28px 90px #0009; }
     .login h1 { margin: 22px 0 8px; }
-    label { display: grid; gap: 8px; margin-top: 18px; color: #c8d5e6; font-size: 14px; font-weight: 700; }
-    input { width: 100%; padding: 13px 14px; border: 1px solid #344762; border-radius: 10px; outline: none; color: white; background: #091523; }
-    input:focus { border-color: #6592ff; box-shadow: 0 0 0 3px #2f6df633; }
-    form .button { width: 100%; margin-top: 22px; }
+    .google-button { width: 100%; margin-top: 24px; display: flex; align-items: center; justify-content: center; gap: 10px; background: white; color: #172033; }
+    .google-icon { width: 20px; height: 20px; display: grid; place-items: center; border-radius: 50%; color: white; background: conic-gradient(from -45deg, #4285f4 0 25%, #34a853 0 50%, #fbbc05 0 75%, #ea4335 0); font-size: 11px; font-weight: 900; }
     .error { min-height: 20px; margin-top: 14px; color: var(--danger); font-size: 14px; }
     [hidden] { display: none !important; }
     @media (max-width: 800px) {
@@ -60,13 +58,9 @@
     <main class="login">
       <div class="brand"><span class="mark">BM</span><span>Bargain Moulding</span></div>
       <h1>Warehouse sign in</h1>
-      <p class="muted">Use your approved BM Warehouse account.</p>
-      <form id="loginForm">
-        <label>Email<input id="email" name="email" type="email" autocomplete="username" required></label>
-        <label>Password<input id="password" name="password" type="password" autocomplete="current-password" required></label>
-        <button class="button" type="submit">Sign in</button>
-        <div id="loginError" class="error" role="alert"></div>
-      </form>
+      <p class="muted">Use your approved Bargain Moulding Google account.</p>
+      <button id="googleSignIn" class="button google-button" type="button"><span class="google-icon">G</span>Continue with Google</button>
+      <div id="loginError" class="error" role="alert"></div>
     </main>
   </div>
 
@@ -103,8 +97,9 @@
   <script>
     const loginView = document.getElementById('loginView');
     const appView = document.getElementById('appView');
-    const loginForm = document.getElementById('loginForm');
+    const googleSignIn = document.getElementById('googleSignIn');
     const loginError = document.getElementById('loginError');
+    const supabaseUrl = 'https://fvzaewmyobgznncbkagh.supabase.co';
 
     function showLogin(message = '') {
       appView.hidden = true;
@@ -149,34 +144,40 @@
       }
     }
 
-    loginForm.addEventListener('submit', async event => {
-      event.preventDefault();
-      loginError.textContent = '';
-      const button = loginForm.querySelector('button');
-      button.disabled = true;
-      button.textContent = 'Signing in…';
+    async function exchangeGoogleSession() {
+      const parameters = new URLSearchParams(location.hash.replace(/^#/, ''));
+      const accessToken = parameters.get('access_token');
+      if (!accessToken) return;
+      loginError.textContent = 'Completing Google sign in…';
       try {
-        const response = await fetch('/api/auth/login', {
+        const response = await fetch('/api/auth/google-session', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           credentials: 'same-origin',
           body: JSON.stringify({
-            email: document.getElementById('email').value,
-            password: document.getElementById('password').value
+            accessToken,
+            refreshToken: parameters.get('refresh_token'),
+            expiresIn: parameters.get('expires_in')
           })
         });
-        if (!response.ok) {
-          const result = await response.json();
-          throw new Error(result.error === 'invalid_credentials' ? 'Email or password is incorrect.' : 'Sign in is unavailable.');
-        }
-        loginForm.reset();
-        await loadSession();
+        const result = await response.json();
+        history.replaceState({}, document.title, location.pathname);
+        if (!response.ok) throw new Error(
+          result.error === 'warehouse_access_not_assigned'
+            ? 'This Google account has not been approved for BM Warehouse.'
+            : 'Google sign in could not be completed.'
+        );
       } catch (error) {
-        loginError.textContent = error.message;
-      } finally {
-        button.disabled = false;
-        button.textContent = 'Sign in';
+        history.replaceState({}, document.title, location.pathname);
+        showLogin(error.message);
       }
+    }
+
+    googleSignIn.addEventListener('click', () => {
+      const redirectTo = location.origin + location.pathname;
+      location.assign(
+        supabaseUrl + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(redirectTo)
+      );
     });
 
     document.getElementById('logoutButton').addEventListener('click', async () => {
@@ -184,7 +185,7 @@
       showLogin();
     });
 
-    loadSession();
+    exchangeGoogleSession().then(loadSession);
   </script>
 </body>
 </html>
