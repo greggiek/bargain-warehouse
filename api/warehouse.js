@@ -162,7 +162,8 @@ async function queueAndPushShopifyInventory(base,key,po,destination,received,ses
 
 const SHOPIFY_TRANSFER_TEST = Object.freeze({
   sku:'GREGS SHOES', quantity:1, fromLocation:'Annex Warehouse', toLocation:'Bohemia Main',
-  ship:{store:'store_2',locationId:'gid://shopify/Location/81193369657',locationName:'Annex (Retail) 730',delta:-1},
+  allocate:{store:'store_2',locationId:'gid://shopify/Location/81193369657',locationName:'Annex (Retail) 730',delta:-1},
+  release:{store:'store_2',locationId:'gid://shopify/Location/81193369657',locationName:'Annex (Retail) 730',delta:1},
   receive:{store:'store_1',locationId:'gid://shopify/Location/68088365268',locationName:'Bohemia Warehouse',delta:1}
 });
 function transferWritebackId(transferId,lineId,leg){
@@ -641,24 +642,27 @@ async function manageTransfer(req,res,session){
   const now=new Date().toISOString(),hasReceipt=(transfer.transfer_lines||[]).some(line=>Number(line.received_qty||0)>0);
   if(operation==='allocate'){
     if(transfer.status!=='draft')return res.status(409).json({ok:false,error:'Only a draft transfer can be allocated.'});
+    const shopify=await pushShopifyTransferLeg(base,key,transfer,'allocate',session);
+    if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not reserve the test unit at Annex. The BM transfer remains Draft. '+shopify.error,shopify});
     await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'allocated',allocated_at:now,allocated_by_name:session.name,allocated_by_email:session.email||null,updated_at:now})});
-    await writeActivity(session,{actionType:'TRANSFER_ALLOCATED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Allocated material for ${transfer.transfer_number}`,status:'allocated'});
-    return res.status(200).json({ok:true,status:'allocated'});
+    await writeActivity(session,{actionType:shopify.applies?'TRANSFER_ALLOCATED_SHOPIFY_TEST':'TRANSFER_ALLOCATED',documentType:'transfer',documentNumber:transfer.transfer_number,description:shopify.applies?`Allocated ${transfer.transfer_number}; Shopify reserved 1 GREGS SHOES at Annex (Retail) 730`:`Allocated material for ${transfer.transfer_number}`,status:'allocated',metadata:{shopifyTest:Boolean(shopify.applies),shopifyLeg:shopify.applies?'allocate':null}});
+    return res.status(200).json({ok:true,status:'allocated',shopifyTest:Boolean(shopify.applies),shopify});
   }
   if(operation==='ship'){
     if(transfer.status!=='allocated')return res.status(409).json({ok:false,error:'Only an allocated transfer can be shipped.'});
-    const shopify=await pushShopifyTransferLeg(base,key,transfer,'ship',session);
-    if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not deduct the test unit from Annex. The BM transfer was not shipped. '+shopify.error,shopify});
+    const shopify=await pushShopifyTransferLeg(base,key,transfer,'allocate',session);
+    if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not reserve the test unit at Annex. The BM transfer was not shipped. '+shopify.error,shopify});
     for(const line of transfer.transfer_lines||[])await rest(base,key,`transfer_lines?id=eq.${line.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({shipped_qty:Number(line.requested_qty||0)})});
     await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'in_transit',shipped_at:now,shipped_by_name:session.name,shipped_by_email:session.email||null,updated_at:now})});
-    await writeActivity(session,{actionType:shopify.applies?'TRANSFER_SHIPPED_SHOPIFY_TEST':'TRANSFER_SHIPPED',documentType:'transfer',documentNumber:transfer.transfer_number,description:shopify.applies?`Shipped ${transfer.transfer_number}; Shopify deducted 1 GREGS SHOES from Annex (Retail) 730`:`Shipped ${transfer.transfer_number}; material is now in transit`,status:'in_transit',metadata:{shopifyTest:Boolean(shopify.applies),shopifyLeg:shopify.applies?'ship':null}});
+    await writeActivity(session,{actionType:shopify.applies?'TRANSFER_SHIPPED_SHOPIFY_TEST':'TRANSFER_SHIPPED',documentType:'transfer',documentNumber:transfer.transfer_number,description:shopify.applies?`Shipped ${transfer.transfer_number}; Shopify deducted 1 GREGS SHOES from Annex (Retail) 730`:`Shipped ${transfer.transfer_number}; material is now in transit`,status:'in_transit',metadata:{shopifyTest:Boolean(shopify.applies),shopifyLeg:shopify.applies?'allocate':null}});
     return res.status(200).json({ok:true,status:'in_transit',shopifyTest:Boolean(shopify.applies),shopify});
   }
   if(operation==='cancel'){
     if(!['draft','allocated'].includes(transfer.status)||hasReceipt)return res.status(409).json({ok:false,error:'Only an unreceived draft or allocated transfer can be canceled.'});
+    let shopify={applies:false};if(transfer.status==='allocated'){shopify=await pushShopifyTransferLeg(base,key,transfer,'release',session);if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not release the reserved test unit. The BM transfer was not canceled. '+shopify.error,shopify});}
     await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'canceled',canceled_at:now,canceled_by_name:session.name,canceled_by_email:session.email||null,updated_at:now})});
-    await writeActivity(session,{actionType:'TRANSFER_CANCELED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Canceled transfer ${transfer.transfer_number}`,status:'canceled',metadata:{previousStatus:transfer.status}});
-    return res.status(200).json({ok:true,status:'canceled'});
+    await writeActivity(session,{actionType:'TRANSFER_CANCELED',documentType:'transfer',documentNumber:transfer.transfer_number,description:shopify.applies?`Canceled ${transfer.transfer_number}; Shopify released 1 GREGS SHOES back to Annex`:`Canceled transfer ${transfer.transfer_number}`,status:'canceled',metadata:{previousStatus:transfer.status,shopifyTest:Boolean(shopify.applies)}});
+    return res.status(200).json({ok:true,status:'canceled',shopifyTest:Boolean(shopify.applies),shopify});
   }
   const locked=!['draft','allocated'].includes(transfer.status)||transfer.qoblex_transfer_id||hasReceipt;if(locked)return res.status(409).json({ok:false,error:'Only an unreceived draft or allocated transfer can be edited.'});
   if(operation==='delete'){if(transfer.status!=='draft')return res.status(409).json({ok:false,error:'Only a draft transfer can be deleted. Cancel an allocated transfer instead.'});await rest(base,key,`transfer_lines?transfer_id=eq.${transfer.id}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'DELETE',headers:{Prefer:'return=minimal'}});await writeActivity(session,{actionType:'TRANSFER_DELETED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Deleted draft transfer ${transfer.transfer_number}`,status:'deleted'});return res.status(200).json({ok:true,deleted:true})}
