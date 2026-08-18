@@ -747,9 +747,9 @@ async function finishTransferCheck(req,res,session){
     receipt.push({lineId:line.id,sku:String(product.sku||'').trim().toUpperCase(),name:product.name||product.sku||'',expected,shipped,received,damaged,missing:Math.max(0,shipped-received),note:String(input?.note||'').trim()});
   }
   const missing=receipt.reduce((sum,line)=>sum+line.missing,0),totalDamaged=receipt.reduce((sum,line)=>sum+line.damaged,0);
+  if(withProblem&&!missing&&(!Array.isArray(body.problems)||body.problems.length===0))return res.status(400).json({ok:false,error:'No discrepancy was supplied.'});
   const shopifyTest=shopifyTransferTestMatch(transfer);if(shopifyTest&&(receipt.length!==1||receipt[0].received!==1||receipt[0].damaged!==0))return res.status(400).json({ok:false,error:'The allowlisted Shopify test must receive exactly 1 undamaged GREGS SHOES unit.'});
   const shopify=await pushShopifyTransferLeg(base,key,transfer,'receive',session);if(shopify.applies&&shopify.status!=='success')return res.status(502).json({ok:false,error:'Shopify did not add the test unit to Bohemia. The BM receipt was not completed. '+shopify.error,shopify});
-  if(withProblem&&!missing&&(!Array.isArray(body.problems)||body.problems.length===0))return res.status(400).json({ok:false,error:'No discrepancy was supplied.'});
   const now=new Date().toISOString();
   const claimed=await rest(base,key,`transfers?id=eq.${transfer.id}&status=in.(in_transit,partially_received,awaiting_receipt,receiving,qoblex_failed)&qoblex_transfer_id=is.null&select=id`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({status:'submitting',receiving_started_at:now,receiving_by_user_id:session.employeeId||null,receiving_by_name:session.name,receiving_by_email:session.email||null,problem_note:withProblem?problemNote:totalDamaged?`${totalDamaged} damaged piece${totalDamaged===1?'':'s'} require Logistics review`:null,qoblex_post_status:'submitting',qoblex_submission_started_at:now,updated_at:now})});
   if(!claimed[0])return res.status(409).json({ok:false,error:'Another user is already finishing this transfer.'});
