@@ -1,6 +1,7 @@
 const crypto = require('node:crypto');
 const bcrypt = require('bcryptjs');
 const { SHOPIFY_TRANSFER_TEST, shopifyTransferTestMatch, transferWritebackId, validateShopifyTransferReceipt } = require('./lib/shopify-transfer-policy');
+const { createShopifyClient } = require('./lib/shopify-client');
 
 const COOKIE = 'bm_warehouse_session';
 const MAX_AGE = 60 * 60 * 12;
@@ -25,7 +26,7 @@ const SHOPIFY_RECEIPT_DESTINATIONS = new Map([
   ['730 Windham Rd', {store:'store_2',locationName:'730 Windham Rd',locationId:'gid://shopify/Location/79725625401'}],
   ['Annex Warehouse', {store:'store_2',locationName:'Annex (Retail) 730',locationId:'gid://shopify/Location/81193369657'}]
 ]);
-const shopifyTokenCache = new Map();
+const shopifyClient = createShopifyClient({ stores: SHOPIFY_STORES, apiVersion: SHOPIFY_API_VERSION, getEnv: env });
 
 function jsonHeaders(key) {
   return { apikey: key, Authorization: `Bearer ${key}`, Accept: 'application/json', 'Content-Type': 'application/json' };
@@ -79,37 +80,8 @@ async function rest(base, key, path, options = {}) {
   if (!response.ok) throw new Error(data?.message || `Database request failed (${response.status})`);
   return data;
 }
-function cleanShopifyDomain(value){return String(value||'').trim().replace(/^https?:\/\//,'').replace(/\/+$/,'')}
-async function shopifyAccess(store){
-  const cached=shopifyTokenCache.get(store.key);if(cached&&cached.expiresAt>Date.now()+60000)return cached;
-  const shop=cleanShopifyDomain(env(store.domain)),clientId=env(store.clientId),clientSecret=env(store.clientSecret);
-  const response=await fetch(`https://${shop}/admin/oauth/access_token`,{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded',Accept:'application/json'},body:new URLSearchParams({grant_type:'client_credentials',client_id:clientId,client_secret:clientSecret})});
-  const data=await response.json().catch(()=>null);if(!response.ok||!data?.access_token)throw new Error(`${store.label}: Shopify authentication failed (${response.status})`);
-  const value={shop,token:data.access_token,expiresAt:Date.now()+Math.max(300,Number(data.expires_in||3600))*1000};shopifyTokenCache.set(store.key,value);return value;
-}
-async function liveShopifyInventoryItem(storeKey,rawSku){
-  const store=SHOPIFY_STORES.find(item=>item.key===storeKey);if(!store)throw new Error(`Unknown Shopify store ${storeKey}`);
-  const {shop,token}=await shopifyAccess(store),sku=String(rawSku||'').trim().toUpperCase();
-  const query=`query BMVariantBySku($query:String!){productVariants(first:20,query:$query){nodes{sku inventoryItem{id}}}}`;
-  const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables:{query:`sku:${JSON.stringify(sku)}`}})}),payload=await response.json().catch(()=>null);
-  if(!response.ok)throw new Error(`${store.label}: Shopify SKU lookup failed (${response.status})`);
-  if(payload?.errors?.length)throw new Error(`${store.label}: ${payload.errors.map(error=>error.message).join('; ')}`);
-  const exact=(payload?.data?.productVariants?.nodes||[]).filter(node=>String(node.sku||'').trim().toUpperCase()===sku);
-  if(exact.length!==1)throw new Error(exact.length?`${store.label}: More than one Shopify variant uses SKU ${sku}.`:`${store.label}: SKU ${sku} was not found.`);
-  return exact[0].inventoryItem?.id||null;
-}
-async function liveShopifyAvailableQuantity(storeKey,inventoryItemId,locationId){
-  const store=SHOPIFY_STORES.find(item=>item.key===storeKey);if(!store)throw new Error(`Unknown Shopify store ${storeKey}`);
-  const {shop,token}=await shopifyAccess(store),query=`query BMAvailableAtLocation($item:ID!,$location:ID!){inventoryItem(id:$item){inventoryLevel(locationId:$location){quantities(names:["available"]){name quantity}}}}`;
-  const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables:{item:inventoryItemId,location:locationId}})}),payload=await response.json().catch(()=>null);
-  if(!response.ok)throw new Error(`${store.label}: Shopify available-quantity lookup failed (${response.status})`);
-  if(payload?.errors?.length)throw new Error(`${store.label}: ${payload.errors.map(error=>error.message).join('; ')}`);
-  const quantity=(payload?.data?.inventoryItem?.inventoryLevel?.quantities||[]).find(item=>item.name==='available')?.quantity;
-  if(!Number.isInteger(quantity))throw new Error(`${store.label}: Shopify returned no available quantity for this location.`);
-  return quantity;
-}
 async function updateShopifyCost(store,inventoryItemId,cost){
-  const {shop,token}=await shopifyAccess(store),query=`mutation BMCostWriteback($id:ID!,$input:InventoryItemInput!){inventoryItemUpdate(id:$id,input:$input){inventoryItem{id unitCost{amount currencyCode}} userErrors{field message}}}`;
+  const {shop,token}=await shopifyClient.access(store),query=`mutation BMCostWriteback($id:ID!,$input:InventoryItemInput!){inventoryItemUpdate(id:$id,input:$input){inventoryItem{id unitCost{amount currencyCode}} userErrors{field message}}}`;
   const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables:{id:inventoryItemId,input:{cost:Number(cost)}}})}),payload=await response.json().catch(()=>null);
   if(!response.ok)throw new Error(`${store.label}: Shopify cost update failed (${response.status})`);
   if(payload?.errors?.length)throw new Error(`${store.label}: ${payload.errors.map(error=>error.message).join('; ')}`);
@@ -139,7 +111,7 @@ async function queueAndPushShopifyCosts(base,key,po,costUpdates,session){
 async function patchInventoryWriteback(base,key,id,patch){return rest(base,key,`shopify_inventory_writebacks?id=eq.${encodeURIComponent(id)}`,{method:'PATCH',headers:{Prefer:'return=representation'},body:JSON.stringify({...patch,updated_at:new Date().toISOString()})})}
 async function adjustShopifyInventory(row){
   const store=SHOPIFY_STORES.find(item=>item.key===row.source_store);if(!store)throw new Error(`Unknown Shopify store ${row.source_store}`);
-  const {shop,token}=await shopifyAccess(store);
+  const {shop,token}=await shopifyClient.access(store);
   const query=`mutation BMInventoryReceipt($input:InventoryAdjustQuantitiesInput!,$idempotencyKey:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$idempotencyKey){inventoryAdjustmentGroup{createdAt reason referenceDocumentUri changes{name delta}} userErrors{field message}}}`;
   const variables={idempotencyKey:row.id,input:{reason:'correction',name:'available',referenceDocumentUri:`bmwarehouse://purchase-order/${encodeURIComponent(row.po_number)}/receipt/${row.id}`,changes:[{delta:Number(row.quantity_delta),inventoryItemId:row.shopify_inventory_item_id,locationId:row.shopify_location_id}]}};
   const response=await fetch(`https://${shop}/admin/api/${SHOPIFY_API_VERSION}/graphql.json`,{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables})}),payload=await response.json().catch(()=>null);
@@ -162,7 +134,7 @@ async function queueAndPushShopifyInventory(base,key,po,destination,received,ses
       rest(base,key,`products?select=id&sku=eq.${encodeURIComponent(sku)}&limit=1`),
       rest(base,key,`shopify_inventory_snapshot?select=source_store,source_store_label,shopify_inventory_item_id,shopify_location_id,location_name&source_store=eq.${encodeURIComponent(location.store)}&location_name=eq.${encodeURIComponent(location.locationName)}&sku=ilike.${encodeURIComponent(sku)}&limit=1`)
     ]);let mapping=mappings[0];
-    if(!mapping){try{const inventoryItemId=await liveShopifyInventoryItem(location.store,sku);if(inventoryItemId)mapping={source_store:location.store,source_store_label:SHOPIFY_STORES.find(item=>item.key===location.store)?.label||location.store,shopify_inventory_item_id:inventoryItemId,shopify_location_id:location.locationId,location_name:location.locationName}}catch(error){mapping={lookup_error:error.message}}}
+    if(!mapping){try{const inventoryItemId=await shopifyClient.inventoryItemForSku(location.store,sku);if(inventoryItemId)mapping={source_store:location.store,source_store_label:SHOPIFY_STORES.find(item=>item.key===location.store)?.label||location.store,shopify_inventory_item_id:inventoryItemId,shopify_location_id:location.locationId,location_name:location.locationName}}catch(error){mapping={lookup_error:error.message}}}
     const rowId=crypto.randomUUID();
     const matched=Boolean(mapping?.shopify_inventory_item_id&&mapping?.shopify_location_id);
     const rows=await rest(base,key,'shopify_inventory_writebacks',{method:'POST',headers:{Prefer:'return=representation'},body:JSON.stringify({id:rowId,purchase_order_id:po.id,po_number:po.po_number,product_id:products[0]?.id||null,sku,quantity_delta:quantity,warehouse_location:destination,source_store:location.store,source_store_label:mapping?.source_store_label||SHOPIFY_STORES.find(item=>item.key===location.store)?.label||location.store,shopify_inventory_item_id:mapping?.shopify_inventory_item_id||'',shopify_location_id:mapping?.shopify_location_id||location.locationId||'',shopify_location_name:location.locationName,status:matched?'pending':'unmatched',last_error:matched?null:(mapping?.lookup_error||'SKU/location was not found in Shopify.'),triggered_by_name:session.name,triggered_by_email:session.email||null})});
@@ -173,7 +145,7 @@ async function queueAndPushShopifyInventory(base,key,po,destination,received,ses
 
 async function adjustShopifyTransferInventory(row){
   const store=SHOPIFY_STORES.find(item=>item.key===row.source_store);if(!store)throw new Error('Unknown Shopify store '+row.source_store);
-  const {shop,token}=await shopifyAccess(store);
+  const {shop,token}=await shopifyClient.access(store);
   const query='mutation BMTransferInventory($input:InventoryAdjustQuantitiesInput!,$idempotencyKey:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$idempotencyKey){inventoryAdjustmentGroup{createdAt reason referenceDocumentUri changes{name delta}} userErrors{field message}}}';
   const variables={idempotencyKey:row.id,input:{reason:'correction',name:'available',referenceDocumentUri:'bmwarehouse://transfer/'+encodeURIComponent(row.transfer_number)+'/'+row.leg+'/'+row.id,changes:[{delta:Number(row.quantity_delta),changeFromQuantity:Number(row.change_from_quantity),inventoryItemId:row.shopify_inventory_item_id,locationId:row.shopify_location_id}]}};
   const response=await fetch('https://'+shop+'/admin/api/'+SHOPIFY_API_VERSION+'/graphql.json',{method:'POST',headers:{'Content-Type':'application/json',Accept:'application/json','X-Shopify-Access-Token':token},body:JSON.stringify({query,variables})}),payload=await response.json().catch(()=>null);
@@ -190,11 +162,11 @@ async function pushShopifyTransferLeg(base,key,transfer,leg,session){
   const existing=await rest(base,key,'shopify_transfer_writebacks?select=*&id=eq.'+encodeURIComponent(id)+'&limit=1');
   if(existing[0]?.status==='success')return{applies:true,status:'success',replayed:true,row:existing[0]};
   let inventoryItemId=existing[0]?.shopify_inventory_item_id||null;
-  if(!inventoryItemId)inventoryItemId=await liveShopifyInventoryItem(target.store,SHOPIFY_TRANSFER_TEST.sku);
+  if(!inventoryItemId)inventoryItemId=await shopifyClient.inventoryItemForSku(target.store,SHOPIFY_TRANSFER_TEST.sku);
   const payload={id,transfer_id:transfer.id,transfer_line_id:match.line.id,transfer_number:transfer.transfer_number,sku:SHOPIFY_TRANSFER_TEST.sku,leg,quantity_delta:target.delta,source_store:target.store,source_store_label:SHOPIFY_STORES.find(item=>item.key===target.store)?.label||target.store,shopify_inventory_item_id:inventoryItemId,shopify_location_id:target.locationId,shopify_location_name:target.locationName,status:'pending',last_error:null,triggered_by_name:session.name,triggered_by_email:session.email||null,updated_at:new Date().toISOString()};
   const rows=await rest(base,key,'shopify_transfer_writebacks?on_conflict=id',{method:'POST',headers:{Prefer:'resolution=merge-duplicates,return=representation'},body:JSON.stringify(payload)});let row=rows[0];
   try{
-    if(!Number.isInteger(row.change_from_quantity)){const current=await liveShopifyAvailableQuantity(target.store,inventoryItemId,target.locationId);await rest(base,key,'shopify_transfer_writebacks?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({change_from_quantity:current,updated_at:new Date().toISOString()})});row={...row,change_from_quantity:current};}
+    if(!Number.isInteger(row.change_from_quantity)){const current=await shopifyClient.availableQuantity(target.store,inventoryItemId,target.locationId);await rest(base,key,'shopify_transfer_writebacks?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({change_from_quantity:current,updated_at:new Date().toISOString()})});row={...row,change_from_quantity:current};}
     const adjustment=await adjustShopifyTransferInventory(row);
     await rest(base,key,'shopify_transfer_writebacks?id=eq.'+encodeURIComponent(id),{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:'success',attempts:Number(row.attempts||0)+1,last_error:null,shopify_response:adjustment,pushed_at:new Date().toISOString(),updated_at:new Date().toISOString()})});
     return{applies:true,status:'success',row:{...row,status:'success'}};
