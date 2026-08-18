@@ -744,7 +744,7 @@ async function resolveTransferProblem(req,res,session){
     await rest(base,key,'transfer_lines',{method:'POST',headers:{Prefer:'return=minimal'},body:JSON.stringify(missing.map(line=>({transfer_id:followId,product_id:line.product_id,requested_qty:line.missing,shipped_qty:0,received_qty:0,damaged_qty:0,missing_qty:0}))) });
   }
   const finalStatus='completed';
-  await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:finalStatus,resolved_at:now,resolved_by_name:session.name,resolved_by_email:session.email||null,updated_at:now,notes:[transfer.notes,note,followUpNumber?`Follow-up ${followUpNumber}`:''].filter(Boolean).join('\n')})});
+  await rest(base,key,`transfers?id=eq.${transfer.id}`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({status:finalStatus,received_at:now,resolved_at:now,resolved_by_name:session.name,resolved_by_email:session.email||null,updated_at:now,notes:[transfer.notes,note,followUpNumber?`Follow-up ${followUpNumber}`:''].filter(Boolean).join('\n')})});
   await rest(base,key,`transfer_discrepancies?transfer_id=eq.${transfer.id}&resolved_at=is.null`,{method:'PATCH',headers:{Prefer:'return=minimal'},body:JSON.stringify({resolved_at:now,resolved_by_name:session.name,resolution_note:note})});
   await writeActivity(session,{actionType:action==='create_followup'?'TRANSFER_FOLLOWUP_CREATED':'TRANSFER_PROBLEM_RESOLVED',documentType:'transfer',documentNumber:transfer.transfer_number,description:`Resolved ${transfer.transfer_number}: ${note}${followUpNumber?` · created ${followUpNumber}`:''}`,status:finalStatus,metadata:{resolution:action,followUpNumber}});
   return res.status(200).json({ok:true,status:finalStatus,followUpNumber});
