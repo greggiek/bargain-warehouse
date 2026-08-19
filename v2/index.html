@@ -91,6 +91,7 @@
   <script src="/product-sync.js" defer></script>
   <script src="/inventory-snapshot.js" defer></script>
   <script src="/transfers.js" defer></script>\n  <script src="/receiving.js" defer></script>
+  <script src="/production.js" defer></script>
 </head>
 <body>
   <div id="loginView" class="login-wrap" hidden>
@@ -113,7 +114,7 @@
         <button id="snapshotNav" class="nav-item" type="button">Opening Snapshot</button>
         <button id="transfersNav" class="nav-item" type="button">Transfers</button>
         <button id="receivingNav" class="nav-item" type="button">Receiving</button>
-        <span>Production</span>
+        <button id="productionNav" class="nav-item" type="button">Production</button>
         <span>Activity</span>
       </nav>
     </aside>
@@ -244,6 +245,12 @@
           <div class="transfer-kicker">Audit trail</div><h2>Recent receipts</h2><p class="muted">Every receipt is recorded in the V2 ledger and appears in Inventory immediately.</p>
           <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Reference</th><th>SKU</th><th>Qty</th><th>What happened</th><th>When</th></tr></thead><tbody id="receiptHistoryRows"></tbody></table></div>
         </section>
+      </section>
+      <section id="productionView" hidden>
+        <div class="inventory-head"><div><div class="eyebrow">V2 manufacturing ledger</div><h1>Production & BOM</h1><p class="muted">Set the recipe, consume components, and add finished goods. Shopify and Qoblex are not changed.</p></div></div>
+        <section class="card section"><div class="transfer-kicker">Recipe setup</div><h2>Bill of materials</h2><div class="inventory-actions"><div class="product-lookup"><label for="finishedSku">Finished product</label><input id="finishedSku" class="inventory-search" autocomplete="off" placeholder="Search finished SKU or product"><div id="finishedSuggestions" class="product-suggestions" hidden></div></div><input id="bomYield" class="inventory-search" type="number" min="0.0001" step="0.0001" value="1" placeholder="Yield quantity"><input id="bomNotes" class="inventory-search" maxlength="300" placeholder="Recipe note (optional)"><button id="addBomComponent" class="button secondary" type="button">Add component</button><button id="saveBom" class="button" type="button">Save BOM</button></div><div id="bomComponents"></div></section>
+        <section class="card section"><div class="transfer-kicker">Complete production</div><h2>Build finished inventory</h2><div class="inventory-actions"><select id="productionLocation" class="inventory-search" aria-label="Production location"></select><input id="productionQty" class="inventory-search" type="number" min="0.0001" step="0.0001" placeholder="Finished quantity"><input id="productionReference" class="inventory-search" maxlength="120" placeholder="Work order / reference (optional)"><button id="completeProduction" class="button" type="button">Complete production</button></div><p id="productionBomStatus" class="inventory-status">Choose a finished SKU to load its BOM.</p><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Component SKU</th><th>Product</th><th>Per yield</th><th>On hand</th><th>Allocated</th></tr></thead><tbody id="bomPreview"></tbody></table></div><p id="productionStatus" class="inventory-status">No inventory changes happen until you complete production.</p></section>
+        <section class="card section"><div class="transfer-kicker">Audit trail</div><h2>Production history</h2><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Reference</th><th>What happened</th><th>Who</th><th>When</th></tr></thead><tbody id="productionHistoryRows"></tbody></table></div></section>
       </section>
       <section id="productSyncView" hidden>
         <div class="inventory-head">
