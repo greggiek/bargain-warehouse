@@ -83,7 +83,14 @@
     searchTimer = setTimeout(searchProducts, 180);
   });
   sku.addEventListener('blur', () => setTimeout(hideSuggestions, 160));
-    async function load() {
+  otherNavs.forEach((otherNav) => {
+    otherNav.addEventListener('click', () => {
+      view.hidden = true;
+      nav.classList.remove('active');
+      hideSuggestions();
+    });
+  });
+  async function load() {
     show('Loading your V2 transfers…');
     const response = await fetch('/api/transfers', { credentials: 'same-origin' });
     const data = await response.json();
