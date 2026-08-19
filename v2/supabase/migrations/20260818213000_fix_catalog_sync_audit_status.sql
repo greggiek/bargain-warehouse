@@ -1,3 +1,7 @@
+-- The activity_events status check permits success, failed, warning, and info.
+-- Use success for a completed Shopify-to-V2 catalog mirror run.
+-- Preserve the first deterministic Shopify SKU for a duplicate barcode.
+-- Other colliding records still mirror, but carry no barcode rather than failing the catalog sync.
 -- One-way Shopify -> V2 catalog mirror. The function is service-role only;
 -- it never contacts or mutates Shopify.
 create or replace function public.sync_shopify_catalog_mirror(
