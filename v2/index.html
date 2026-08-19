@@ -48,6 +48,7 @@
     .inventory-actions { display: flex; gap: 10px; }
     .inventory-search { width: min(340px, 45vw); padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px; color: white; background: var(--panel); }
     .product-lookup { position: relative; }
+    .product-lookup label { display: block; margin: 0 0 6px 2px; color: var(--muted); font-size: 12px; font-weight: 700; }
     .product-suggestions { position: absolute; z-index: 5; top: calc(100% + 6px); left: 0; width: min(480px, 62vw); max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: #142238; box-shadow: 0 18px 42px #0008; }
     .product-suggestion { display: block; width: 100%; padding: 10px 12px; color: var(--text); border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
     .product-suggestion:first-child { border-top: 0; }
@@ -175,7 +176,7 @@
           <div class="inventory-actions">
             <select id="transferFrom" class="inventory-search" aria-label="From location"></select>
             <select id="transferTo" class="inventory-search" aria-label="To location"></select>
-            <div class="product-lookup"><input id="transferSku" class="inventory-search" autocomplete="off" placeholder="Search SKU, product, barcode, or category"><div id="transferSuggestions" class="product-suggestions" hidden></div></div>
+            <div class="product-lookup"><label for="transferSku">Item to transfer</label><input id="transferSku" class="inventory-search" autocomplete="off" placeholder="Search SKU, product, barcode, or category"><div id="transferSuggestions" class="product-suggestions" hidden></div></div>
             <input id="transferQty" class="inventory-search" type="number" min="1" step="1" placeholder="Quantity">
             <button id="transferCreate" class="button" type="button">Create transfer</button>
           </div>
