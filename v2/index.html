@@ -136,16 +136,16 @@
       </div>
       <section id="inventoryView" hidden>
         <div class="inventory-head">
-          <div><div class="eyebrow">Network inventory</div><h1>Inventory overview</h1><p class="muted">Live, read-only on-hand inventory from both Shopify stores.</p></div>
+          <div><div class="eyebrow">Network inventory</div><h1>Inventory overview</h1><p class="muted">Live V2 on-hand inventory, including completed transfers. Shopify remains the catalog source of truth.</p></div>
           <div class="inventory-actions"><input id="inventorySearch" class="inventory-search" type="search" placeholder="Search SKU or product"><button id="inventoryRefresh" class="button secondary" type="button">Refresh</button></div>
         </div>
-        <div id="inventoryStatus" class="inventory-status">Open Inventory to load Shopify.</div>
+        <div id="inventoryStatus" class="inventory-status">Open Inventory to load the V2 operational ledger.</div>
         <div class="inventory-table-wrap">
           <table class="inventory-table">
             <thead><tr><th>SKU</th><th>Product</th><th>Total</th><th>Amityville</th><th>Bohemia</th><th>Outpost</th><th>Riverhead</th><th>Windham</th><th>Annex</th></tr></thead>
             <tbody id="inventoryRows"></tbody>
           </table>
-          <div class="inventory-foot"><span id="inventoryCount">0 SKUs</span><span>Shopify read-only · Qoblex disconnected</span></div>
+          <div class="inventory-foot"><span id="inventoryCount">0 SKUs</span><span>V2 operational ledger · Shopify catalog source · Qoblex disconnected</span></div>
         </div>
       </section>
       <section id="snapshotView" hidden>
