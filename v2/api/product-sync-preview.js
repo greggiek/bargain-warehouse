@@ -41,15 +41,17 @@ module.exports = async function productSyncPreview(req, res) {
     if (shopify.writesEnabled !== false) throw new Error('Shopify safety check failed');
 
     const { url, serviceRoleKey } = configuration();
-    const productsResponse = await fetch(
-      `${url}/rest/v1/products?select=id,sku,name,barcode,active,purchase_price,moving_average_cost&limit=10000`,
-      {
-        headers: jsonHeaders(serviceRoleKey),
-        signal: AbortSignal.timeout(10000)
-      }
-    );
-    if (!productsResponse.ok) throw new Error('V2 product lookup failed');
-    const existingProducts = await productsResponse.json();
+    const existingProducts = [];
+    for (let offset = 0; ; offset += 1000) {
+      const productsResponse = await fetch(
+        `${url}/rest/v1/products?select=id,sku,name,barcode,active,purchase_price,moving_average_cost&limit=1000&offset=${offset}`,
+        { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(10000) }
+      );
+      if (!productsResponse.ok) throw new Error('V2 product lookup failed');
+      const page = await productsResponse.json();
+      existingProducts.push(...page);
+      if (page.length < 1000) break;
+    }
     const bySku = new Map(
       existingProducts.map(product => [String(product.sku).trim().toUpperCase(), product])
     );
