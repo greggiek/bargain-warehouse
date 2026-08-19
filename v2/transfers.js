@@ -76,7 +76,7 @@
       const data = await response.json();
       if (request !== searchRequest || !response.ok) return;
       showSuggestions(data.products || []);
-    } catch { hideSuggestions(); }
+    } catch { hideSuggestions(); show('Product lookup is unavailable. Please retry.', true); }
   }
   sku.addEventListener('input', () => {
     clearTimeout(searchTimer);
