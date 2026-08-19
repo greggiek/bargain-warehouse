@@ -3,7 +3,7 @@ const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
 
 const LOCATION_RULES = [
-  { match: ['amityville'], warehouseCode: 'AMT' },
+  { match: ['amityville', 'bayview'], warehouseCode: 'AMT' },
   { match: ['bohemia'], warehouseCode: 'BOH' },
   { match: ['outpost', 'ronkonkoma'], warehouseCode: 'OUT' },
   { match: ['riverhead'], warehouseCode: 'RIV' },
