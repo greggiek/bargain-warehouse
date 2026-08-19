@@ -49,6 +49,20 @@
     .inventory-search { width: min(340px, 45vw); padding: 11px 13px; border: 1px solid var(--line); border-radius: 10px; color: white; background: var(--panel); }
     .product-lookup { position: relative; }
     .product-lookup label { display: block; margin: 0 0 6px 2px; color: var(--muted); font-size: 12px; font-weight: 700; }
+    .transfer-choice-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 14px; margin-top: 16px; }
+    .transfer-choice { padding: 20px; border: 1px solid var(--line); border-radius: 14px; text-align: left; color: var(--text); background: var(--panel); }
+    .transfer-choice.create { border-color: #2bd57688; background: #113027; }
+    .transfer-choice.receive { border-color: #2f6df688; background: #122949; }
+    .transfer-choice strong,.transfer-choice span { display: block; }
+    .transfer-choice strong { margin: 7px 0; font-size: 18px; }
+    .transfer-choice span { color: var(--muted); }
+    .transfer-kicker { color: var(--green); font-size: 12px; font-weight: 800; letter-spacing: .1em; text-transform: uppercase; }
+    .transfer-metrics { display: flex; gap: 8px; align-items: center; color: var(--muted); font-size: 13px; }
+    .transfer-metric { padding: 6px 9px; border-radius: 9px; color: #acc8ff; background: #182c49; font-weight: 750; }
+    .transfer-filters { display:flex; gap:10px; margin: 14px 0; }
+    .transfer-filters .inventory-search { flex: 1; width: auto; }
+    .transfer-filter { padding: 10px; color: var(--text); border: 1px solid var(--line); border-radius: 10px; background: var(--panel); }
+    @media (max-width:800px){.transfer-choice-grid{grid-template-columns:1fr}.transfer-filters{flex-wrap:wrap}}
     .product-suggestions { position: absolute; z-index: 5; top: calc(100% + 6px); left: 0; width: min(480px, 62vw); max-height: 280px; overflow: auto; border: 1px solid var(--line); border-radius: 10px; background: #142238; box-shadow: 0 18px 42px #0008; }
     .product-suggestion { display: block; width: 100%; padding: 10px 12px; color: var(--text); border: 0; border-top: 1px solid var(--line); background: transparent; text-align: left; }
     .product-suggestion:first-child { border-top: 0; }
@@ -170,9 +184,18 @@
       </section>
       <section id="transferView" hidden>
         <div class="inventory-head">
-          <div><div class="eyebrow">V2 inventory ledger</div><h1>Create transfer</h1><p class="muted">Allocate inventory from one V2 location to another. This does not change Shopify or Qoblex.</p></div>
+          <div><div class="eyebrow">Transfers</div><h1>Move material with confidence</h1><p class="muted">Create outgoing V2 transfers or receive incoming material. Shopify and Qoblex are not changed.</p></div>
         </div>
         <section class="card section">
+          <div class="transfer-kicker">What are you doing?</div>
+          <div class="transfer-choice-grid">
+            <button id="transferCreateChoice" class="transfer-choice create" type="button"><span>↔</span><strong>Create transfer</strong><span>Move material from this warehouse to another location.</span></button>
+            <button id="transferReceiveChoice" class="transfer-choice receive" type="button"><span>▣ ✓</span><strong>Receive transfer</strong><span>Verify shipped material and record received, damaged, or missing pieces.</span></button>
+          </div>
+        </section>
+        <section id="transferCreatePanel" class="card section">
+          <div class="transfer-kicker">Outgoing transfer</div>
+          <h2>Create transfer</h2>
           <div class="inventory-actions">
             <select id="transferFrom" class="inventory-search" aria-label="From location"></select>
             <select id="transferTo" class="inventory-search" aria-label="To location"></select>
@@ -180,15 +203,26 @@
             <input id="transferQty" class="inventory-search" type="number" min="1" step="1" placeholder="Quantity">
             <button id="transferCreate" class="button" type="button">Create transfer</button>
           </div>
-          <p id="transferStatus" class="inventory-status">Open Transfers to load your locations.</p>
+          <p id="transferStatus" class="inventory-status">Open Transfers to load your V2 transfer queue.</p>
         </section>
-        <div class="inventory-table-wrap">
-          <table class="inventory-table">
-            <thead><tr><th>Transfer</th><th>From</th><th>To</th><th>SKU</th><th>Qty</th><th>Next step</th></tr></thead>
-            <tbody id="transferRows"></tbody>
-          </table>
-          <div class="inventory-foot"><span>Allocated → ship → receive</span><span>V2 ledger only · Shopify and Qoblex unchanged</span></div>
-        </div>
+        <section class="card section">
+          <div class="transfer-kicker">Company-wide inventory</div><h2>In transit</h2><p class="muted">Material that left its source but has not fully arrived at destination.</p>
+          <div class="transfer-metrics"><span id="inTransitPieces" class="transfer-metric">0 pieces</span><span id="inTransitTransfers" class="transfer-metric">0 transfers</span><span id="inTransitSkus" class="transfer-metric">0 SKUs</span></div>
+          <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>SKU</th><th>Transfer</th><th>Route</th><th>Shipped</th><th>Received</th><th>Damaged</th><th>Still in transit</th></tr></thead><tbody id="inTransitRows"></tbody></table></div>
+        </section>
+        <section id="transferQueue" class="card section">
+          <div class="transfer-kicker">All locations</div><h2>Master transfer bucket</h2><p class="muted">Every active transfer across your assigned locations.</p>
+          <div class="transfer-filters"><input id="transferQueueSearch" class="inventory-search" type="search" placeholder="Search transfer, SKU, warehouse, or status"><select id="transferStatusFilter" class="transfer-filter"><option value="">All statuses</option><option value="allocated">Allocated</option><option value="in_transit">In transit</option><option value="partially_received">Partially received</option><option value="problem">Problem</option><option value="completed">Completed</option></select></div>
+          <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Transfer</th><th>From</th><th>To</th><th>Status</th><th>Lines</th><th>Pieces</th><th>Action</th></tr></thead><tbody id="transferRows"></tbody></table></div>
+        </section>
+        <section class="card section">
+          <div class="transfer-kicker">Audit trail</div><h2>Transfer history</h2><p class="muted">Who created, shipped, received, or changed each transfer.</p>
+          <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Transfer</th><th>What happened</th><th>Who</th><th>When</th></tr></thead><tbody id="transferHistoryRows"></tbody></table></div>
+        </section>
+        <section class="card section">
+          <div class="transfer-kicker">Logistics exceptions</div><h2>Needs review <span id="exceptionCount" class="transfer-metric">0 open</span></h2><p class="muted">Damaged or missing material is kept visible for follow-up.</p>
+          <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Transfer</th><th>SKU</th><th>Issue</th><th>Quantity</th><th>Note</th></tr></thead><tbody id="transferExceptionRows"></tbody></table></div>
+        </section>
       </section>
       <section id="productSyncView" hidden>
         <div class="inventory-head">
