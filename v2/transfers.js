@@ -8,6 +8,9 @@
   const sku = document.getElementById('transferSku'), quantity = document.getElementById('transferQty');
   const create = document.getElementById('transferCreate'), status = document.getElementById('transferStatus');
   const rows = document.getElementById('transferRows');
+  const suggestions = document.getElementById('transferSuggestions');
+  let searchTimer;
+  let searchRequest = 0;
   const show = (message, failed = false) => { status.textContent = message; status.classList.toggle('error', failed); };
   const quantityInput = (label, max) => {
     const value = prompt(label + ' (0–' + max + ')', '0');
@@ -47,7 +50,40 @@
       row.append(actionCell); rows.append(row);
     });
   }
-  async function load() {
+  function hideSuggestions() { suggestions.replaceChildren(); suggestions.hidden = true; }
+  function showSuggestions(products) {
+    suggestions.replaceChildren();
+    if (!products.length) return hideSuggestions();
+    products.forEach((product) => {
+      const button = document.createElement('button');
+      button.className = 'product-suggestion'; button.type = 'button';
+      const primary = document.createElement('strong');
+      primary.textContent = product.sku + ' — ' + product.name;
+      const detail = document.createElement('small');
+      detail.textContent = [product.barcode ? 'Barcode: ' + product.barcode : '', product.category || ''].filter(Boolean).join(' · ');
+      button.append(primary, detail);
+      button.addEventListener('click', () => { sku.value = product.sku; hideSuggestions(); quantity.focus(); });
+      suggestions.append(button);
+    });
+    suggestions.hidden = false;
+  }
+  async function searchProducts() {
+    const term = sku.value.trim();
+    if (term.length < 2) return hideSuggestions();
+    const request = ++searchRequest;
+    try {
+      const response = await fetch('/api/transfers?productSearch=' + encodeURIComponent(term), { credentials: 'same-origin' });
+      const data = await response.json();
+      if (request !== searchRequest || !response.ok) return;
+      showSuggestions(data.products || []);
+    } catch { hideSuggestions(); }
+  }
+  sku.addEventListener('input', () => {
+    clearTimeout(searchTimer);
+    searchTimer = setTimeout(searchProducts, 180);
+  });
+  sku.addEventListener('blur', () => setTimeout(hideSuggestions, 160));
+    async function load() {
     show('Loading your V2 transfers…');
     const response = await fetch('/api/transfers', { credentials: 'same-origin' });
     const data = await response.json();

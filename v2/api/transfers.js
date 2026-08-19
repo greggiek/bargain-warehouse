@@ -18,6 +18,17 @@ module.exports = async (req, res) => {
 
   try {
     const locations = await accessForUser(url, serviceRoleKey, auth.user.id);
+    const productSearch = String(req.query?.productSearch || '').trim();
+    if (req.method === 'GET' && productSearch) {
+      const term = productSearch.replace(/[(),.*%]/g, ' ').trim();
+      if (term.length < 2) return res.status(200).json({ ok: true, products: [] });
+      const filter = '(sku.ilike.*' + term + '*,name.ilike.*' + term + '*,barcode.ilike.*' + term + '*,category.ilike.*' + term + '*)';
+      const response = await fetch(
+        url + '/rest/v1/products?select=id,sku,name,barcode,category&active=eq.true&or=' + encodeURIComponent(filter) + '&order=sku.asc&limit=12',
+        { headers: jsonHeaders(serviceRoleKey) }
+      );
+      return res.status(response.status).json({ ok: response.ok, products: await response.json() });
+    }
     if (req.method === 'GET') {
       const response = await fetch(
         url + '/rest/v1/transfers?select=id,transfer_number,status,from_location_id,to_location_id,created_at,from_location:locations!transfers_from_location_id_fkey(name),to_location:locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_quantity,allocated_quantity,shipped_quantity,received_quantity,damaged_quantity,missing_quantity,notes,products(sku,name))&order=created_at.desc&limit=50',
