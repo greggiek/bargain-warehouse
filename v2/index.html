@@ -68,6 +68,7 @@
   </style>
   <script src="/inventory.js" defer></script>
   <script src="/product-sync.js" defer></script>
+  <script src="/inventory-snapshot.js" defer></script>
 </head>
 <body>
   <div id="loginView" class="login-wrap" hidden>
@@ -87,6 +88,7 @@
         <button id="overviewNav" class="nav-item active" type="button">Overview</button>
         <button id="inventoryNav" class="nav-item" type="button">Inventory</button>
         <button id="productSyncNav" class="nav-item" type="button">Shopify Catalog</button>
+        <button id="snapshotNav" class="nav-item" type="button">Opening Snapshot</button>
         <span>Transfers</span>
         <span>Receiving</span>
         <span>Production</span>
@@ -122,6 +124,26 @@
             <tbody id="inventoryRows"></tbody>
           </table>
           <div class="inventory-foot"><span id="inventoryCount">0 SKUs</span><span>Shopify read-only · Qoblex disconnected</span></div>
+        </div>
+      </section>
+      <section id="snapshotView" hidden>
+        <div class="inventory-head">
+          <div><div class="eyebrow">Baseline preview</div><h1>Opening inventory snapshot</h1><p class="muted">Read Shopify on-hand quantities into a one-time V2 baseline preview. No inventory is written until you approve a clean preview.</p></div>
+          <div class="inventory-actions"><button id="snapshotRefresh" class="button secondary" type="button">Refresh snapshot preview</button></div>
+        </div>
+        <div class="cards">
+          <section class="card"><span class="muted">Shopify location levels</span><strong id="snapshotLevelCount">—</strong></section>
+          <section class="card"><span class="muted">Mapped V2 balances</span><strong id="snapshotBalanceCount">—</strong></section>
+          <section class="card"><span class="muted">Unmapped levels</span><strong id="snapshotUnmappedCount">—</strong></section>
+          <section class="card"><span class="muted">Negative balances</span><strong id="snapshotNegativeCount">—</strong></section>
+        </div>
+        <div id="snapshotStatus" class="inventory-status">Open Opening Snapshot to generate a safe Shopify preview.</div>
+        <div class="inventory-table-wrap">
+          <table class="inventory-table">
+            <thead><tr><th>Warehouse</th><th>V2 location</th><th>SKU</th><th>Product</th><th>On hand</th><th>Shopify stores</th></tr></thead>
+            <tbody id="snapshotRows"></tbody>
+          </table>
+          <div class="inventory-foot"><span>Preview only · no V2 inventory or Shopify writes</span><span>Shopify source · Qoblex disconnected</span></div>
         </div>
       </section>
       <section id="productSyncView" hidden>
