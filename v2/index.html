@@ -92,6 +92,7 @@
   <script src="/inventory-snapshot.js" defer></script>
   <script src="/transfers.js" defer></script>\n  <script src="/receiving.js" defer></script>
   <script src="/production.js" defer></script>
+  <script src="/replenishment.js" defer></script>
 </head>
 <body>
   <div id="loginView" class="login-wrap" hidden>
@@ -115,6 +116,7 @@
         <button id="transfersNav" class="nav-item" type="button">Transfers</button>
         <button id="receivingNav" class="nav-item" type="button">Receiving</button>
         <button id="productionNav" class="nav-item" type="button">Production</button>
+        <button id="replenishmentNav" class="nav-item" type="button">Replenishment</button>
         <span>Activity</span>
       </nav>
     </aside>
@@ -251,6 +253,11 @@
         <section class="card section"><div class="transfer-kicker">Recipe setup</div><h2>Bill of materials</h2><div class="inventory-actions"><div class="product-lookup"><label for="finishedSku">Finished product</label><input id="finishedSku" class="inventory-search" autocomplete="off" placeholder="Search finished SKU or product"><div id="finishedSuggestions" class="product-suggestions" hidden></div></div><input id="bomYield" class="inventory-search" type="number" min="0.0001" step="0.0001" value="1" placeholder="Yield quantity"><input id="bomNotes" class="inventory-search" maxlength="300" placeholder="Recipe note (optional)"><button id="addBomComponent" class="button secondary" type="button">Add component</button><button id="saveBom" class="button" type="button">Save BOM</button></div><div id="bomComponents"></div></section>
         <section class="card section"><div class="transfer-kicker">Complete production</div><h2>Build finished inventory</h2><div class="inventory-actions"><select id="productionLocation" class="inventory-search" aria-label="Production location"></select><input id="productionQty" class="inventory-search" type="number" min="0.0001" step="0.0001" placeholder="Finished quantity"><input id="productionReference" class="inventory-search" maxlength="120" placeholder="Work order / reference (optional)"><button id="completeProduction" class="button" type="button">Complete production</button></div><p id="productionBomStatus" class="inventory-status">Choose a finished SKU to load its BOM.</p><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Component SKU</th><th>Product</th><th>Per yield</th><th>On hand</th><th>Allocated</th></tr></thead><tbody id="bomPreview"></tbody></table></div><p id="productionStatus" class="inventory-status">No inventory changes happen until you complete production.</p></section>
         <section class="card section"><div class="transfer-kicker">Audit trail</div><h2>Production history</h2><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Reference</th><th>What happened</th><th>Who</th><th>When</th></tr></thead><tbody id="productionHistoryRows"></tbody></table></div></section>
+      </section>
+      <section id="replenishmentView" hidden>
+        <div class="inventory-head"><div><div class="eyebrow">V2 replenishment control</div><h1>Shortages & replenishment</h1><p class="muted">Negative balances are valid operational signals. Use this queue to see what each warehouse needs; it does not change Shopify or Qoblex.</p></div><div class="inventory-actions"><button id="replenishmentRefresh" class="button secondary" type="button">Refresh queue</button></div></div>
+        <div class="cards"><section class="card"><span class="muted">Shortage SKUs</span><strong id="replenishmentCount">—</strong></section><section class="card"><span class="muted">Suggested replenishment</span><strong id="replenishmentDeficit">—</strong></section></div>
+        <section class="card section"><div class="transfer-kicker">Action queue</div><h2>What needs to be replenished</h2><div class="transfer-filters"><input id="replenishmentSearch" class="inventory-search" type="search" placeholder="Search SKU, product, barcode, category, or warehouse"><select id="replenishmentLocation" class="transfer-filter"></select></div><p id="replenishmentStatus" class="inventory-status">Open Replenishment to load the V2 shortage queue.</p><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Warehouse</th><th>SKU</th><th>Product</th><th>Category</th><th>On hand</th><th>Shortage</th><th>Suggested order</th></tr></thead><tbody id="replenishmentRows"></tbody></table><div class="inventory-foot"><span>Suggested order equals current deficit; add vendor minimums and reorder points next.</span><span>V2 ledger only · Shopify and Qoblex unchanged</span></div></div></section>
       </section>
       <section id="productSyncView" hidden>
         <div class="inventory-head">
