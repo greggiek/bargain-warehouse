@@ -8,49 +8,43 @@
   const sku = document.getElementById('transferSku'), quantity = document.getElementById('transferQty');
   const create = document.getElementById('transferCreate'), status = document.getElementById('transferStatus');
   const rows = document.getElementById('transferRows');
-
   const show = (message, failed = false) => { status.textContent = message; status.classList.toggle('error', failed); };
+  const quantityInput = (label, max) => {
+    const value = prompt(label + ' (0–' + max + ')', '0');
+    if (value === null) return null;
+    const number = Number(value);
+    if (!Number.isFinite(number) || number < 0 || number > max) throw new Error('Enter a quantity between 0 and ' + max + '.');
+    return number;
+  };
   const locationOption = (location) => {
     const option = document.createElement('option');
-    option.value = location.id;
-    option.textContent = location.name;
-    option.disabled = !location.canManage;
+    option.value = location.id; option.textContent = location.name; option.disabled = !location.canManage;
     return option;
   };
-  const cell = (row, value) => {
-    const element = document.createElement('td');
-    element.textContent = value;
-    row.append(element);
-  };
-  const actionButton = (label, id, action) => {
+  const cell = (row, value) => { const element = document.createElement('td'); element.textContent = value; row.append(element); };
+  const actionButton = (label, transfer, action) => {
     const button = document.createElement('button');
-    button.className = 'button secondary';
-    button.type = 'button';
-    button.textContent = label;
-    button.addEventListener('click', () => runAction(id, action, button));
+    button.className = 'button secondary'; button.type = 'button'; button.textContent = label;
+    button.addEventListener('click', () => runAction(transfer, action, button));
     return button;
   };
   function renderTransfers(transfers) {
     rows.replaceChildren();
     if (!transfers.length) {
       const row = document.createElement('tr'), empty = document.createElement('td');
-      empty.colSpan = 6; empty.className = 'muted'; empty.textContent = 'No V2 transfers yet.';
-      row.append(empty); rows.append(row); return;
+      empty.colSpan = 6; empty.className = 'muted'; empty.textContent = 'No V2 transfers yet.'; row.append(empty); rows.append(row); return;
     }
     transfers.forEach((transfer) => {
       const row = document.createElement('tr');
       const line = transfer.transfer_lines && transfer.transfer_lines[0];
       cell(row, transfer.transfer_number);
-      cell(row, transfer.from_location?.name || '—');
-      cell(row, transfer.to_location?.name || '—');
-      cell(row, line ? line.products?.sku || '—' : '—');
-      cell(row, line ? String(line.requested_quantity) : '—');
+      cell(row, transfer.from_location?.name || '—'); cell(row, transfer.to_location?.name || '—');
+      cell(row, line ? line.products?.sku || '—' : '—'); cell(row, line ? String(line.requested_quantity) : '—');
       const actionCell = document.createElement('td');
-      if (transfer.status === 'allocated') actionCell.append(actionButton('Ship', transfer.id, 'ship'));
-      else if (transfer.status === 'in_transit') actionCell.append(actionButton('Receive', transfer.id, 'receive'));
+      if (transfer.status === 'allocated') actionCell.append(actionButton('Ship', transfer, 'ship'));
+      else if (transfer.status === 'in_transit' || transfer.status === 'partially_received') actionCell.append(actionButton('Receive', transfer, 'receive'));
       else actionCell.textContent = transfer.status.replace('_', ' ');
-      row.append(actionCell);
-      rows.append(row);
+      row.append(actionCell); rows.append(row);
     });
   }
   async function load() {
@@ -60,26 +54,45 @@
     if (!response.ok) return show(data.error || 'Could not load transfers.', true);
     [from, to].forEach((select) => {
       select.replaceChildren();
-      const placeholder = document.createElement('option');
-      placeholder.value = ''; placeholder.textContent = 'Choose location'; select.append(placeholder);
+      const placeholder = document.createElement('option'); placeholder.value = ''; placeholder.textContent = 'Choose location'; select.append(placeholder);
       data.locations.forEach((location) => select.append(locationOption(location)));
     });
     renderTransfers(data.transfers || []);
     show('Create, ship, and receive transfers in the V2 ledger. Shopify and Qoblex are not changed.');
   }
-  async function runAction(transferId, action, button) {
-    const word = action === 'ship' ? 'ship' : 'receive';
-    if (!confirm('Confirm you want to ' + word + ' this transfer in V2?')) return;
-    button.disabled = true; show((action === 'ship' ? 'Shipping' : 'Receiving') + ' transfer…');
+  function receiptLines(transfer) {
+    const lines = transfer.transfer_lines || [];
+    if (lines.length !== 1) throw new Error('Multi-line receipts are not enabled in this screen yet.');
+    const line = lines[0];
+    const outstanding = Number(line.shipped_quantity) - Number(line.received_quantity) - Number(line.damaged_quantity) - Number(line.missing_quantity);
+    if (outstanding <= 0) throw new Error('There is nothing left to receive.');
+    const receivedQuantity = quantityInput('Quantity received for ' + (line.products?.sku || 'this SKU'), outstanding);
+    if (receivedQuantity === null) return null;
+    const damagedQuantity = quantityInput('Quantity damaged', outstanding - receivedQuantity);
+    if (damagedQuantity === null) return null;
+    const missingQuantity = quantityInput('Quantity missing', outstanding - receivedQuantity - damagedQuantity);
+    if (missingQuantity === null) return null;
+    if (receivedQuantity + damagedQuantity + missingQuantity === 0) throw new Error('Enter at least one quantity.');
+    const note = damagedQuantity || missingQuantity ? prompt('Optional note for the discrepancy', '') : '';
+    if (note === null) return null;
+    return [{ lineId: line.id, receivedQuantity, damagedQuantity, missingQuantity, note }];
+  }
+  async function runAction(transfer, action, button) {
+    const word = action === 'ship' ? 'ship' : 'record this receipt for';
+    let lines;
+    try { if (action === 'receive') { lines = receiptLines(transfer); if (!lines) return; } }
+    catch (error) { return show(error.message, true); }
+    if (!confirm('Confirm you want to ' + word + ' transfer ' + transfer.transfer_number + ' in V2?')) return;
+    button.disabled = true; show((action === 'ship' ? 'Shipping' : 'Recording receipt for') + ' transfer…');
     try {
       const response = await fetch('/api/transfers', {
         method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin',
-        body: JSON.stringify({ action, transferId })
+        body: JSON.stringify({ action, transferId: transfer.id, lines })
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || 'Transfer action failed.');
-      show('Transfer ' + data.transfer.transferNumber + ' is now ' + data.transfer.status.replace('_', ' ') + '.');
       await load();
+      show('Transfer ' + data.transfer.transferNumber + ' is now ' + data.transfer.status.replace('_', ' ') + '.');
     } catch (error) { show(error.message, true); } finally { button.disabled = false; }
   }
   nav.addEventListener('click', async () => {
