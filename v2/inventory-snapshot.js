@@ -27,6 +27,37 @@
       text('snapshotUnmappedCount', data.counts.unmappedLevels.toLocaleString());
       text('snapshotNegativeCount', data.counts.negativeBalances.toLocaleString());
 
+      const unmappedBody = document.getElementById('snapshotUnmappedRows');
+      unmappedBody.replaceChildren();
+      (data.unmappedLocations || []).forEach(row => {
+        const tr = document.createElement('tr');
+        [row.shopifyStore, row.shopifyLocation, row.levels, row.nonzeroLevels, row.netOnHand, row.examples.join(', ')].forEach(value => {
+          const td = document.createElement('td');
+          td.textContent = value;
+          tr.append(td);
+        });
+        unmappedBody.append(tr);
+      });
+      if (!unmappedBody.children.length) {
+        unmappedBody.innerHTML = '<tr><td colspan="6">All Shopify locations are mapped.</td></tr>';
+      }
+
+      const negativeBody = document.getElementById('snapshotNegativeRows');
+      negativeBody.replaceChildren();
+      (data.negativeLocations || []).forEach(row => {
+        const tr = document.createElement('tr');
+        [row.warehouse, row.v2Location, row.negativeSkus, row.totalDeficit, row.worstOnHand, row.examples.join(', ')].forEach((value, index) => {
+          const td = document.createElement('td');
+          td.textContent = value;
+          if (index === 4) td.className = 'inventory-status error';
+          tr.append(td);
+        });
+        negativeBody.append(tr);
+      });
+      if (!negativeBody.children.length) {
+        negativeBody.innerHTML = '<tr><td colspan="6">No negative balances in this preview.</td></tr>';
+      }
+
       const body = document.getElementById('snapshotRows');
       body.replaceChildren();
       data.rows.forEach(row => {
@@ -42,10 +73,11 @@
       });
 
       loaded = true;
-      const issueText = data.counts.negativeBalances || data.counts.unmappedLevels
-        ? ` · review ${data.counts.negativeBalances} negative and ${data.counts.unmappedLevels} unmapped rows before baseline approval`
-        : ' · ready for baseline approval';
-      status.textContent = `Preview only · ${data.counts.mappedBalances.toLocaleString()} location/SKU balances · no V2 inventory written${issueText}`;
+      const unmappedImpact = data.counts.unmappedNonzeroLevels || 0;
+      const mappingText = unmappedImpact
+        ? ` · review ${unmappedImpact.toLocaleString()} unmapped nonzero levels before baseline approval`
+        : ' · all nonzero Shopify levels are mapped';
+      status.textContent = `Preview only · ${data.counts.mappedBalances.toLocaleString()} location/SKU balances · negatives retained for replenishment · zero quantities allowed${mappingText}`;
     } catch (error) {
       status.textContent = `Could not build opening snapshot preview: ${error.message}`;
       status.className = 'inventory-status error';
