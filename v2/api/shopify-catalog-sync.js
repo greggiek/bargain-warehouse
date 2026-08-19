@@ -65,8 +65,10 @@ module.exports = async function shopifyCatalogSync(req, res) {
       }),
       signal: AbortSignal.timeout(30000)
     });
-    const result = await response.json();
-    if (!response.ok) throw new Error(result.message || 'Shopify catalog sync failed');
+    const resultText = await response.text();
+    let result = {};
+    try { result = resultText ? JSON.parse(resultText) : {}; } catch { result = {}; }
+    if (!response.ok) throw new Error(result?.message || resultText || 'Shopify catalog sync failed');
 
     const summary = Array.isArray(result) ? result[0] : result;
     const categoryResponse = await fetch(\`${url}/rest/v1/rpc/sync_shopify_catalog_categories\`, { method: 'POST', headers: jsonHeaders(serviceRoleKey), body: JSON.stringify({ p_catalog: catalog }), signal: AbortSignal.timeout(30000) });
