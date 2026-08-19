@@ -1,0 +1,64 @@
+const { configuration, jsonHeaders } = require('./_lib/auth');
+const { requireUser } = require('./_lib/require-user');
+
+async function accessForUser(url, key, userId) {
+  const response = await fetch(url + '/rest/v1/user_location_access?user_id=eq.' + encodeURIComponent(userId) + '&select=location_id,can_manage,locations(id,name,active)', { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
+  if (!response.ok) throw new Error('location access lookup failed');
+  return response.json();
+}
+async function rpc(url, key, name, body) {
+  const response = await fetch(url + '/rest/v1/rpc/' + name, { method: 'POST', headers: { ...jsonHeaders(key), 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(15000) });
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(data.message || data.error || name + ' failed');
+  return data;
+}
+module.exports = async (req, res) => {
+  try {
+    const auth = await requireUser(req);
+    if (!auth.ok) return res.status(auth.status).json({ error: auth.error });
+    const { url: supabaseUrl, serviceRoleKey } = configuration();
+    const access = (await accessForUser(supabaseUrl, serviceRoleKey, auth.user.id)).filter(row => row.locations?.active);
+    const allowed = new Map(access.map(row => [Number(row.location_id), Boolean(row.can_manage)]));
+    if (req.method === 'GET') {
+      const term = String(req.query?.term || '').trim();
+      if (term) return res.status(200).json(await rpc(supabaseUrl, serviceRoleKey, 'search_v2_products', { p_term: term }));
+      const finishedId = Number(req.query?.bomForProductId);
+      const locationId = Number(req.query?.locationId);
+      if (finishedId) {
+        const q = new URLSearchParams({ finished_product_id: 'eq.' + finishedId, active: 'eq.true', select: 'id,yield_quantity,notes,products!product_boms_finished_product_id_fkey(id,sku,name),product_bom_components(id,component_product_id,quantity_per_yield,products(id,sku,name))', limit: '1' });
+        const response = await fetch(supabaseUrl + '/rest/v1/product_boms?' + q, { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+        const rows = await response.json(); if (!response.ok) throw new Error(rows.message || 'BOM lookup failed');
+        const bom = rows[0] || null;
+        if (bom && locationId && allowed.has(locationId)) {
+          const ids = (bom.product_bom_components || []).map(c => c.component_product_id).join(',');
+          if (ids) {
+            const b = await fetch(supabaseUrl + '/rest/v1/inventory_balances?location_id=eq.' + locationId + '&product_id=in.(' + ids + ')&select=product_id,quantity,allocated_quantity', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+            const balances = await b.json(); if (!b.ok) throw new Error('balance lookup failed');
+            const map = new Map(balances.map(x => [Number(x.product_id), x]));
+            bom.product_bom_components.forEach(c => { c.balance = map.get(Number(c.component_product_id)) || { quantity: 0, allocated_quantity: 0 }; });
+          }
+        }
+        return res.status(200).json({ bom, locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })) });
+      }
+      const h = await fetch(supabaseUrl + '/rest/v1/activity_events?document_type=eq.production&order=created_at.desc&limit=20&select=document_number,description,status,created_at,user_name', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+      const allHistory = await h.json(); if (!h.ok) throw new Error('production history lookup failed');
+      const permitted = new Set(access.map(x => Number(x.location_id)));
+      const history = allHistory.filter(x => permitted.has(Number(x.metadata?.locationId)));
+      return res.status(200).json({ locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })), history });
+    }
+    if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
+    const body = req.body || {}; const action = body.action;
+    if (action === 'saveBom') {
+      if (auth.user.role !== 'admin') return res.status(403).json({ error: 'admin_required_for_bom_changes' });
+      const data = await rpc(supabaseUrl, serviceRoleKey, 'save_v2_product_bom', { p_finished_product_id:Number(body.finishedProductId), p_yield_quantity:Number(body.yieldQuantity), p_components:(body.components || []).map(x => ({ productId: x.component_product_id, quantity: x.quantity_per_yield })), p_notes:String(body.notes || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
+      return res.status(200).json(data);
+    }
+    if (action === 'complete') {
+      const locationId = Number(body.locationId);
+      if (!allowed.get(locationId)) return res.status(403).json({ error: 'location_manage_required' });
+      const data = await rpc(supabaseUrl, serviceRoleKey, 'complete_v2_production', { p_bom_id:Number(body.bomId), p_location_id:locationId, p_output_quantity:Number(body.quantity), p_reference:String(body.reference || ''), p_idempotency_key:String(body.idempotencyKey || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
+      return res.status(200).json(data);
+    }
+    return res.status(400).json({ error: 'unknown_action' });
+  } catch (error) { return res.status(400).json({ error: error.message || 'production_failed' }); }
+};
