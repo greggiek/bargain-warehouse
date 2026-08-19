@@ -49,6 +49,7 @@ module.exports = async function shopifyCatalogSync(req, res) {
       sku: candidate.sku,
       name: candidate.name,
       barcode: candidate.barcode,
+      category: candidate.category || '',
       sources: candidate.sources
     }));
 
@@ -68,6 +69,9 @@ module.exports = async function shopifyCatalogSync(req, res) {
     if (!response.ok) throw new Error(result.message || 'Shopify catalog sync failed');
 
     const summary = Array.isArray(result) ? result[0] : result;
+    const categoryResponse = await fetch(\`${url}/rest/v1/rpc/sync_shopify_catalog_categories\`, { method: 'POST', headers: jsonHeaders(serviceRoleKey), body: JSON.stringify({ p_catalog: catalog }), signal: AbortSignal.timeout(30000) });
+    const categoryResult = await categoryResponse.json();
+    if (!categoryResponse.ok) throw new Error(categoryResult.message || 'Shopify category sync failed');
     return res.status(200).json({
       ok: true,
       direction: 'shopify_to_v2',
@@ -77,7 +81,8 @@ module.exports = async function shopifyCatalogSync(req, res) {
         created: Number(summary.created_count || 0),
         refreshed: Number(summary.refreshed_count || 0),
         sourceVariants: Number(summary.source_variant_count || 0),
-        warnings: preview.counts.warnings
+        warnings: preview.counts.warnings,
+        categoriesRefreshed: Number(categoryResult || 0)
       }
     });
   } catch (error) {
