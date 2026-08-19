@@ -20,7 +20,7 @@ module.exports = async (req, res) => {
     const locations = await accessForUser(url, serviceRoleKey, auth.user.id);
     if (req.method === 'GET') {
       const response = await fetch(
-        url + '/rest/v1/transfers?select=id,transfer_number,status,from_location_id,to_location_id,created_at,from_location:locations!transfers_from_location_id_fkey(name),to_location:locations!transfers_to_location_id_fkey(name),transfer_lines(requested_quantity,allocated_quantity,shipped_quantity,received_quantity,products(sku,name))&order=created_at.desc&limit=50',
+        url + '/rest/v1/transfers?select=id,transfer_number,status,from_location_id,to_location_id,created_at,from_location:locations!transfers_from_location_id_fkey(name),to_location:locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_quantity,allocated_quantity,shipped_quantity,received_quantity,damaged_quantity,missing_quantity,notes,products(sku,name))&order=created_at.desc&limit=50',
         { headers: jsonHeaders(serviceRoleKey) }
       );
       const transfers = await response.json();
@@ -75,9 +75,15 @@ module.exports = async (req, res) => {
     const access = locations.find((location) => location.id === requiredLocationId);
     if (!access || !access.canManage) return res.status(403).json({ ok: false, error: 'You need manage access to this transfer location.' });
 
-    const response = await fetch(url + '/rest/v1/rpc/' + (action === 'ship' ? 'ship_v2_transfer' : 'receive_v2_transfer'), {
+    const receiptLines = Array.isArray(body.lines) ? body.lines : [];
+    if (action === 'receive' && receiptLines.length === 0) {
+      return res.status(400).json({ ok: false, error: 'Enter receipt quantities.' });
+    }
+    const response = await fetch(url + '/rest/v1/rpc/' + (action === 'ship' ? 'ship_v2_transfer' : 'receive_v2_transfer_details'), {
       method: 'POST', headers: jsonHeaders(serviceRoleKey),
-      body: JSON.stringify({ p_transfer_id: transferId, p_user_id: auth.user.id, p_user_name: auth.user.display_name })
+      body: JSON.stringify(action === 'ship'
+        ? { p_transfer_id: transferId, p_user_id: auth.user.id, p_user_name: auth.user.display_name }
+        : { p_transfer_id: transferId, p_lines: receiptLines, p_user_id: auth.user.id, p_user_name: auth.user.display_name })
     });
     const result = await response.json();
     if (!response.ok) return res.status(response.status).json({ ok: false, error: result.message || 'Transfer action failed.' });
