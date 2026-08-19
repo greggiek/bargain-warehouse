@@ -19,8 +19,8 @@
   all=d.items||[];recommendations=d.recommendations||[];renderBoard(d.board||[]);const s=$('replenishmentLocation');s.replaceChildren();const o=document.createElement('option');o.value='';o.textContent='All warehouses';s.append(o);(d.locations||[]).forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.name;s.append(o);});
   const total=all.reduce((n,x)=>n+x.shortage,0);set(all.length+' shortage SKUs · '+fmt(total)+' total pieces required. These are V2 replenishment signals only.');render();
  }
- $('replenishmentNav').addEventListener('click',()=>{['overviewView','inventoryView','snapshotView','transferView','receivingView','productionView','productSyncView'].forEach(id=>{const el=$(id);if(el)el.hidden=true;});view.hidden=false;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.id==='replenishmentNav'));load().catch(e=>set(e.message,true));});
- ['overviewNav','inventoryNav','productSyncNav','snapshotNav','transfersNav','receivingNav','productionNav'].forEach(id=>$(id)?.addEventListener('click',()=>view.hidden=true));
+ $('replenishmentNav').addEventListener('click',()=>{['overviewView','inventoryView','snapshotView','transferView','receivingView','productionView','productSyncView','parLevelsView'].forEach(id=>{const el=$(id);if(el)el.hidden=true;});view.hidden=false;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.id==='replenishmentNav'));load().catch(e=>set(e.message,true));});
+ ['overviewNav','inventoryNav','productSyncNav','snapshotNav','transfersNav','receivingNav','productionNav','parLevelsNav'].forEach(id=>$(id)?.addEventListener('click',()=>view.hidden=true));
  $('replenishmentRefresh').addEventListener('click',()=>load().catch(e=>set(e.message,true)));
  $('replenishmentSearch').addEventListener('input',render);$('replenishmentLocation').addEventListener('change',render);
 })();
