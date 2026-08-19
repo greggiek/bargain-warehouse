@@ -44,13 +44,26 @@ module.exports = async (req, res) => {
       const allHistory = await h.json(); if (!h.ok) throw new Error('production history lookup failed');
       const permitted = new Set(access.map(x => Number(x.location_id)));
       const history = allHistory.filter(x => permitted.has(Number(x.metadata?.locationId)));
-      return res.status(200).json({ locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })), history });
+      const w = await fetch(supabaseUrl + '/rest/v1/production_work_orders?status=eq.allocated&order=started_at.desc&select=id,work_order_number,output_quantity,reference,products:product_boms!production_work_orders_bom_id_fkey(products!product_boms_finished_product_id_fkey(sku,name)),destination:locations!production_work_orders_destination_location_id_fkey(name)', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+      const activeWorkOrders = await w.json(); if (!w.ok) throw new Error('active work order lookup failed');
+      return res.status(200).json({ locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })), history, activeWorkOrders });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
     const body = req.body || {}; const action = body.action;
     if (action === 'saveBom') {
       if (auth.user.role !== 'admin') return res.status(403).json({ error: 'admin_required_for_bom_changes' });
       const data = await rpc(supabaseUrl, serviceRoleKey, 'save_v2_product_bom', { p_finished_product_id:Number(body.finishedProductId), p_yield_quantity:Number(body.yieldQuantity), p_components:(body.components || []).map(x => ({ productId: x.component_product_id, quantity: x.quantity_per_yield })), p_notes:String(body.notes || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
+      return res.status(200).json(data);
+    }
+    if (action === 'startWorkOrder') {
+      const destinationId = Number(body.destinationLocationId);
+      const productionLocation = access.find(x => x.locations?.code === '730' || x.locations?.name === '730 Windham Rd');
+      if (!productionLocation?.can_manage || !allowed.get(destinationId)) return res.status(403).json({ error: 'location_manage_required' });
+      const data = await rpc(supabaseUrl, serviceRoleKey, 'start_v2_production_work_order', { p_bom_id:Number(body.bomId), p_destination_location_id:destinationId, p_output_quantity:Number(body.quantity), p_reference:String(body.reference || ''), p_idempotency_key:String(body.idempotencyKey || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
+      return res.status(200).json(data);
+    }
+    if (action === 'completeWorkOrder') {
+      const data = await rpc(supabaseUrl, serviceRoleKey, 'complete_v2_production_work_order', { p_work_order_id:Number(body.workOrderId), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
       return res.status(200).json(data);
     }
     if (action === 'complete') {
