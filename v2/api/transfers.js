@@ -20,14 +20,16 @@ module.exports = async (req, res) => {
     const locations = await accessForUser(url, serviceRoleKey, auth.user.id);
     const productSearch = String(req.query?.productSearch || '').trim();
     if (req.method === 'GET' && productSearch) {
-      const term = productSearch.replace(/[(),.*%]/g, ' ').trim();
+      const term = productSearch.trim();
       if (term.length < 2) return res.status(200).json({ ok: true, products: [] });
-      const filter = '(sku.ilike.*' + term + '*,name.ilike.*' + term + '*,barcode.ilike.*' + term + '*,category.ilike.*' + term + '*)';
-      const response = await fetch(
-        url + '/rest/v1/products?select=id,sku,name,barcode,category&active=eq.true&or=' + encodeURIComponent(filter) + '&order=sku.asc&limit=12',
-        { headers: jsonHeaders(serviceRoleKey) }
-      );
-      return res.status(response.status).json({ ok: response.ok, products: await response.json() });
+      const response = await fetch(url + '/rest/v1/rpc/search_v2_products', {
+        method: 'POST',
+        headers: jsonHeaders(serviceRoleKey),
+        body: JSON.stringify({ p_term: term })
+      });
+      const products = await response.json();
+      if (!response.ok) return res.status(response.status).json({ ok: false, error: products.message || 'Product search failed.' });
+      return res.status(200).json({ ok: true, products });
     }
     if (req.method === 'GET') {
       const response = await fetch(
