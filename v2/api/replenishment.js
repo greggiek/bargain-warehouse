@@ -9,6 +9,7 @@ module.exports=async function replenishment(req,res){
   const q='location_id=in.('+ids+')&select=location_id,product_id,quantity,allocated_quantity,products(sku,name,category,barcode),locations(id,name)&limit=10000';
   const r=await fetch(url+'/rest/v1/inventory_balances?'+q,{headers:jsonHeaders(serviceRoleKey),signal:AbortSignal.timeout(12000)}),balances=await r.json();if(!r.ok)throw new Error(balances.message||'replenishment lookup failed');
   const rows=balances.map(x=>({locationId:Number(x.location_id),location:x.locations?.name||'Warehouse',productId:Number(x.product_id),sku:x.products?.sku||'—',product:x.products?.name||'Unnamed product',category:x.products?.category||'',barcode:x.products?.barcode||'',onHand:Number(x.quantity),shortage:Math.max(-Number(x.quantity),0),available:Math.max(Number(x.quantity)-Number(x.allocated_quantity||0),0),allocated:Number(x.allocated_quantity||0)}));
+  const boardMap=new Map();rows.forEach(x=>{const category=x.category||'Other',key=x.locationId+'|'+category;if(!boardMap.has(key))boardMap.set(key,{locationId:x.locationId,location:x.location,category,below:0,deficit:0});const item=boardMap.get(key);if(x.shortage>0){item.below+=1;item.deficit+=x.shortage;}});const board=[...boardMap.values()].sort((a,b)=>a.location.localeCompare(b.location)||a.category.localeCompare(b.category));
   const items=rows.filter(x=>x.shortage>0),byProduct=new Map();
   rows.forEach(x=>{if(!byProduct.has(x.productId))byProduct.set(x.productId,[]);byProduct.get(x.productId).push({...x});});
   const recommendations=[];
@@ -20,6 +21,6 @@ module.exports=async function replenishment(req,res){
     });
   });
   const locations=access.map(x=>({id:x.location_id,name:x.locations.name,canManage:x.can_manage}));
-  return res.status(200).json({ok:true,items,recommendations,locations});
+  return res.status(200).json({ok:true,items,recommendations,locations,board});
  }catch(e){return res.status(500).json({ok:false,error:e.message});}
 };
