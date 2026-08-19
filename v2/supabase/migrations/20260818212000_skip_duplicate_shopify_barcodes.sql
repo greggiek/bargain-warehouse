@@ -121,7 +121,7 @@ begin
     'shopify_catalog_mirror_sync',
     'shopify_catalog',
     'Synced the Shopify catalog into the V2 read-only mirror',
-    'completed',
+    'success',
     jsonb_build_object(
       'source', 'shopify',
       'qoblex_connected', false,
