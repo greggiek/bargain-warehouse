@@ -75,7 +75,11 @@
         credentials: 'same-origin',
         body: JSON.stringify({ confirmation: 'SYNC_SHOPIFY_CATALOG' })
       });
-      const data = await response.json();
+      const responseText = await response.text();
+      let data;
+      try { data = JSON.parse(responseText); } catch {
+        throw new Error(responseText || 'Catalog sync returned an invalid server response');
+      }
       if (!response.ok || !data.ok) throw new Error(data.error || 'Shopify catalog sync failed');
       loaded = false;
       await loadPreview();
