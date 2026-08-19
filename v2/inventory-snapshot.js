@@ -95,6 +95,15 @@
     if (!loaded) loadPreview();
   }
 
+  document.getElementById('snapshotImport').addEventListener('click', async () => {
+    if (!confirm('Import the verified Shopify opening balances into V2? Shopify and Qoblex will not change.')) return;
+    const response = await fetch('/api/inventory-opening-snapshot-import', { method:'POST', credentials:'same-origin', headers:{'Content-Type':'application/json'}, body:JSON.stringify({confirmation:'IMPORT_OPENING_BALANCE'}) });
+    const data = await response.json();
+    if (!response.ok || !data.ok) return alert('Import failed: ' + (data.error || 'unknown error'));
+    alert('Opening baseline imported: ' + data.result.imported + ' balances.');
+    loadPreview();
+  });
+
   document.getElementById('snapshotNav').addEventListener('click', show);
   document.getElementById('snapshotRefresh').addEventListener('click', loadPreview);
 })();

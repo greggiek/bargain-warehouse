@@ -163,6 +163,7 @@ module.exports = async function inventoryOpeningSnapshotPreview(req, res) {
         negativeDeficit: rows.filter(row => row.onHand < 0).reduce((sum, row) => sum + Math.abs(row.onHand), 0)
       },
       rows: rows.slice(0, 250),
+      importRows: rows,
       unmappedLocations: Array.from(unmappedByLocation.values())
         .sort((a, b) => b.nonzeroLevels - a.nonzeroLevels || b.levels - a.levels),
       negativeLocations: Array.from(negativeByLocation.values())
