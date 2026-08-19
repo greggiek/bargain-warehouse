@@ -68,6 +68,7 @@ module.exports = async function productSyncPreview(req, res) {
       const sku = String(item.sku || '').trim();
       if (!sku) continue;
       const name = String(item.product || sku).trim();
+      const category = String(item.category || '').trim();
       const barcodes = Array.from(new Set(
         (item.variants || []).map(variant => String(variant.barcode || '').trim()).filter(Boolean)
       ));
@@ -112,6 +113,7 @@ module.exports = async function productSyncPreview(req, res) {
         sku,
         name,
         barcode,
+        category,
         uom: 'EA',
         active: true,
         sourceStores: Array.from(new Set(sources.map(source => source.storeLabel).filter(Boolean))),
