@@ -38,11 +38,33 @@ module.exports = async (req, res) => {
       );
       const transfers = await response.json();
       const allowed = new Set(locations.map((location) => location.id));
+      const visibleTransfers = (Array.isArray(transfers) ? transfers : []).filter((transfer) =>
+        allowed.has(transfer.from_location_id) || allowed.has(transfer.to_location_id)
+      );
+      const [historyResponse, exceptionResponse] = await Promise.all([
+        fetch(url + '/rest/v1/activity_events?select=id,action_type,document_number,description,status,created_at,user_name&document_type=eq.transfer&order=created_at.desc&limit=100', { headers: jsonHeaders(serviceRoleKey) }),
+        fetch(url + '/rest/v1/transfer_discrepancies?select=id,discrepancy_type,quantity,note,created_at,transfers(transfer_number,from_location_id,to_location_id),transfer_lines(products(sku,name))&resolved_at=is.null&order=created_at.desc&limit=100', { headers: jsonHeaders(serviceRoleKey) })
+      ]);
+      const history = historyResponse.ok ? await historyResponse.json() : [];
+      const exceptions = exceptionResponse.ok ? (await exceptionResponse.json()).filter((item) =>
+        allowed.has(item.transfers?.from_location_id) || allowed.has(item.transfers?.to_location_id)
+      ) : [];
+      const activeTransfers = visibleTransfers.filter((transfer) => !['completed', 'cancelled'].includes(transfer.status));
+      const inTransit = visibleTransfers.filter((transfer) => ['in_transit', 'partially_received'].includes(transfer.status));
+      const inTransitLines = inTransit.flatMap((transfer) => (transfer.transfer_lines || []).map((line) => ({
+        transferNumber: transfer.transfer_number, from: transfer.from_location?.name || '—', to: transfer.to_location?.name || '—',
+        sku: line.products?.sku || '—', name: line.products?.name || '', shipped: Number(line.shipped_quantity || 0),
+        received: Number(line.received_quantity || 0), damaged: Number(line.damaged_quantity || 0),
+        inTransit: Number(line.shipped_quantity || 0) - Number(line.received_quantity || 0) - Number(line.damaged_quantity || 0) - Number(line.missing_quantity || 0)
+      })));
       return res.status(response.status).json({
-        ok: response.ok, locations,
-        transfers: (Array.isArray(transfers) ? transfers : []).filter((transfer) =>
-          allowed.has(transfer.from_location_id) || allowed.has(transfer.to_location_id)
-        )
+        ok: response.ok, locations, transfers: visibleTransfers, history, exceptions, inTransitLines,
+        summary: {
+          activeTransfers: activeTransfers.length,
+          inTransitPieces: inTransitLines.reduce((sum, line) => sum + Math.max(0, line.inTransit), 0),
+          inTransitSkus: new Set(inTransitLines.filter((line) => line.inTransit > 0).map((line) => line.sku)).size,
+          openExceptions: exceptions.length
+        }
       });
     }
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method_not_allowed' });
