@@ -22,6 +22,31 @@ module.exports = async (req, res) => {
     if (req.method === 'GET') {
       const term = String(req.query?.term || '').trim();
       if (term) return res.status(200).json(await rpc(supabaseUrl, serviceRoleKey, 'search_v2_products', { p_term: term }));
+      if (String(req.query?.bomManagement || '') === '1') {
+        const [goodResponse, needsSetupResponse] = await Promise.all([
+          fetch(supabaseUrl + '/rest/v1/product_boms?active=eq.true&order=updated_at.desc&select=id,yield_quantity,notes,updated_at,products!product_boms_finished_product_id_fkey(id,sku,name)', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) }),
+          fetch(supabaseUrl + '/rest/v1/v1_door_bom_sources?match_status=eq.unmatched&order=finished_sku&select=finished_sku,finished_name,components,missing_skus,updated_at', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) })
+        ]);
+        const [good, needsSetup] = await Promise.all([goodResponse.json(), needsSetupResponse.json()]);
+        if (!goodResponse.ok) throw new Error(good.message || 'BOM management lookup failed');
+        if (!needsSetupResponse.ok) throw new Error(needsSetup.message || 'V1 BOM issue lookup failed');
+        return res.status(200).json({ good, needsSetup });
+      }
+      const templateSku = String(req.query?.bomManagementTemplateSku || '').trim();
+      if (templateSku) {
+        const sourceResponse = await fetch(supabaseUrl + '/rest/v1/v1_door_bom_sources?finished_sku=eq.' + encodeURIComponent(templateSku) + '&select=finished_sku,finished_name,components,missing_skus&limit=1', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+        const sourceRows = await sourceResponse.json(); if (!sourceResponse.ok) throw new Error(sourceRows.message || 'V1 BOM template lookup failed');
+        const source = sourceRows[0]; if (!source) return res.status(404).json({ error: 'v1_bom_template_not_found' });
+        const skus = (source.components || []).map(component => String(component.sku || '').trim()).filter(Boolean);
+        const quoted = skus.map(sku => '"' + sku.replace(/\\/g, '\\\\').replace(/"/g, '\\"') + '"').join(',');
+        const productsResponse = quoted
+          ? await fetch(supabaseUrl + '/rest/v1/products?active=eq.true&sku=in.(' + encodeURIComponent(quoted) + ')&select=id,sku,name', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) })
+          : null;
+        const products = productsResponse ? await productsResponse.json() : [];
+        if (productsResponse && !productsResponse.ok) throw new Error(products.message || 'V1 BOM component lookup failed');
+        const bySku = new Map(products.map(product => [String(product.sku).trim().toUpperCase(), product]));
+        return res.status(200).json({ template: source, components: (source.components || []).map(component => ({ sku: component.sku, quantity: component.quantity, product: bySku.get(String(component.sku || '').trim().toUpperCase()) || null })) });
+      }
       const finishedId = Number(req.query?.bomForProductId);
       const locationId = Number(req.query?.locationId);
       if (finishedId) {
@@ -53,6 +78,16 @@ module.exports = async (req, res) => {
     if (action === 'saveBom') {
       if (auth.user.role !== 'admin') return res.status(403).json({ error: 'admin_required_for_bom_changes' });
       const data = await rpc(supabaseUrl, serviceRoleKey, 'save_v2_product_bom', { p_finished_product_id:Number(body.finishedProductId), p_yield_quantity:Number(body.yieldQuantity), p_components:(body.components || []).map(x => ({ productId: x.component_product_id, quantity: x.quantity_per_yield })), p_notes:String(body.notes || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
+      const sourceSku = String(body.sourceSku || '').trim();
+      if (sourceSku) {
+        const sourceUpdate = await fetch(supabaseUrl + '/rest/v1/v1_door_bom_sources?finished_sku=eq.' + encodeURIComponent(sourceSku), {
+          method: 'PATCH',
+          headers: { ...jsonHeaders(serviceRoleKey), 'Content-Type': 'application/json', Prefer: 'return=minimal' },
+          body: JSON.stringify({ match_status: 'matched', v2_finished_product_id: Number(body.finishedProductId), missing_skus: [], updated_at: new Date().toISOString() }),
+          signal: AbortSignal.timeout(8000)
+        });
+        if (!sourceUpdate.ok) throw new Error('BOM saved, but the V1 source mapping could not be updated');
+      }
       return res.status(200).json(data);
     }
     if (action === 'startWorkOrder') {
