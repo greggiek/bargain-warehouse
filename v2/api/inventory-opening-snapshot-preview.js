@@ -112,6 +112,43 @@ module.exports = async function inventoryOpeningSnapshotPreview(req, res) {
       .map(row => ({ ...row, sourceStores: Array.from(row.sourceStores).sort() }))
       .sort((a, b) => (a.onHand < 0 ? -1 : b.onHand < 0 ? 1 : a.sku.localeCompare(b.sku)));
 
+    const unmappedByLocation = new Map();
+    for (const row of unmapped) {
+      const key = `${row.shopifyStore}:${row.shopifyLocation}`;
+      const group = unmappedByLocation.get(key) || {
+        shopifyStore: row.shopifyStore,
+        shopifyLocation: row.shopifyLocation,
+        levels: 0,
+        nonzeroLevels: 0,
+        netOnHand: 0,
+        examples: []
+      };
+      group.levels += 1;
+      group.netOnHand += row.onHand;
+      if (row.onHand !== 0) group.nonzeroLevels += 1;
+      if (group.examples.length < 4) group.examples.push(`${row.sku} (${row.onHand})`);
+      unmappedByLocation.set(key, group);
+    }
+
+    const negativeByLocation = new Map();
+    for (const row of rows) {
+      if (row.onHand >= 0) continue;
+      const key = String(row.v2LocationId);
+      const group = negativeByLocation.get(key) || {
+        warehouse: row.warehouse,
+        v2Location: row.v2Location,
+        negativeSkus: 0,
+        totalDeficit: 0,
+        worstOnHand: 0,
+        examples: []
+      };
+      group.negativeSkus += 1;
+      group.totalDeficit += Math.abs(row.onHand);
+      group.worstOnHand = Math.min(group.worstOnHand, row.onHand);
+      if (group.examples.length < 4) group.examples.push(`${row.sku} (${row.onHand})`);
+      negativeByLocation.set(key, group);
+    }
+
     return res.status(200).json({
       ok: true,
       mode: 'OPENING_SNAPSHOT_PREVIEW',
@@ -121,9 +158,15 @@ module.exports = async function inventoryOpeningSnapshotPreview(req, res) {
         sourceLevels,
         mappedBalances: rows.length,
         unmappedLevels: unmapped.length,
-        negativeBalances: negativeRows
+        unmappedNonzeroLevels: unmapped.filter(row => row.onHand !== 0).length,
+        negativeBalances: negativeRows,
+        negativeDeficit: rows.filter(row => row.onHand < 0).reduce((sum, row) => sum + Math.abs(row.onHand), 0)
       },
       rows: rows.slice(0, 250),
+      unmappedLocations: Array.from(unmappedByLocation.values())
+        .sort((a, b) => b.nonzeroLevels - a.nonzeroLevels || b.levels - a.levels),
+      negativeLocations: Array.from(negativeByLocation.values())
+        .sort((a, b) => b.totalDeficit - a.totalDeficit),
       unmapped: unmapped.slice(0, 100),
       generatedAt: new Date().toISOString()
     });

@@ -138,6 +138,20 @@
           <section class="card"><span class="muted">Negative balances</span><strong id="snapshotNegativeCount">—</strong></section>
         </div>
         <div id="snapshotStatus" class="inventory-status">Open Opening Snapshot to generate a safe Shopify preview.</div>
+        <section class="card section">
+          <h2>Shopify locations needing a mapping decision</h2>
+          <p class="muted">Zero-on-hand rows are retained for BOM visibility and do not need a baseline decision.</p>
+          <div class="inventory-table-wrap">
+            <table class="inventory-table"><thead><tr><th>Shopify store</th><th>Shopify location</th><th>Levels</th><th>Nonzero</th><th>Net on hand</th><th>Examples</th></tr></thead><tbody id="snapshotUnmappedRows"></tbody></table>
+          </div>
+        </section>
+        <section class="card section">
+          <h2>Negative stock is replenishment visibility</h2>
+          <p class="muted">These balances are valid and will carry into V2 so the team can see shortages and replenish them.</p>
+          <div class="inventory-table-wrap">
+            <table class="inventory-table"><thead><tr><th>Warehouse</th><th>V2 location</th><th>Negative SKUs</th><th>Total deficit</th><th>Worst on hand</th><th>Examples</th></tr></thead><tbody id="snapshotNegativeRows"></tbody></table>
+          </div>
+        </section>
         <div class="inventory-table-wrap">
           <table class="inventory-table">
             <thead><tr><th>Warehouse</th><th>V2 location</th><th>SKU</th><th>Product</th><th>On hand</th><th>Shopify stores</th></tr></thead>
