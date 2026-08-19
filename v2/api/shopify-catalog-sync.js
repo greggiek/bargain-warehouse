@@ -28,18 +28,18 @@ module.exports = async function shopifyCatalogSync(req, res) {
     return res.status(405).json({ ok: false, error: 'method_not_allowed' });
   }
 
-  const authorization = await requireUser(req);
-  if (!authorization.ok) {
-    return res.status(authorization.status).json({ ok: false, error: authorization.error });
-  }
-  if (!['admin', 'developer'].includes(authorization.user.role)) {
-    return res.status(403).json({ ok: false, error: 'administrator_role_required' });
-  }
-  if (req.body?.confirmation !== 'SYNC_SHOPIFY_CATALOG') {
-    return res.status(400).json({ ok: false, error: 'catalog_sync_confirmation_required' });
-  }
-
   try {
+    const authorization = await requireUser(req);
+    if (!authorization.ok) {
+      return res.status(authorization.status).json({ ok: false, error: authorization.error });
+    }
+    if (!['admin', 'developer'].includes(authorization.user.role)) {
+      return res.status(403).json({ ok: false, error: 'administrator_role_required' });
+    }
+    if (req.body?.confirmation !== 'SYNC_SHOPIFY_CATALOG') {
+      return res.status(400).json({ ok: false, error: 'catalog_sync_confirmation_required' });
+    }
+
     const preview = await collectPreview(req);
     if (!preview.ok || preview.mode !== 'PREVIEW_ONLY' || preview.writesEnabled !== false) {
       throw new Error('Shopify preview safety check failed');
@@ -71,10 +71,16 @@ module.exports = async function shopifyCatalogSync(req, res) {
     if (!response.ok) throw new Error(result?.message || resultText || 'Shopify catalog sync failed');
 
     const summary = Array.isArray(result) ? result[0] : result;
-    const categoryResponse = await fetch(\`${url}/rest/v1/rpc/sync_shopify_catalog_categories\`, { method: 'POST', headers: jsonHeaders(serviceRoleKey), body: JSON.stringify({ p_catalog: catalog }), signal: AbortSignal.timeout(30000) });
+    const categoryResponse = await fetch(`${url}/rest/v1/rpc/sync_shopify_catalog_categories`, {
+      method: 'POST',
+      headers: jsonHeaders(serviceRoleKey),
+      body: JSON.stringify({ p_catalog: catalog }),
+      signal: AbortSignal.timeout(30000)
+    });
     const categoryText = await categoryResponse.text();
     if (!categoryResponse.ok) throw new Error(categoryText || 'Shopify category sync failed');
     const categoriesRefreshed = Number(categoryText || 0);
+
     return res.status(200).json({
       ok: true,
       direction: 'shopify_to_v2',
@@ -89,11 +95,12 @@ module.exports = async function shopifyCatalogSync(req, res) {
       }
     });
   } catch (error) {
+    console.error('Shopify catalog sync failed', error);
     return res.status(error.status || 500).json({
       ok: false,
       direction: 'shopify_to_v2',
       qoblexConnected: false,
-      error: error.message
+      error: error.message || 'Shopify catalog sync failed'
     });
   }
 };
