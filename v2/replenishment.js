@@ -2,6 +2,7 @@
  const $=id=>document.getElementById(id); const view=$('replenishmentView'); if(!view)return;
  let all=[], recommendations=[], purchaseQueue=[];
  const fmt=n=>new Intl.NumberFormat('en-US',{maximumFractionDigits:2}).format(n);
+ function renderBoard(board){const host=$('lowStockBoard');host.replaceChildren();const byLoc=new Map();(board||[]).forEach(x=>{if(!byLoc.has(x.location))byLoc.set(x.location,[]);byLoc.get(x.location).push(x);});[...byLoc.entries()].sort((a,b)=>a[0].localeCompare(b[0])).forEach(([location,groups])=>{const card=document.createElement('section');card.className='low-stock-card'+(groups.some(x=>x.below>0)?' alert':'');const head=document.createElement('div');head.className='low-stock-card-head';const title=document.createElement('div');title.innerHTML='<span>WAREHOUSE</span><strong></strong>';title.querySelector('strong').textContent=location;const total=groups.reduce((n,x)=>n+x.below,0);const badge=document.createElement('span');badge.className='low-stock-badge';badge.textContent=total?total+' below par':'Healthy';head.append(title,badge);card.append(head);groups.forEach(x=>{const row=document.createElement('div');row.className='low-stock-row';const name=document.createElement('span');name.textContent=x.category;const status=document.createElement('strong');status.className=x.below?'needs':'healthy';status.textContent=x.below?x.below+' below par':'Healthy';row.append(name,status);card.append(row);});host.append(card);});}
  const set=(t,e=false)=>{$('replenishmentStatus').textContent=t;$('replenishmentStatus').classList.toggle('error',e);};
  function render(){
   const term=$('replenishmentSearch').value.trim().toLowerCase(),loc=$('replenishmentLocation').value;
@@ -15,7 +16,7 @@
  }
  async function load(){
   set('Loading V2 shortages…');const r=await fetch('/api/replenishment',{credentials:'same-origin',cache:'no-store'});const d=await r.json();if(!r.ok)throw new Error(d.error||'Unable to load replenishment');
-  all=d.items||[];recommendations=d.recommendations||[];const s=$('replenishmentLocation');s.replaceChildren();const o=document.createElement('option');o.value='';o.textContent='All warehouses';s.append(o);(d.locations||[]).forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.name;s.append(o);});
+  all=d.items||[];recommendations=d.recommendations||[];renderBoard(d.board||[]);const s=$('replenishmentLocation');s.replaceChildren();const o=document.createElement('option');o.value='';o.textContent='All warehouses';s.append(o);(d.locations||[]).forEach(x=>{const o=document.createElement('option');o.value=x.id;o.textContent=x.name;s.append(o);});
   const total=all.reduce((n,x)=>n+x.shortage,0);set(all.length+' shortage SKUs · '+fmt(total)+' total pieces required. These are V2 replenishment signals only.');render();
  }
  $('replenishmentNav').addEventListener('click',()=>{view.hidden=false;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.id==='replenishmentNav'));load().catch(e=>set(e.message,true));});
