@@ -95,6 +95,7 @@
   <script src="/inventory-snapshot.js" defer></script>
   <script src="/transfers.js" defer></script>\n  <script src="/receiving.js" defer></script>
   <script src="/production.js" defer></script>
+  <script src="/bom-management.js" defer></script>
   <script src="/replenishment.js" defer></script>\n  <script src="/par-levels.js" defer></script>
 </head>
 <body>
@@ -119,6 +120,7 @@
         <button id="transfersNav" class="nav-item" type="button">Transfers</button>
         <button id="receivingNav" class="nav-item" type="button">Receiving</button>
         <button id="productionNav" class="nav-item" type="button">Production</button>
+        <button id="bomManagementNav" class="nav-item" type="button">↳ BOM management</button>
         <button id="replenishmentNav" class="nav-item" type="button">Replenishment</button>\n        <button id="parLevelsNav" class="nav-item" type="button">Par Levels</button>
         <span>Activity</span>
       </nav>
@@ -257,6 +259,20 @@
         <section class="card section"><div class="transfer-kicker">Complete production</div><h2>Build finished inventory</h2><div class="inventory-actions"><select id="productionLocation" class="inventory-search" aria-label="Production location"></select><select id="productionDestination" class="inventory-search" aria-label="Final destination"></select><input id="productionQty" class="inventory-search" type="number" min="0.0001" step="0.0001" placeholder="Finished quantity"><input id="productionReference" class="inventory-search" maxlength="120" placeholder="Work order / reference (optional)"><button id="releaseProduction" class="button" type="button">Release work order</button></div><p id="productionBomStatus" class="inventory-status">Choose a finished SKU to load its BOM.</p><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Component SKU</th><th>Product</th><th>Per yield</th><th>On hand</th><th>Allocated</th></tr></thead><tbody id="bomPreview"></tbody></table></div><p id="productionStatus" class="inventory-status">No inventory changes happen until you complete production.</p></section>
         <section class="card section"><div class="transfer-kicker">730 production floor</div><h2>Released work orders</h2><p class="muted">Components are allocated at 730. Completing a work order consumes them, adds finished doors to 730, and creates an allocated transfer to the final destination.</p><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Work order</th><th>Finished SKU</th><th>Qty</th><th>Destination</th><th>Reference</th><th>Action</th></tr></thead><tbody id="activeWorkOrderRows"></tbody></table></div></section>
         <section class="card section"><div class="transfer-kicker">Audit trail</div><h2>Production history</h2><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Reference</th><th>What happened</th><th>Who</th><th>When</th></tr></thead><tbody id="productionHistoryRows"></tbody></table></div></section>
+      </section>
+      <section id="bomManagementView" hidden>
+        <div class="inventory-head"><div><div class="eyebrow">Production setup</div><h1>BOM management</h1><p class="muted">Review working door recipes and repair V1 recipes that are missing a current Shopify finished SKU. Saving only changes the V2 BOM—never Shopify, Qoblex, or inventory.</p></div></div>
+        <section class="card section">
+          <div class="transfer-filters"><input id="bomManagementSearch" class="inventory-search" type="search" placeholder="Search SKU or door description"><button id="bomGoodFilter" class="button" type="button">Working BOMs</button><button id="bomNeedsFilter" class="button secondary" type="button">Needs setup</button></div>
+          <div class="transfer-metrics"><span id="bomGoodCount" class="transfer-metric">0 working</span><span id="bomNeedsCount" class="transfer-metric">0 need setup</span></div>
+          <p id="bomManagementStatus" class="inventory-status">Open BOM management to review production recipes.</p>
+          <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>SKU</th><th>Finished door</th><th>Recipe status</th><th>Components</th><th>Action</th></tr></thead><tbody id="bomManagementRows"></tbody></table><div class="inventory-foot"><span id="bomManagementVisible">Showing 0 BOMs</span><button id="bomManagementMore" class="button secondary" type="button" hidden>Show more</button></div></div>
+        </section>
+        <section class="card section">
+          <div class="transfer-kicker">Recipe editor</div><h2 id="bomEditorTitle">Choose a BOM to edit</h2><p id="bomEditorHelp" class="muted">Select a working recipe, or open a V1 recipe that needs its finished SKU mapped.</p>
+          <div class="inventory-actions"><div class="product-lookup"><label for="bomManagementFinished">Finished product</label><input id="bomManagementFinished" class="inventory-search" autocomplete="off" placeholder="Search finished SKU or product"><div id="bomManagementFinishedSuggestions" class="product-suggestions" hidden></div></div><input id="bomManagementYield" class="inventory-search" type="number" min="0.0001" step="0.0001" value="1" placeholder="Yield quantity"><input id="bomManagementNotes" class="inventory-search" maxlength="300" placeholder="Recipe note"><button id="bomManagementAddComponent" class="button secondary" type="button">Add component</button><button id="bomManagementSave" class="button" type="button">Save BOM</button></div>
+          <div id="bomManagementComponents"></div>
+        </section>
       </section>
       <section id="parLevelsView" hidden><div class="inventory-head"><div><div class="eyebrow">Warehouse settings</div><h1>Par levels</h1><p class="muted">Choose a warehouse and category, then set the minimum for each SKU. These are durable operating settings—saving them does not change inventory, Shopify, or Qoblex.</p></div></div><section class="card section"><div class="transfer-kicker">Warehouse-specific minimums</div><h2>Set SKU pars</h2><div class="inventory-actions"><select id="parWarehouse" class="inventory-search" aria-label="Warehouse"></select><select id="parCategory" class="inventory-search" aria-label="Category"></select><button id="saveParSettings" class="button" type="button">Save par settings</button></div><p id="parStatus" class="inventory-status">Open Par Levels to load warehouse settings.</p><div class="transfer-metrics"><span id="parSkuCount" class="transfer-metric">0 SKUs</span></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>SKU</th><th>Product</th><th>Par level</th></tr></thead><tbody id="parProductRows"></tbody></table><div class="inventory-foot"><span>Each value applies only to the selected warehouse.</span><span>0 means no minimum for that SKU</span></div></div></section></section>
       <section id="replenishmentView" hidden>
