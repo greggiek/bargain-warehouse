@@ -11,9 +11,13 @@ test('opening inventory snapshot is preview-only', () => {
   assert.match(page, /id="snapshotNav"/);
   assert.match(page, /id="snapshotView"/);
   assert.match(page, /inventory-snapshot\.js/);
+  assert.match(page, /snapshotUnmappedRows/);
+  assert.match(page, /snapshotNegativeRows/);
   assert.match(behavior, /OPENING_SNAPSHOT_PREVIEW/);
   assert.match(behavior, /writesEnabled !== false/);
   assert.doesNotMatch(behavior, /method:\s*['"]POST/);
   assert.match(endpoint, /writesEnabled:\s*false/);
+  assert.match(endpoint, /unmappedLocations/);
+  assert.match(endpoint, /negativeLocations/);
   assert.doesNotMatch(endpoint, /inventoryAdjust|inventorySet/);
 });
