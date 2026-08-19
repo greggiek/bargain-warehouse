@@ -69,6 +69,7 @@
   <script src="/inventory.js" defer></script>
   <script src="/product-sync.js" defer></script>
   <script src="/inventory-snapshot.js" defer></script>
+  <script src="/transfers.js" defer></script>
 </head>
 <body>
   <div id="loginView" class="login-wrap" hidden>
@@ -89,7 +90,7 @@
         <button id="inventoryNav" class="nav-item" type="button">Inventory</button>
         <button id="productSyncNav" class="nav-item" type="button">Shopify Catalog</button>
         <button id="snapshotNav" class="nav-item" type="button">Opening Snapshot</button>
-        <span>Transfers</span>
+        <button id="transfersNav" class="nav-item" type="button">Transfers</button>
         <span>Receiving</span>
         <span>Production</span>
         <span>Activity</span>
@@ -159,6 +160,21 @@
           </table>
           <div class="inventory-foot"><span>Preview only · no V2 inventory or Shopify writes</span><span>Shopify source · Qoblex disconnected</span></div>
         </div>
+      </section>
+      <section id="transferView" hidden>
+        <div class="inventory-head">
+          <div><div class="eyebrow">V2 inventory ledger</div><h1>Create transfer</h1><p class="muted">Allocate inventory from one V2 location to another. This does not change Shopify or Qoblex.</p></div>
+        </div>
+        <section class="card section">
+          <div class="inventory-actions">
+            <select id="transferFrom" class="inventory-search" aria-label="From location"></select>
+            <select id="transferTo" class="inventory-search" aria-label="To location"></select>
+            <input id="transferSku" class="inventory-search" autocomplete="off" placeholder="Exact SKU">
+            <input id="transferQty" class="inventory-search" type="number" min="1" step="1" placeholder="Quantity">
+            <button id="transferCreate" class="button" type="button">Create transfer</button>
+          </div>
+          <p id="transferStatus" class="inventory-status">Open Transfers to load your locations.</p>
+        </section>
       </section>
       <section id="productSyncView" hidden>
         <div class="inventory-head">
