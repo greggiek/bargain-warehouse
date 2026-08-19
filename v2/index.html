@@ -90,7 +90,7 @@
   <script src="/inventory.js" defer></script>
   <script src="/product-sync.js" defer></script>
   <script src="/inventory-snapshot.js" defer></script>
-  <script src="/transfers.js" defer></script>
+  <script src="/transfers.js" defer></script>\n  <script src="/receiving.js" defer></script>
 </head>
 <body>
   <div id="loginView" class="login-wrap" hidden>
@@ -112,7 +112,7 @@
         <button id="productSyncNav" class="nav-item" type="button">Shopify Catalog</button>
         <button id="snapshotNav" class="nav-item" type="button">Opening Snapshot</button>
         <button id="transfersNav" class="nav-item" type="button">Transfers</button>
-        <span>Receiving</span>
+        <button id="receivingNav" class="nav-item" type="button">Receiving</button>
         <span>Production</span>
         <span>Activity</span>
       </nav>
@@ -222,6 +222,27 @@
         <section class="card section">
           <div class="transfer-kicker">Logistics exceptions</div><h2>Needs review <span id="exceptionCount" class="transfer-metric">0 open</span></h2><p class="muted">Damaged or missing material is kept visible for follow-up.</p>
           <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Transfer</th><th>SKU</th><th>Issue</th><th>Quantity</th><th>Note</th></tr></thead><tbody id="transferExceptionRows"></tbody></table></div>
+        </section>
+      </section>
+      <section id="receivingView" hidden>
+        <div class="inventory-head">
+          <div><div class="eyebrow">V2 inventory ledger</div><h1>Receive material</h1><p class="muted">Post newly received material directly into a managed warehouse. Shopify and Qoblex are not changed.</p></div>
+        </div>
+        <section class="card section">
+          <div class="transfer-kicker">New receipt</div><h2>Receive into V2 inventory</h2>
+          <div class="inventory-actions">
+            <select id="receivingLocation" class="inventory-search" aria-label="Receiving location"></select>
+            <div class="product-lookup"><label for="receivingSku">Item received</label><input id="receivingSku" class="inventory-search" autocomplete="off" placeholder="Search SKU, product, barcode, or category"><div id="receivingSuggestions" class="product-suggestions" hidden></div></div>
+            <input id="receivingQty" class="inventory-search" type="number" min="0.01" step="0.01" placeholder="Quantity">
+            <input id="receivingReference" class="inventory-search" maxlength="120" placeholder="PO / packing slip (optional)">
+            <input id="receivingNote" class="inventory-search" maxlength="300" placeholder="Note (optional)">
+            <button id="receivingSubmit" class="button" type="button">Receive inventory</button>
+          </div>
+          <p id="receivingStatus" class="inventory-status">Open Receiving to load the V2 workspace.</p>
+        </section>
+        <section class="card section">
+          <div class="transfer-kicker">Audit trail</div><h2>Recent receipts</h2><p class="muted">Every receipt is recorded in the V2 ledger and appears in Inventory immediately.</p>
+          <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Reference</th><th>SKU</th><th>Qty</th><th>What happened</th><th>When</th></tr></thead><tbody id="receiptHistoryRows"></tbody></table></div>
         </section>
       </section>
       <section id="productSyncView" hidden>
