@@ -172,6 +172,7 @@ module.exports = async function (req, res) {
             nodes {
               id
               title
+              productType
               status
 
               variants(first: 20) {
@@ -242,6 +243,7 @@ module.exports = async function (req, res) {
               variant.inventoryItem?.id || null,
 
             product: product.title,
+            category: product.productType || '',
             productStatus: product.status,
             variant: variant.title,
 
@@ -329,6 +331,7 @@ module.exports = async function (req, res) {
           skuMap.set(sku, {
             sku,
             product: variant.product,
+            category: variant.category || '',
 
             totalOnHand: 0,
             totalAvailable: 0,
