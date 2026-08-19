@@ -4,7 +4,7 @@
   let locations=[], finished=null, components=[], bom=null, timer;
   const msg=(t,err=false)=>{ $('productionStatus').textContent=t; $('productionStatus').classList.toggle('error',err); };
   const escape = s => String(s ?? '');
-  async function get(path){ const r=await fetch('/api/production'+path,{credentials:'same-origin'}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'Request failed'); return d; }
+  async function get(path){ const r=await fetch('/api/production'+path,{credentials:'same-origin',cache:'no-store'}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'Request failed'); return d; }
   async function post(body){ const r=await fetch('/api/production',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify(body)}); const d=await r.json(); if(!r.ok) throw new Error(d.error||'Request failed'); return d; }
   function option(select, label, value){ const o=document.createElement('option'); o.value=value; o.textContent=label; select.append(o); }
   function renderHistory(rows){ const host=$('productionHistoryRows'); host.replaceChildren(); if(!rows.length){const tr=document.createElement('tr'); tr.innerHTML='<td colspan="4" class="muted">No V2 production runs yet.</td>';host.append(tr);return;} rows.forEach(x=>{const tr=document.createElement('tr');[x.document_number,x.description,x.user_name||'—',new Date(x.created_at).toLocaleString()].forEach(v=>{const td=document.createElement('td');td.textContent=v||'—';tr.append(td)});host.append(tr)}); }
