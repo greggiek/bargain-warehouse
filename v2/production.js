@@ -105,7 +105,7 @@
     dest.replaceChildren(); add(dest, 'Choose final destination', '');
     locations.filter(x => x.canManage && x.id !== floor?.id).forEach(x => add(dest, x.name, x.id));
     pick.replaceChildren(); add(pick, 'Choose BOM by finished SKU', '');
-    boms.forEach(x => add(pick, x.products.sku + ' — ' + x.products.name, x.id));
+    boms.forEach(x => add(pick, x.products.sku + ' — ' + (x.finishedTitle || x.products.name), x.id));
     renderJobs(d.activeProductionJobs || []);
     renderLines(); preview();
     say('Choose a BOM by SKU, add door lines, then release the job to reserve 730 components.');
