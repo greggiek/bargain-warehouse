@@ -19,7 +19,9 @@ function parseCookies(header = '') {
 }
 
 function sessionCookies(session) {
-  const secure = 'Path=/; HttpOnly; Secure; SameSite=Strict';
+  // OAuth returns from Supabase before the app makes its first same-origin API call.
+  // Lax keeps the tokens protected while allowing that normal login handoff.
+  const secure = 'Path=/; HttpOnly; Secure; SameSite=Lax';
   return [
     `${ACCESS_COOKIE}=${encodeURIComponent(session.access_token)}; ${secure}; Max-Age=${session.expires_in}`,
     `${REFRESH_COOKIE}=${encodeURIComponent(session.refresh_token)}; ${secure}; Max-Age=2592000`
@@ -27,7 +29,7 @@ function sessionCookies(session) {
 }
 
 function clearSessionCookies() {
-  const expired = 'Path=/; HttpOnly; Secure; SameSite=Strict; Max-Age=0';
+  const expired = 'Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0';
   return [
     `${ACCESS_COOKIE}=; ${expired}`,
     `${REFRESH_COOKIE}=; ${expired}`
