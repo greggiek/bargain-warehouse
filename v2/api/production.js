@@ -70,12 +70,23 @@ module.exports = async (req, res) => {
       const permitted = new Set(access.map(x => Number(x.location_id)));
       const history = allHistory.filter(x => permitted.has(Number(x.metadata?.locationId)));
       const [w, b] = await Promise.all([
-        fetch(supabaseUrl + '/rest/v1/production_jobs?status=eq.allocated&order=started_at.desc&select=id,job_number,reference,destination:locations!production_jobs_destination_location_id_fkey(name),production_job_lines(output_quantity,product_boms(products!product_boms_finished_product_id_fkey(sku,name)))', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) }),
+        fetch(supabaseUrl + '/rest/v1/production_jobs?status=eq.allocated&order=started_at.desc&select=id,job_number,reference,destination:locations!production_jobs_destination_location_id_fkey(name),production_job_lines(output_quantity,product_boms(yield_quantity,products!product_boms_finished_product_id_fkey(sku,name),product_bom_components(quantity_per_yield,component_product_id,products(id,sku,name))))', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) }),
         fetch(supabaseUrl + '/rest/v1/product_boms?active=eq.true&select=id,yield_quantity,products!product_boms_finished_product_id_fkey(id,sku,name)', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) })
       ]);
       const [activeProductionJobs, activeBoms] = await Promise.all([w.json(), b.json()]);
       if (!w.ok) throw new Error('active production job lookup failed');
       if (!b.ok) throw new Error('active BOM lookup failed');
+      const productionLocation = access.find(x => x.locations?.code === '730' || x.locations?.name === '730 Windham Rd');
+      const componentIds = [...new Set(activeProductionJobs.flatMap(job => (job.production_job_lines || []).flatMap(line => (line.product_boms?.product_bom_components || []).map(component => Number(component.component_product_id)).filter(Boolean))))];
+      if (productionLocation && componentIds.length) {
+        const balanceResponse = await fetch(supabaseUrl + '/rest/v1/inventory_balances?location_id=eq.' + productionLocation.location_id + '&product_id=in.(' + componentIds.join(',') + ')&select=product_id,quantity,allocated_quantity', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+        const balances = await balanceResponse.json();
+        if (!balanceResponse.ok) throw new Error('production reservation balance lookup failed');
+        const balanceByProduct = new Map(balances.map(row => [Number(row.product_id), row]));
+        activeProductionJobs.forEach(job => (job.production_job_lines || []).forEach(line => (line.product_boms?.product_bom_components || []).forEach(component => {
+          component.balance = balanceByProduct.get(Number(component.component_product_id)) || { quantity: 0, allocated_quantity: 0 };
+        })));
+      }
       const finishedIds = activeBoms.map(row => Number(row.products?.id)).filter(Boolean);
       if (finishedIds.length) {
         const sourcesResponse = await fetch(supabaseUrl + '/rest/v1/v1_door_bom_sources?v2_finished_product_id=in.(' + finishedIds.join(',') + ')&match_status=eq.matched&select=v2_finished_product_id,finished_name', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
