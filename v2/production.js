@@ -19,6 +19,49 @@
     $('productionStatus').textContent = m;
     $('productionStatus').classList.toggle('error', bad);
   };
+  async function selectBom(bomId) {
+    const base = boms.find(x => x.id === Number(bomId));
+    bom = null;
+    preview();
+    if (!base) return;
+    const d = await get('?bomForProductId=' + base.products.id + '&locationId=' + $('productionLocation').value);
+    bom = d.bom;
+    $('productionBomSearch').value = base.products.sku + ' — ' + (base.finishedTitle || base.products.name);
+    $('productionBomGroups').hidden = true;
+    preview();
+  }
+  function renderBomPicker() {
+    const term = $('productionBomSearch').value.trim().toLowerCase();
+    const groups = new Map();
+    boms.filter(row => {
+      const label = row.products.sku + ' ' + (row.finishedTitle || '') + ' ' + (row.products.name || '');
+      return !term || label.toLowerCase().includes(term);
+    }).forEach(row => {
+      const parent = row.products.name || 'Other doors';
+      if (!groups.has(parent)) groups.set(parent, []);
+      groups.get(parent).push(row);
+    });
+    const holder = $('productionBomGroups');
+    holder.replaceChildren();
+    [...groups.entries()].sort(([a], [b]) => a.localeCompare(b)).forEach(([parent, children]) => {
+      const details = document.createElement('details');
+      details.className = 'bom-group';
+      details.open = Boolean(term);
+      const summary = document.createElement('summary');
+      summary.textContent = parent + ' · ' + children.length;
+      details.append(summary);
+      children.sort((a, b) => String(a.products.sku).localeCompare(String(b.products.sku))).forEach(row => {
+        const choice = document.createElement('button');
+        choice.type = 'button';
+        choice.className = 'bom-child';
+        choice.textContent = row.products.sku + ' — ' + (row.finishedTitle || row.products.name);
+        choice.onclick = () => selectBom(row.id).catch(e => say(e.message, true));
+        details.append(choice);
+      });
+      holder.append(details);
+    });
+    holder.hidden = groups.size === 0;
+  }
 
   function preview() {
     const h = $('bomPreview');
@@ -100,12 +143,13 @@
     locations = d.locations || [];
     boms = d.activeBoms || [];
     const floor = locations.find(x => x.name === '730 Windham Rd');
-    const p = $('productionLocation'), dest = $('productionDestination'), pick = $('productionBom');
+    const p = $('productionLocation'), dest = $('productionDestination');
     p.replaceChildren(); add(p, '730 Windham Rd (production floor)', floor?.id || ''); p.disabled = true;
     dest.replaceChildren(); add(dest, 'Choose final destination', '');
     locations.filter(x => x.canManage && x.id !== floor?.id).forEach(x => add(dest, x.name, x.id));
-    pick.replaceChildren(); add(pick, 'Choose BOM by finished SKU', '');
-    boms.forEach(x => add(pick, x.products.sku + ' — ' + (x.finishedTitle || x.products.name), x.id));
+    $('productionBomSearch').value = '';
+    renderBomPicker();
+    $('productionBomGroups').hidden = true;
     renderJobs(d.activeProductionJobs || []);
     renderLines(); preview();
     say('Choose a BOM by SKU, add door lines, then release the job to reserve 730 components.');
@@ -117,16 +161,25 @@
 
   document.addEventListener('DOMContentLoaded', () => {
     view = $('productionView');
+    const legacyBomSelect = $('productionBom');
+    legacyBomSelect.hidden = true;
+    const picker = document.createElement('div');
+    picker.className = 'bom-picker';
+    const search = document.createElement('input');
+    search.id = 'productionBomSearch';
+    search.className = 'inventory-search';
+    search.type = 'search';
+    search.autocomplete = 'off';
+    search.placeholder = 'Search finished SKU or door';
+    const groups = document.createElement('div');
+    groups.id = 'productionBomGroups';
+    groups.className = 'bom-groups';
+    groups.hidden = true;
+    picker.append(search, groups);
+    legacyBomSelect.after(picker);
     $('productionNav').addEventListener('click', () => open().catch(e => say(e.message, true)));
-    $('productionBom').onchange = async e => {
-      try {
-        const base = boms.find(x => x.id === Number(e.target.value));
-        bom = null; preview();
-        if (!base) return;
-        const d = await get('?bomForProductId=' + base.products.id + '&locationId=' + $('productionLocation').value);
-        bom = d.bom; preview();
-      } catch (e) { say(e.message, true); }
-    };
+    $('productionBomSearch').oninput = renderBomPicker;
+    $('productionBomSearch').onfocus = renderBomPicker;
     $('productionAddLine').onclick = () => {
       try {
         const q = Number($('productionQty').value);
@@ -134,7 +187,7 @@
         if (!(q > 0)) throw Error('Enter the finished quantity.');
         const x = lines.find(x => x.b.id === bom.id);
         if (x) x.q += q; else lines.push({ b: bom, p: bom.products, q });
-        $('productionQty').value = ''; $('productionBom').value = ''; bom = null;
+        $('productionQty').value = ''; $('productionBomSearch').value = ''; bom = null;
         preview(); renderLines(); say('Door added. Add more SKUs, then release the full job.');
       } catch (e) { say(e.message, true); }
     };
