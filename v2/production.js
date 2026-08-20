@@ -1,7 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   let view, locations = [], boms = [], bom = null, lines = [];
-  const get = async q => {
+  const get = async (q = '') => {
     const r = await fetch('/api/production' + q), d = await r.json();
     if (!r.ok) throw Error(d.error || 'Request failed');
     return d;
