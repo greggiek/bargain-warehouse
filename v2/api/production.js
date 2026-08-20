@@ -76,6 +76,14 @@ module.exports = async (req, res) => {
       const [activeProductionJobs, activeBoms] = await Promise.all([w.json(), b.json()]);
       if (!w.ok) throw new Error('active production job lookup failed');
       if (!b.ok) throw new Error('active BOM lookup failed');
+      const finishedIds = activeBoms.map(row => Number(row.products?.id)).filter(Boolean);
+      if (finishedIds.length) {
+        const sourcesResponse = await fetch(supabaseUrl + '/rest/v1/v1_door_bom_sources?v2_finished_product_id=in.(' + finishedIds.join(',') + ')&match_status=eq.matched&select=v2_finished_product_id,finished_name', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+        const sources = await sourcesResponse.json();
+        if (!sourcesResponse.ok) throw new Error('finished door title lookup failed');
+        const titleByProductId = new Map(sources.map(row => [Number(row.v2_finished_product_id), row.finished_name]));
+        activeBoms.forEach(row => { row.finishedTitle = titleByProductId.get(Number(row.products?.id)) || row.products?.name || ''; });
+      }
       activeBoms.sort((a, z) => String(a.products?.sku || '').localeCompare(String(z.products?.sku || '')));
       return res.status(200).json({ locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })), history, activeProductionJobs, activeBoms });
     }
