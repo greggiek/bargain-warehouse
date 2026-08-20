@@ -105,7 +105,44 @@
       [j.job_number, l.map(x => (x.product_boms?.products?.sku || '—') + ' × ' + x.output_quantity).join(', '), j.destination?.name || '—', j.reference || '—'].forEach(v => {
         const td = document.createElement('td'); td.textContent = v; tr.append(td);
       });
-      const td = document.createElement('td'), b = document.createElement('button');
+      const td = document.createElement('td'), reservations = new Map();
+      l.forEach(line => {
+        const recipe = line.product_boms || {};
+        const output = Number(line.output_quantity || 0), yieldQty = Number(recipe.yield_quantity || 1);
+        (recipe.product_bom_components || []).forEach(component => {
+          const product = component.products || {};
+          const key = Number(component.component_product_id);
+          const current = reservations.get(key) || { sku: product.sku || '—', name: product.name || '—', reserved: 0, balance: component.balance || { quantity: 0, allocated_quantity: 0 } };
+          current.reserved += output * Number(component.quantity_per_yield || 0) / yieldQty;
+          reservations.set(key, current);
+        });
+      });
+      const toggle = document.createElement('button');
+      toggle.type = 'button'; toggle.className = 'button secondary'; toggle.textContent = 'Reservations';
+      const detail = document.createElement('tr');
+      detail.hidden = true;
+      const detailCell = document.createElement('td');
+      detailCell.colSpan = 5;
+      const table = document.createElement('table');
+      table.className = 'inventory-table reservation-table';
+      const head = document.createElement('thead');
+      head.innerHTML = '<tr><th>Component SKU</th><th>Component</th><th>Reserved for this job</th><th>730 on hand</th><th>Total allocated</th><th>Available after allocation</th></tr>';
+      const body = document.createElement('tbody');
+      [...reservations.values()].sort((a, b) => a.sku.localeCompare(b.sku)).forEach(row => {
+        const line = document.createElement('tr');
+        const available = Number(row.balance.quantity || 0) - Number(row.balance.allocated_quantity || 0);
+        [row.sku, row.name, row.reserved, row.balance.quantity || 0, row.balance.allocated_quantity || 0, available].forEach(value => {
+          const cell = document.createElement('td'); cell.textContent = Number.isFinite(value) ? String(value) : value; line.append(cell);
+        });
+        body.append(line);
+      });
+      if (!reservations.size) body.innerHTML = '<tr><td colspan="6" class="muted">No component reservation details were found for this job.</td></tr>';
+      table.append(head, body); detailCell.append(table); detail.append(detailCell);
+      toggle.onclick = () => {
+        detail.hidden = !detail.hidden;
+        toggle.textContent = detail.hidden ? 'Reservations' : 'Hide reservations';
+      };
+      const b = document.createElement('button');
       b.className = 'button'; b.textContent = 'Complete';
       b.onclick = async () => {
         try {
@@ -115,7 +152,7 @@
           await refresh();
         } catch (e) { say(e.message, true); }
       };
-      td.append(b); tr.append(td); h.append(tr);
+      td.append(toggle, b); tr.append(td); h.append(tr, detail);
     });
   }
 
