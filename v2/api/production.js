@@ -69,9 +69,9 @@ module.exports = async (req, res) => {
       const allHistory = await h.json(); if (!h.ok) throw new Error('production history lookup failed');
       const permitted = new Set(access.map(x => Number(x.location_id)));
       const history = allHistory.filter(x => permitted.has(Number(x.metadata?.locationId)));
-      const w = await fetch(supabaseUrl + '/rest/v1/production_work_orders?status=eq.allocated&order=started_at.desc&select=id,work_order_number,output_quantity,reference,products:product_boms!production_work_orders_bom_id_fkey(products!product_boms_finished_product_id_fkey(sku,name)),destination:locations!production_work_orders_destination_location_id_fkey(name)', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
-      const activeWorkOrders = await w.json(); if (!w.ok) throw new Error('active work order lookup failed');
-      return res.status(200).json({ locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })), history, activeWorkOrders });
+      const w = await fetch(supabaseUrl + '/rest/v1/production_jobs?status=eq.allocated&order=started_at.desc&select=id,job_number,reference,destination:locations!production_jobs_destination_location_id_fkey(name),production_job_lines(output_quantity,product_boms(products!product_boms_finished_product_id_fkey(sku,name)))', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+      const activeProductionJobs = await w.json(); if (!w.ok) throw new Error('active production job lookup failed');
+      return res.status(200).json({ locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })), history, activeProductionJobs });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
     const body = req.body || {}; const action = body.action;
@@ -95,6 +95,17 @@ module.exports = async (req, res) => {
       const productionLocation = access.find(x => x.locations?.code === '730' || x.locations?.name === '730 Windham Rd');
       if (!productionLocation?.can_manage || !allowed.get(destinationId)) return res.status(403).json({ error: 'location_manage_required' });
       const data = await rpc(supabaseUrl, serviceRoleKey, 'start_v2_production_work_order', { p_bom_id:Number(body.bomId), p_destination_location_id:destinationId, p_output_quantity:Number(body.quantity), p_reference:String(body.reference || ''), p_idempotency_key:String(body.idempotencyKey || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
+      return res.status(200).json(data);
+    }
+    if (action === 'startProductionJob') {
+      const destinationId = Number(body.destinationLocationId);
+      const productionLocation = access.find(x => x.locations?.code === '730' || x.locations?.name === '730 Windham Rd');
+      if (!productionLocation?.can_manage || !allowed.get(destinationId)) return res.status(403).json({ error: 'location_manage_required' });
+      const data = await rpc(supabaseUrl, serviceRoleKey, 'start_v2_production_job', { p_destination_location_id:destinationId, p_lines:(body.lines || []).map(line => ({ bom_id:Number(line.bomId), quantity:Number(line.quantity) })), p_reference:String(body.reference || ''), p_idempotency_key:String(body.idempotencyKey || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
+      return res.status(200).json(data);
+    }
+    if (action === 'completeProductionJob') {
+      const data = await rpc(supabaseUrl, serviceRoleKey, 'complete_v2_production_job', { p_job_id:Number(body.jobId), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
       return res.status(200).json(data);
     }
     if (action === 'completeWorkOrder') {
