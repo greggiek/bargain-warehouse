@@ -310,27 +310,6 @@
       loginView.hidden = true;
       appView.hidden = false;
       document.getElementById('welcome').textContent = `Welcome, ${session.user.displayName}`;
-      document.getElementById('role').textContent = session.user.role;
-      document.getElementById('locationCount').textContent = session.locations.length;
-      const list = document.getElementById('locations');
-      list.replaceChildren();
-      session.locations.forEach(access => {
-        const location = access.locations || {};
-        const row = document.createElement('div');
-        row.className = 'location';
-        const details = document.createElement('div');
-        const name = document.createElement('strong');
-        name.textContent = location.name || 'Assigned location';
-        const code = document.createElement('div');
-        code.className = 'muted';
-        code.textContent = location.code || '';
-        details.append(name, code);
-        const badge = document.createElement('span');
-        badge.className = 'badge';
-        badge.textContent = access.can_manage ? 'Manage' : 'View';
-        row.append(details, badge);
-        list.append(row);
-      });
     }
 
     async function loadSession() {
