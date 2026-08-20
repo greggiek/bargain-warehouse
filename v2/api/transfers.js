@@ -33,7 +33,7 @@ module.exports = async (req, res) => {
     }
     if (req.method === 'GET') {
       const response = await fetch(
-        url + '/rest/v1/transfers?select=id,transfer_number,status,from_location_id,to_location_id,created_at,from_location:locations!transfers_from_location_id_fkey(name),to_location:locations!transfers_to_location_id_fkey(name),transfer_lines(id,requested_quantity,allocated_quantity,shipped_quantity,received_quantity,damaged_quantity,missing_quantity,notes,products(sku,name))&order=created_at.desc&limit=50',
+        url + '/rest/v1/transfers?select=id,transfer_number,status,from_location_id,to_location_id,created_at,from_location:locations!transfers_from_location_id_fkey(name),to_location:locations!transfers_to_location_id_fkey(name),transfer_lines(id,product_id,requested_quantity,allocated_quantity,shipped_quantity,received_quantity,damaged_quantity,missing_quantity,notes,products!transfer_lines_product_id_fkey(sku,name,barcode))&order=created_at.desc&limit=50',
         { headers: jsonHeaders(serviceRoleKey) }
       );
       const transfers = await response.json();
