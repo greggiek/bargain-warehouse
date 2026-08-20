@@ -69,9 +69,15 @@ module.exports = async (req, res) => {
       const allHistory = await h.json(); if (!h.ok) throw new Error('production history lookup failed');
       const permitted = new Set(access.map(x => Number(x.location_id)));
       const history = allHistory.filter(x => permitted.has(Number(x.metadata?.locationId)));
-      const w = await fetch(supabaseUrl + '/rest/v1/production_jobs?status=eq.allocated&order=started_at.desc&select=id,job_number,reference,destination:locations!production_jobs_destination_location_id_fkey(name),production_job_lines(output_quantity,product_boms(products!product_boms_finished_product_id_fkey(sku,name)))', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
-      const activeProductionJobs = await w.json(); if (!w.ok) throw new Error('active production job lookup failed');
-      return res.status(200).json({ locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })), history, activeProductionJobs });
+      const [w, b] = await Promise.all([
+        fetch(supabaseUrl + '/rest/v1/production_jobs?status=eq.allocated&order=started_at.desc&select=id,job_number,reference,destination:locations!production_jobs_destination_location_id_fkey(name),production_job_lines(output_quantity,product_boms(products!product_boms_finished_product_id_fkey(sku,name)))', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) }),
+        fetch(supabaseUrl + '/rest/v1/product_boms?active=eq.true&select=id,yield_quantity,products!product_boms_finished_product_id_fkey(id,sku,name)', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) })
+      ]);
+      const [activeProductionJobs, activeBoms] = await Promise.all([w.json(), b.json()]);
+      if (!w.ok) throw new Error('active production job lookup failed');
+      if (!b.ok) throw new Error('active BOM lookup failed');
+      activeBoms.sort((a, z) => String(a.products?.sku || '').localeCompare(String(z.products?.sku || '')));
+      return res.status(200).json({ locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })), history, activeProductionJobs, activeBoms });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
     const body = req.body || {}; const action = body.action;
