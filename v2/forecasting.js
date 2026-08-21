@@ -57,7 +57,7 @@
   async function sync(mode = 'daily', days = 1) {
     const isBackfill = mode === 'next';
     try {
-      $('forecastSync').disabled = true; $('forecastBackfill').disabled = true;
+      $('forecastSync').disabled = true; $('forecastBackfill').disabled = true; $('forecastBackfillWeek').disabled = true;
       set(isBackfill ? 'Backfilling ' + days + ' prior day' + (days === 1 ? '' : 's') + ' of Shopify sales…' : 'Syncing yesterday’s Shopify sales…');
       const response = await fetch('/api/sales-history-sync', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ mode, days }) });
       const data = await response.json();
@@ -65,7 +65,7 @@
       const windowLabel = data.startDate + ' through ' + data.endDate;
       if ($('forecastCategory').value) { set('Sales saved for ' + windowLabel + '. Loading the selected category…'); await loadCategory(); }
       else set('Sales saved for ' + windowLabel + ': ' + fmt(data.orders) + ' orders and ' + fmt(data.lines) + ' sales lines.');
-    } catch (error) { set(error.message, true); } finally { $('forecastSync').disabled = false; $('forecastBackfill').disabled = false; }
+    } catch (error) { set(error.message, true); } finally { $('forecastSync').disabled = false; $('forecastBackfill').disabled = false; $('forecastBackfillWeek').disabled = false; }
   }
 
   $('forecastNav').addEventListener('click', () => {
