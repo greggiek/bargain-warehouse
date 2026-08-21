@@ -41,6 +41,20 @@ module.exports = async (req, res) => {
       const visibleTransfers = (Array.isArray(transfers) ? transfers : []).filter((transfer) =>
         allowed.has(transfer.from_location_id) || allowed.has(transfer.to_location_id)
       );
+      const productIds = [...new Set(visibleTransfers.flatMap((transfer) =>
+        (transfer.transfer_lines || []).map((line) => Number(line.product_id)).filter(Number.isInteger)
+      ))];
+      const productLookup = productIds.length
+        ? await fetch(url + '/rest/v1/products?select=id,sku,name,barcode&id=in.(' + productIds.join(',') + ')', { headers: jsonHeaders(serviceRoleKey) })
+        : null;
+      const products = productLookup?.ok ? await productLookup.json() : [];
+      const productsById = new Map((Array.isArray(products) ? products : []).map((product) => [Number(product.id), product]));
+      visibleTransfers.forEach((transfer) => {
+        transfer.transfer_lines = (transfer.transfer_lines || []).map((line) => {
+          const product = productsById.get(Number(line.product_id)) || (Array.isArray(line.products) ? line.products[0] : line.products) || {};
+          return { ...line, sku: product.sku || line.sku || null, product_name: product.name || line.product_name || null, barcode: product.barcode || line.barcode || null, products: product };
+        });
+      });
       const [historyResponse, exceptionResponse] = await Promise.all([
         fetch(url + '/rest/v1/activity_events?select=id,action_type,document_number,description,status,created_at,user_name&document_type=eq.transfer&order=created_at.desc&limit=100', { headers: jsonHeaders(serviceRoleKey) }),
         fetch(url + '/rest/v1/transfer_discrepancies?select=id,discrepancy_type,quantity,note,created_at,transfers(transfer_number,from_location_id,to_location_id),transfer_lines(products(sku,name))&resolved_at=is.null&order=created_at.desc&limit=100', { headers: jsonHeaders(serviceRoleKey) })
