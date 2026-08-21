@@ -54,12 +54,12 @@
     } catch (error) { set(error.message, true); } finally { $('forecastRefresh').disabled = false; }
   }
 
-  async function sync(mode = 'daily') {
+  async function sync(mode = 'daily', days = 1) {
     const isBackfill = mode === 'next';
     try {
       $('forecastSync').disabled = true; $('forecastBackfill').disabled = true;
-      set(isBackfill ? 'Backfilling one prior day of Shopify sales…' : 'Syncing yesterday’s Shopify sales…');
-      const response = await fetch('/api/sales-history-sync', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ mode, days: 1 }) });
+      set(isBackfill ? 'Backfilling ' + days + ' prior day' + (days === 1 ? '' : 's') + ' of Shopify sales…' : 'Syncing yesterday’s Shopify sales…');
+      const response = await fetch('/api/sales-history-sync', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ mode, days }) });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || 'Sales sync failed');
       const windowLabel = data.startDate + ' through ' + data.endDate;
@@ -76,7 +76,8 @@
   ['overviewNav','inventoryNav','productSyncNav','snapshotNav','transfersNav','receivingNav','productionNav','parLevelsNav','bomManagementNav','replenishmentNav'].forEach(id => $(id)?.addEventListener('click', () => view.hidden = true));
   $('forecastRefresh').addEventListener('click', loadCategory);
   $('forecastSync').addEventListener('click', () => sync('daily'));
-  $('forecastBackfill').addEventListener('click', () => sync('next'));
+  $('forecastBackfill').addEventListener('click', () => sync('next', 1));
+  $('forecastBackfillWeek').addEventListener('click', () => sync('next', 7));
   $('forecastCategory').addEventListener('change', () => {
     forecastData = null; clearMetrics(); $('forecastMeta').textContent = 'Category selected. Load its forecast when you are ready.';
     emptyTable('Select Load category forecast to view this category.'); set('Ready to load ' + ($('forecastCategory').value || 'a category') + '.');
