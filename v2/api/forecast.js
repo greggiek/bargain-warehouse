@@ -24,7 +24,7 @@ module.exports = async function forecast(req, res) {
     const parByKey = new Map(pars.map(x => [String(x.location_id) + '|' + String(x.product_id), number(x.par_quantity)]));
     const byProduct = new Map();
     balances.forEach(balance => {
-      if (!byProduct.has(balance.product_id)) byProduct.set(balance.product_id, { productId: balance.product_id, sku: balance.products?.sku || '—', product: balance.products?.name || 'Unnamed product', hubOnHand: 0, hubAllocated: 0, retailShortage: 0 });
+      if (!byProduct.has(balance.product_id)) byProduct.set(balance.product_id, { productId: balance.product_id, sku: balance.products?.sku || '—', product: balance.products?.name || 'Unnamed product', category: balance.products?.category || 'Uncategorized', hubOnHand: 0, hubAllocated: 0, retailShortage: 0 });
       const row = byProduct.get(balance.product_id), par = parByKey.get(String(balance.location_id) + '|' + String(balance.product_id)) || 0;
       if (Number(balance.location_id) === Number(hub.id)) { row.hubOnHand = number(balance.quantity); row.hubAllocated = number(balance.allocated_quantity); }
       else row.retailShortage += Math.max(par - number(balance.quantity), 0);
