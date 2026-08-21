@@ -54,15 +54,18 @@
     } catch (error) { set(error.message, true); } finally { $('forecastRefresh').disabled = false; }
   }
 
-  async function sync() {
+  async function sync(mode = 'daily') {
+    const isBackfill = mode === 'next';
     try {
-      $('forecastSync').disabled = true; set('Syncing the last 90 days of Shopify sales. This can take a minute…');
-      const response = await fetch('/api/sales-history-sync', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ days: 90 }) });
+      $('forecastSync').disabled = true; $('forecastBackfill').disabled = true;
+      set(isBackfill ? 'Backfilling one prior day of Shopify sales…' : 'Syncing yesterday’s Shopify sales…');
+      const response = await fetch('/api/sales-history-sync', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ mode, days: 1 }) });
       const data = await response.json();
       if (!response.ok) throw Error(data.error || 'Sales sync failed');
-      if ($('forecastCategory').value) { set('Sales mirror refreshed. Loading the selected category…'); await loadCategory(); }
-      else set('Sales mirror refreshed: ' + fmt(data.orders) + ' orders and ' + fmt(data.lines) + ' sales lines. Choose a category to view its forecast.');
-    } catch (error) { set(error.message, true); } finally { $('forecastSync').disabled = false; }
+      const windowLabel = data.startDate + ' through ' + data.endDate;
+      if ($('forecastCategory').value) { set('Sales saved for ' + windowLabel + '. Loading the selected category…'); await loadCategory(); }
+      else set('Sales saved for ' + windowLabel + ': ' + fmt(data.orders) + ' orders and ' + fmt(data.lines) + ' sales lines.');
+    } catch (error) { set(error.message, true); } finally { $('forecastSync').disabled = false; $('forecastBackfill').disabled = false; }
   }
 
   $('forecastNav').addEventListener('click', () => {
@@ -72,7 +75,8 @@
   });
   ['overviewNav','inventoryNav','productSyncNav','snapshotNav','transfersNav','receivingNav','productionNav','parLevelsNav','bomManagementNav','replenishmentNav'].forEach(id => $(id)?.addEventListener('click', () => view.hidden = true));
   $('forecastRefresh').addEventListener('click', loadCategory);
-  $('forecastSync').addEventListener('click', sync);
+  $('forecastSync').addEventListener('click', () => sync('daily'));
+  $('forecastBackfill').addEventListener('click', () => sync('next'));
   $('forecastCategory').addEventListener('change', () => {
     forecastData = null; clearMetrics(); $('forecastMeta').textContent = 'Category selected. Load its forecast when you are ready.';
     emptyTable('Select Load category forecast to view this category.'); set('Ready to load ' + ($('forecastCategory').value || 'a category') + '.');
