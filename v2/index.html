@@ -31,6 +31,8 @@
     .muted { color: var(--muted); }
     .button { border: 0; border-radius: 10px; padding: 11px 16px; color: white; background: var(--blue); font-weight: 750; }
     .button.secondary { border: 1px solid var(--line); background: transparent; }
+    .topbar-actions { display: flex; align-items: center; gap: 10px; }
+    .bm-os-link { display: inline-flex; align-items: center; justify-content: center; min-height: 42px; padding: 10px 14px; border: 1px solid var(--line); border-radius: 10px; color: var(--text); background: var(--panel); font-weight: 750; text-decoration: none; }
     .cards { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 32px; }
     .card { padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: var(--panel); }
     .card strong { display: block; margin-top: 8px; font-size: 30px; }
@@ -83,10 +85,23 @@
     [hidden] { display: none !important; }
     @media (max-width: 800px) {
       .shell { grid-template-columns: 1fr; }
-      aside { display: none; }
-      .page { padding: 26px 18px; }
+      aside { display: block; width: 100%; padding: 14px 12px 10px; overflow: hidden; }
+      .brand-logo { max-width: 150px; }
+      nav { display: flex; gap: 8px; margin-top: 12px; overflow-x: auto; padding-bottom: 4px; scrollbar-width: none; }
+      nav::-webkit-scrollbar { display: none; }
+      .nav-section { display: none; }
+      .nav-group, .nav-group[hidden] { display: contents; }
+      nav .nav-item { flex: 0 0 auto; width: auto; padding: 9px 12px; white-space: nowrap; background: #103d5e; }
+      .page { min-width: 0; width: 100%; padding: 20px 14px; overflow: hidden; }
       .cards, .locations { grid-template-columns: 1fr; }
-      .topbar { align-items: flex-start; }
+      .topbar { align-items: flex-start; gap: 14px; }
+      .topbar-actions { flex: 0 0 auto; flex-direction: column; align-items: stretch; }
+      .topbar-actions .button, .bm-os-link { min-height: 40px; padding: 8px 11px; font-size: 13px; white-space: nowrap; }
+      h1 { font-size: clamp(30px, 11vw, 42px); }
+      .card { min-width: 0; width: 100%; padding: 18px; overflow-wrap: anywhere; }
+      .inventory-head { align-items: stretch; flex-direction: column; }
+      .inventory-actions { width: 100%; flex-wrap: wrap; }
+      .inventory-search, .bom-picker { width: 100%; max-width: 100%; }
     }
 
     /* V2 operational dashboard shell */
@@ -95,10 +110,13 @@
   <script src="/inventory.js" defer></script>
   <script src="/product-sync.js" defer></script>
   <script src="/inventory-snapshot.js" defer></script>
-  <script src="/transfers.js" defer></script>\n  <script src="/receiving.js" defer></script>
+  <script src="/transfers.js" defer></script>
+  <script src="/receiving.js" defer></script>
   <script src="/production.js" defer></script>
   <script src="/bom-management.js" defer></script>
-  <script src="/replenishment.js" defer></script>\n  <script src="/forecasting.js" defer></script>\n  <script src="/par-levels.js" defer></script>
+  <script src="/replenishment.js" defer></script>
+  <script src="/forecasting.js" defer></script>
+  <script src="/par-levels.js" defer></script>
   <script src="/sku-fix-queue.js" defer></script>
 </head>
 <body>
@@ -125,7 +143,10 @@
     <main class="page">
       <header class="topbar">
         <div><h1 id="welcome">Warehouse overview</h1></div>
-        <button id="logoutButton" class="button secondary" type="button">Sign out</button>
+        <div class="topbar-actions">
+          <a class="bm-os-link" href="https://bm-time.vercel.app/admin">Back to BM OS</a>
+          <button id="logoutButton" class="button secondary" type="button">Sign out</button>
+        </div>
       </header>
       <div id="overviewView"><section class="card section"><div class="eyebrow">BM Warehouse</div><h2>Operations</h2><p class="muted">Choose Inventory, Transfers, Production, or Replenishment from the left.</p></section></div>
       <section id="inventoryView" hidden>
