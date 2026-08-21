@@ -23,3 +23,14 @@ test('login page renders role and assigned locations', () => {
   assert.match(page, /session\.locations/);
   assert.match(page, /access\.can_manage/);
 });
+
+test('authenticated shell provides a route back to BM OS', () => {
+  assert.match(page, /href="https:\/\/bm-time\.vercel\.app\/admin"/);
+  assert.match(page, />Back to BM OS</);
+});
+
+test('mobile shell keeps navigation available and contains content', () => {
+  assert.match(page, /nav-group\[hidden\] \{ display: contents; \}/);
+  assert.match(page, /\.page \{ min-width: 0; width: 100%;/);
+  assert.doesNotMatch(page, /<\/script>\\n/);
+});
