@@ -25,7 +25,7 @@ test('login page renders role and assigned locations', () => {
 });
 
 test('authenticated shell provides a route back to BM OS', () => {
-  assert.match(page, /href="https:\/\/bm-time\.vercel\.app\/admin"/);
+  assert.match(page, /href="https:\/\/bm-time\.vercel\.app\/"/);
   assert.match(page, />Back to BM OS</);
 });
 
