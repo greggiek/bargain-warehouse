@@ -8,6 +8,7 @@
   const create=document.getElementById('transferCreate'), status=document.getElementById('transferStatus');
   const suggestions=document.getElementById('transferSuggestions'), rows=document.getElementById('transferRows');
   const queueSearch=document.getElementById('transferQueueSearch'), statusFilter=document.getElementById('transferStatusFilter');
+  const documentScanPanel=document.getElementById('transferDocumentScanPanel'), documentScanInput=document.getElementById('transferDocumentScanInput'), documentScanStatus=document.getElementById('transferDocumentScanStatus');
   let transfers=[], searchTimer, searchRequest=0;
   let scanSession=null, pendingReceiptLines=null;
   const show=(message,failed=false)=>{status.textContent=message;status.classList.toggle('error',failed);};
@@ -16,6 +17,16 @@
   const formatStatus=(value)=>String(value||'').replace(/_/g,' ');
   const locationOption=(location)=>{const option=document.createElement('option');option.value=location.id;option.textContent=location.name;option.disabled=!location.canManage;return option;};
   const actionButton=(label,transfer,action)=>{const button=document.createElement('button');button.className='button secondary';button.type='button';button.textContent=label;button.addEventListener('click',()=>openScanner(transfer,action));return button;};
+  function openCamera(onScan,statusElement){
+    if(!('BarcodeDetector' in window))return statusElement.textContent='Camera scanning is not supported by this browser. Use the phone scanner field or a Bluetooth scanner.';
+    const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px;background:#07101ddd';
+    overlay.innerHTML='<section class="card" style="width:min(620px,100%)"><div class="topbar"><h2>Scan barcode</h2><button class="button secondary" type="button">Close</button></div><video playsinline muted style="display:block;width:100%;margin-top:14px;border-radius:12px;background:#000"></video><p class="muted" style="margin-bottom:0">Hold the transfer or SKU barcode inside the camera view.</p></section>';
+    const video=overlay.querySelector('video');let stream,frame;const close=()=>{cancelAnimationFrame(frame);stream?.getTracks().forEach(track=>track.stop());overlay.remove();};overlay.querySelector('button').addEventListener('click',close);document.body.append(overlay);
+    navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}).then(async nextStream=>{
+      stream=nextStream;video.srcObject=stream;await video.play();const detector=new BarcodeDetector({formats:['code_39','code_128','qr_code','ean_13','ean_8','upc_a','upc_e','itf','codabar']});
+      const detect=async()=>{try{const [code]=await detector.detect(video);if(code?.rawValue){close();onScan(code.rawValue);return;}}catch(_){}frame=requestAnimationFrame(detect);};detect();
+    }).catch(()=>{close();statusElement.textContent='Camera permission was not granted. Scan with a Bluetooth scanner or enter the barcode number.';statusElement.classList.add('error');});
+  }
   function printTransfer(transfer){
     const lines=transfer.transfer_lines||[];
     const popup=window.open('about:blank','_blank','width=900,height=700');
@@ -47,13 +58,21 @@
       const scanSku=product.sku||line.sku||line.product_sku||'MISSING SKU';
       return '<tr><td>'+code39Svg(scanSku)+'<div class="code">SKU: '+esc(scanSku)+'</div></td><td>'+esc(product.name||line.product_name||'Unnamed product')+'</td><td>'+esc(line.requested_quantity)+'</td><td>'+esc(line.allocated_quantity)+'</td><td>'+esc(line.shipped_quantity)+'</td><td>'+esc(line.received_quantity)+'</td></tr>';
     }).join('');
-    popup.document.write('<!doctype html><title>'+esc(transfer.transfer_number)+'</title><style>body{font:15px Arial;color:#18263a;margin:38px}h1{margin:0 0 6px}p{color:#61718a}table{width:100%;border-collapse:collapse;margin-top:28px}th,td{padding:11px;border:1px solid #cfd9e6;text-align:left}th{background:#edf3fa}.code{font-family:monospace;font-size:18px;font-weight:bold;white-space:nowrap}.sku-barcode{display:block;max-width:260px;height:58px}.barcode-warning{font-size:12px;color:#a33}@media print{body{margin:16px}}</style><h1>'+esc(transfer.transfer_number)+'</h1><p><b>Route:</b> '+esc(transfer.from_location?.name)+' → '+esc(transfer.to_location?.name)+'<br><b>Status:</b> '+esc(formatStatus(transfer.status))+'<br><b>Printed:</b> '+esc(new Date().toLocaleString())+'</p><table><thead><tr><th>SKU / scan label</th><th>Product</th><th>Requested</th><th>Allocated</th><th>Shipped</th><th>Received</th></tr></thead><tbody>'+lineRows+'</tbody></table><p>Every barcode encodes its printed SKU. “MISSING SKU” goes into the SKU-fix queue before use.</p>');
+    popup.document.write('<!doctype html><title>'+esc(transfer.transfer_number)+'</title><style>body{font:15px Arial;color:#18263a;margin:38px}h1{margin:0 0 6px}p{color:#61718a}table{width:100%;border-collapse:collapse;margin-top:28px}th,td{padding:11px;border:1px solid #cfd9e6;text-align:left}th{background:#edf3fa}.code{font-family:monospace;font-size:18px;font-weight:bold;white-space:nowrap}.sku-barcode{display:block;max-width:260px;height:58px}.document-barcode{padding:12px;border:2px solid #18263a;border-radius:8px;max-width:420px;margin:18px 0}.document-barcode b{display:block;margin-bottom:6px;font-size:11px;letter-spacing:.08em}.document-barcode .sku-barcode{max-width:390px;height:70px}.barcode-warning{font-size:12px;color:#a33}@media print{body{margin:16px}}</style><h1>'+esc(transfer.transfer_number)+'</h1><p><b>Route:</b> '+esc(transfer.from_location?.name)+' → '+esc(transfer.to_location?.name)+'<br><b>Status:</b> '+esc(formatStatus(transfer.status))+'<br><b>Printed:</b> '+esc(new Date().toLocaleString())+'</p><section class="document-barcode"><b>TRANSFER BARCODE — SCAN IN BM WAREHOUSE TO RECEIVE</b>'+code39Svg(transfer.transfer_number)+'<div class="code">'+esc(transfer.transfer_number)+'</div></section><table><thead><tr><th>SKU / scan label</th><th>Product</th><th>Requested</th><th>Allocated</th><th>Shipped</th><th>Received</th></tr></thead><tbody>'+lineRows+'</tbody></table><p>Every barcode encodes its printed SKU. “MISSING SKU” goes into the SKU-fix queue before use.</p>');
     popup.document.close();popup.focus();setTimeout(()=>popup.print(),150);
   }
   function openScanner(transfer,action){
     scanSession={transfer,action,counts:new Map()};document.getElementById('transferScanPanel').hidden=false;document.getElementById('transferScanTitle').textContent=(action==='ship'?'Ship ':'Receive ')+transfer.transfer_number;
     document.getElementById('transferScanHelp').textContent=action==='ship'?'Scan every item leaving the origin. Confirming ships the transfer.':'Scan everything received. You can record discrepancies after the scan.';
     document.getElementById('transferScanStatus').textContent='';renderScan();document.getElementById('transferScanPanel').scrollIntoView({behavior:'smooth',block:'center'});document.getElementById('transferScanInput').focus();
+  }
+  function openDocumentScan(){documentScanPanel.hidden=false;documentScanInput.value='';documentScanStatus.textContent='Scan the main barcode from the transfer paperwork.';documentScanStatus.classList.remove('error');documentScanPanel.scrollIntoView({behavior:'smooth',block:'center'});documentScanInput.focus();}
+  function openTransferFromPaperwork(value){
+    const scanned=String(value||'').trim().toUpperCase();
+    const transfer=transfers.find(item=>String(item.transfer_number||'').toUpperCase()===scanned);
+    if(!transfer){documentScanStatus.textContent='No visible transfer matches '+scanned+'. Make sure you are signed into the destination warehouse.';documentScanStatus.classList.add('error');return;}
+    if(!['in_transit','partially_received'].includes(transfer.status)){documentScanStatus.textContent=transfer.transfer_number+' is '+formatStatus(transfer.status)+'. It must be shipped before it can be received.';documentScanStatus.classList.add('error');return;}
+    documentScanPanel.hidden=true;openScanner(transfer,'receive');
   }
   function renderScan(){const host=document.getElementById('transferScanRows');host.replaceChildren();(scanSession.transfer.transfer_lines||[]).forEach(line=>{const expected=Number(scanSession.action==='ship'?line.allocated_quantity:line.shipped_quantity),scanned=scanSession.counts.get(line.id)||0,row=document.createElement('tr');cell(row,line.products?.sku||'—');cell(row,String(expected));cell(row,String(scanned));cell(row,String(Math.max(0,expected-scanned)));host.append(row);});}
   function scanValue(value){const term=String(value||'').trim().toLowerCase();if(!term)return;const line=(scanSession.transfer.transfer_lines||[]).find(x=>[x.products?.sku,x.products?.barcode,x.products?.name].filter(Boolean).some(v=>String(v).toLowerCase()===term));if(!line){document.getElementById('transferScanStatus').textContent='Not on this transfer: '+value;document.getElementById('transferScanStatus').classList.add('error');return;}const expected=Number(scanSession.action==='ship'?line.allocated_quantity:line.shipped_quantity),next=(scanSession.counts.get(line.id)||0)+1;if(next>expected){document.getElementById('transferScanStatus').textContent='Already scanned the expected quantity for '+line.products?.sku+'.';document.getElementById('transferScanStatus').classList.add('error');return;}scanSession.counts.set(line.id,next);document.getElementById('transferScanStatus').textContent=line.products?.sku+' scanned ('+next+'/'+expected+').';document.getElementById('transferScanStatus').classList.remove('error');renderScan();}
@@ -97,7 +116,10 @@
   document.getElementById('transferScanInput').addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();scanValue(event.currentTarget.value);event.currentTarget.value='';}});
   document.getElementById('transferCancelScan').addEventListener('click',()=>{scanSession=null;document.getElementById('transferScanPanel').hidden=true;});
   document.getElementById('transferFinishScan').addEventListener('click',async()=>{if(!scanSession)return;const {transfer,action}=scanSession;const lines=transfer.transfer_lines||[];const incomplete=lines.filter(line=>(scanSession.counts.get(line.id)||0)<Number(action==='ship'?line.allocated_quantity:line.shipped_quantity));if(incomplete.length){return show('Scan is incomplete. Record a discrepancy through receiving before confirming.',true);}if(action==='receive')pendingReceiptLines=lines.map(line=>({lineId:line.id,receivedQuantity:Number(line.shipped_quantity),damagedQuantity:0,missingQuantity:0,note:''}));document.getElementById('transferScanPanel').hidden=true;scanSession=null;await runAction(transfer,action,document.getElementById('transferFinishScan'));});
-  document.getElementById('transferCameraScan').addEventListener('click',()=>{document.getElementById('transferScanStatus').textContent='Camera scanning is next; use a Bluetooth scanner or type/scan into this field for now.';});
+  document.getElementById('transferCameraScan').addEventListener('click',()=>openCamera(scanValue,document.getElementById('transferScanStatus')));
+  documentScanInput.addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();openTransferFromPaperwork(event.currentTarget.value);}});
+  document.getElementById('transferDocumentCameraScan').addEventListener('click',()=>openCamera(openTransferFromPaperwork,documentScanStatus));
+  document.getElementById('transferDocumentCancel').addEventListener('click',()=>{documentScanPanel.hidden=true;});
   function renderQueue(){
     const term=queueSearch.value.trim().toLowerCase(),wanted=statusFilter.value;
     const visible=transfers.filter((transfer)=>{const line=transfer.transfer_lines?.[0],haystack=[transfer.transfer_number,transfer.from_location?.name,transfer.to_location?.name,transfer.status,line?.products?.sku,line?.products?.name].join(' ').toLowerCase();return (!term||haystack.includes(term))&&(!wanted||transfer.status===wanted);});
@@ -129,7 +151,7 @@
   }
   queueSearch.addEventListener('input',renderQueue);statusFilter.addEventListener('change',renderQueue);
   document.getElementById('transferCreateChoice').addEventListener('click',()=>{document.getElementById('transferCreatePanel').scrollIntoView({behavior:'smooth',block:'center'});sku.focus();});
-  document.getElementById('transferReceiveChoice').addEventListener('click',()=>document.getElementById('transferQueue').scrollIntoView({behavior:'smooth',block:'start'}));
+  document.getElementById('transferReceiveChoice').addEventListener('click',openDocumentScan);
   nav.addEventListener('click',async()=>{otherViews.forEach((element)=>{if(element)element.hidden=true;});otherNavs.forEach((element)=>element&&element.classList.remove('active'));nav.classList.add('active');view.hidden=false;await load();});
   create.addEventListener('click',async()=>{
     if(!from.value||!to.value||!sku.value.trim()||!quantity.value)return show('Choose locations, an exact SKU, and a quantity.',true);
