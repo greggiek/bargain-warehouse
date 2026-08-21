@@ -40,6 +40,8 @@
     load().catch(error => set(error.message, true));
   });
   ['overviewNav','inventoryNav','productSyncNav','snapshotNav','transfersNav','receivingNav','productionNav','parLevelsNav','bomManagementNav','replenishmentNav'].forEach(id => $(id)?.addEventListener('click', () => view.hidden = true));
-  $('forecastRefresh').addEventListener('click', () => load().catch(error => set(error.message, true)));
+  // Keep this action meaningful even before the local sales mirror has data.
+  // It refreshes Shopify history first, then recalculates the forecast.
+  $('forecastRefresh').addEventListener('click', sync);
   $('forecastSync').addEventListener('click', sync);
 })();
