@@ -216,6 +216,11 @@
           <div class="inventory-actions"><input id="transferScanInput" class="inventory-search" autocomplete="off" placeholder="Scan barcode or enter SKU"><button id="transferCameraScan" class="button secondary" type="button">Use camera</button><button id="transferFinishScan" class="button" type="button">Confirm scan</button><button id="transferCancelScan" class="button secondary" type="button">Cancel</button></div>
           <p id="transferScanStatus" class="inventory-status"></p><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>SKU</th><th>Expected</th><th>Scanned</th><th>Remaining</th></tr></thead><tbody id="transferScanRows"></tbody></table></div>
         </section>
+        <section id="transferDocumentScanPanel" class="card section" hidden>
+          <div class="transfer-kicker">Incoming transfer</div><h2>Scan transfer paperwork</h2><p class="muted">Scan the main barcode printed on the transfer. We will open that transfer, then scan each material SKU to check it in.</p>
+          <div class="inventory-actions"><input id="transferDocumentScanInput" class="inventory-search" autocomplete="off" placeholder="Scan transfer barcode or enter MT / DT number"><button id="transferDocumentCameraScan" class="button secondary" type="button">Use camera</button><button id="transferDocumentCancel" class="button secondary" type="button">Cancel</button></div>
+          <p id="transferDocumentScanStatus" class="inventory-status"></p>
+        </section>
         <section class="card section">
           <div class="transfer-kicker">Company-wide inventory</div><h2>In transit</h2><p class="muted">Material that left its source but has not fully arrived at destination.</p>
           <div class="transfer-metrics"><span id="inTransitPieces" class="transfer-metric">0 pieces</span><span id="inTransitTransfers" class="transfer-metric">0 transfers</span><span id="inTransitSkus" class="transfer-metric">0 SKUs</span></div>
