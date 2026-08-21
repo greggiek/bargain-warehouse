@@ -23,11 +23,18 @@ async function collectSales(store, startDate, endDate) {
   if (hasNextPage) throw new Error(`${store.key}: Shopify order history exceeded safe page limit`); return { totals:[...totals.values()], orders, lines };
 }
 module.exports = async function salesHistorySync(req, res) {
-  if (req.method !== 'POST') { res.setHeader('Allow','POST'); return res.status(405).json({ok:false,error:'method_not_allowed'}); }
-  const auth = await requireUser(req); if (!auth.ok) return res.status(auth.status).json({ok:false,error:auth.error}); if (!['admin','developer'].includes(auth.user.role)) return res.status(403).json({ok:false,error:'administrator_role_required'});
+  const cronRequest = req.method === 'GET' && String(req.headers?.authorization || '') === 'Bearer ' + String(process.env.CRON_SECRET || '');
+  if (!cronRequest && req.method !== 'POST') { res.setHeader('Allow','GET, POST'); return res.status(405).json({ok:false,error:'method_not_allowed'}); }
+  if (cronRequest && !process.env.CRON_SECRET) return res.status(401).json({ok:false,error:'cron_secret_not_configured'});
+  if (!cronRequest) {
+    const auth = await requireUser(req);
+    if (!auth.ok) return res.status(auth.status).json({ok:false,error:auth.error});
+    if (!['admin','developer'].includes(auth.user.role)) return res.status(403).json({ok:false,error:'administrator_role_required'});
+  }
   try {
-    const mode = String(req.body?.mode || 'daily');
-    const days = Number(req.body?.days) === 3 ? 3 : 1;
+    const mode = cronRequest ? 'daily' : String(req.body?.mode || 'daily');
+    const requestedDays = Number(req.body?.days || 1);
+    const days = [1, 3, 7].includes(requestedDays) ? requestedDays : 1;
     const isDate = value => /^\\d{4}-\\d{2}-\\d{2}$/.test(String(value || ''));
     const shiftDate = (value, offset) => new Date(new Date(value + 'T00:00:00Z').getTime() + offset * 86400000).toISOString().slice(0, 10);
     const today = new Date().toISOString().slice(0, 10);
