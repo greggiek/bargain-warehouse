@@ -4,7 +4,7 @@
   const fmt = n => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Number(n || 0));
   const set = (text, error = false) => { $('forecastStatus').textContent = text; $('forecastStatus').classList.toggle('error', error); };
   function cell(row, value) { const td = document.createElement('td'); td.textContent = value; row.append(td); }
-  function render(data) {
+  let forecastData = null;\n  function render(data) {\n    forecastData = data;
     $('forecastSales30').textContent = fmt(data.summary.sales30);
     $('forecastSales60').textContent = fmt(data.summary.sales60);
     $('forecastSales90').textContent = fmt(data.summary.sales90);
@@ -14,10 +14,15 @@
     const tbody = $('forecastRows'); tbody.replaceChildren();
     (data.items || []).forEach(item => {
       const row = document.createElement('tr');
-      [item.sku, item.product, fmt(item.sales30), fmt(item.sales60), fmt(item.sales90), fmt(item.hubAvailable), fmt(item.retailShortage), fmt(item.hubBackstockTarget), fmt(item.purchaseRecommendation)].forEach(value => cell(row, value));
+      [item.category || 'Uncategorized', item.sku, item.product, fmt(item.sales30), fmt(item.sales60), fmt(item.sales90), fmt(item.hubAvailable), fmt(item.retailShortage), fmt(item.hubBackstockTarget), fmt(item.purchaseRecommendation)].forEach(value => cell(row, value));
       tbody.append(row);
     });
-    if (!(data.items || []).length) tbody.innerHTML = '<tr><td colspan="9" class="muted">No sales-backed purchase recommendations yet.</td></tr>';
+    if (!(data.items || []).length) tbody.innerHTML = '<tr><td colspan="10" class="muted">No sales-backed purchase recommendations yet.</td></tr>';
+    const categories = [...new Set((data.items || []).map(item => item.category || 'Uncategorized'))].sort();
+    const select = $('forecastCategory'), selected = select.value;
+    select.replaceChildren(new Option('All categories', ''));
+    categories.forEach(value => select.add(new Option(value, value)));
+    select.value = categories.includes(selected) ? selected : '';
     $('forecastMeta').textContent = data.lastSyncedAt ? 'Sales mirror last refreshed ' + new Date(data.lastSyncedAt).toLocaleString() + '. Forecasts use fulfilled sales history from both Shopify stores.' : 'No sales history has been mirrored yet. Sync the last 90 days to begin.';
     set(data.summary.purchaseSkus + ' SKUs need purchase coverage at 730 after retail needs and hub back stock are accounted for.');
   }
@@ -44,4 +49,6 @@
   // It refreshes Shopify history first, then recalculates the forecast.
   $('forecastRefresh').addEventListener('click', sync);
   $('forecastSync').addEventListener('click', sync);
+  $('forecastCategory').addEventListener('change', () => forecastData && render(forecastData));
+  $('forecastSort').addEventListener('change', () => forecastData && render(forecastData));
 })();
