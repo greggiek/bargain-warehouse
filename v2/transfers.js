@@ -21,19 +21,34 @@
     const popup=window.open('about:blank','_blank','width=900,height=700');
     if(!popup)return show('Allow pop-ups to print this transfer.',true);
     const esc=value=>String(value??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
+    // Code 39 is generated here (rather than loaded from a CDN) so printed labels
+    // work on restricted warehouse networks and in browser print pop-ups.
+    const code39={
+      '0':'nnnwwnwnn','1':'wnnwnnnnw','2':'nnwwnnnnw','3':'wnwwnnnnn','4':'nnnwwnnnw','5':'wnnwwnnnn','6':'nnwwwnnnn','7':'nnnwnnwnw','8':'wnnwnnwnn','9':'nnwwnnwnn',
+      'A':'wnnnnwnnw','B':'nnwnnwnnw','C':'wnwnnwnnn','D':'nnnnwwnnw','E':'wnnnwwnnn','F':'nnwnwwnnn','G':'nnnnnwwnw','H':'wnnnnwwnn','I':'nnwnnwwnn','J':'nnnnwwwnn',
+      'K':'wnnnnnnww','L':'nnwnnnnww','M':'wnwnnnnwn','N':'nnnnwnnww','O':'wnnnwnnwn','P':'nnwnwnnwn','Q':'nnnnnnwww','R':'wnnnnnwwn','S':'nnwnnnwwn','T':'nnnnwnwwn',
+      'U':'wwnnnnnnw','V':'nwwnnnnnw','W':'wwwnnnnnn','X':'nwnnwnnnw','Y':'wwnnwnnnn','Z':'nwwnwnnnn','-':'nwnnnnwnw','.':'wwnnnnwnn',' ':'nwwnnnwnn','$':'nwnwnwnnn','/':'nwnwnnnwn','+':'nwnnnwnwn','%':'nnnwnwnwn','*':'nwnnwnwnn'
+    };
+    const code39Svg=value=>{
+      const encoded='*'+String(value||'').toUpperCase()+'*';
+      if([...encoded].some(character=>!code39[character])) return '<div class="barcode-warning">Barcode unavailable: unsupported SKU characters</div>';
+      const unit=2,height=52,quiet=10;
+      let x=quiet,rects='';
+      [...encoded].forEach((character,index)=>{
+        [...code39[character]].forEach((width,position)=>{const size=(width==='w'?3:1)*unit;if(position%2===0)rects+='<rect x="'+x+'" y="0" width="'+size+'" height="'+height+'"/>';x+=size;});
+        if(index<encoded.length-1)x+=unit;
+      });
+      const total=x+quiet;
+      return '<svg class="sku-barcode" viewBox="0 0 '+total+' '+height+'" width="'+total+'" height="'+height+'" role="img" aria-label="Barcode for '+esc(value)+'">'+rects+'</svg>';
+    };
     const productFor=line=>Array.isArray(line.products)?(line.products[0]||{}):(line.products||{});
     const lineRows=lines.map(line=>{
       const product=productFor(line);
       const scanSku=product.sku||line.sku||line.product_sku||'MISSING SKU';
-      return '<tr><td><svg class="sku-barcode" data-sku="'+esc(scanSku)+'"></svg><div class="code">SKU: '+esc(scanSku)+'</div></td><td>'+esc(product.name||line.product_name||'Unnamed product')+'</td><td>'+esc(line.requested_quantity)+'</td><td>'+esc(line.allocated_quantity)+'</td><td>'+esc(line.shipped_quantity)+'</td><td>'+esc(line.received_quantity)+'</td></tr>';
+      return '<tr><td>'+code39Svg(scanSku)+'<div class="code">SKU: '+esc(scanSku)+'</div></td><td>'+esc(product.name||line.product_name||'Unnamed product')+'</td><td>'+esc(line.requested_quantity)+'</td><td>'+esc(line.allocated_quantity)+'</td><td>'+esc(line.shipped_quantity)+'</td><td>'+esc(line.received_quantity)+'</td></tr>';
     }).join('');
-    popup.document.write('<!doctype html><title>'+esc(transfer.transfer_number)+'</title><style>body{font:15px Arial;color:#18263a;margin:38px}h1{margin:0 0 6px}p{color:#61718a}table{width:100%;border-collapse:collapse;margin-top:28px}th,td{padding:11px;border:1px solid #cfd9e6;text-align:left}th{background:#edf3fa}.code{font-family:monospace;font-size:18px;font-weight:bold;white-space:nowrap}.sku-barcode{display:block;max-width:260px;height:58px}@media print{body{margin:16px}}</style><h1>'+esc(transfer.transfer_number)+'</h1><p><b>Route:</b> '+esc(transfer.from_location?.name)+' → '+esc(transfer.to_location?.name)+'<br><b>Status:</b> '+esc(formatStatus(transfer.status))+'<br><b>Printed:</b> '+esc(new Date().toLocaleString())+'</p><table><thead><tr><th>SKU / scan label</th><th>Product</th><th>Requested</th><th>Allocated</th><th>Shipped</th><th>Received</th></tr></thead><tbody>'+lineRows+'</tbody></table><p>Every barcode encodes its printed SKU. “MISSING SKU” goes into the SKU-fix queue before use.</p>');
-    popup.document.close();popup.focus();
-    const barcodeScript=popup.document.createElement('script');
-    barcodeScript.src='https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.code128.min.js';
-    barcodeScript.onload=()=>{popup.document.querySelectorAll('.sku-barcode').forEach((element)=>popup.JsBarcode(element,element.dataset.sku,{format:'CODE128',displayValue:false,margin:0,width:1.5,height:52}));setTimeout(()=>popup.print(),150);};
-    barcodeScript.onerror=()=>{show('Could not load the barcode renderer. The SKU text is still printable.',true);popup.print();};
-    popup.document.head.append(barcodeScript);
+    popup.document.write('<!doctype html><title>'+esc(transfer.transfer_number)+'</title><style>body{font:15px Arial;color:#18263a;margin:38px}h1{margin:0 0 6px}p{color:#61718a}table{width:100%;border-collapse:collapse;margin-top:28px}th,td{padding:11px;border:1px solid #cfd9e6;text-align:left}th{background:#edf3fa}.code{font-family:monospace;font-size:18px;font-weight:bold;white-space:nowrap}.sku-barcode{display:block;max-width:260px;height:58px}.barcode-warning{font-size:12px;color:#a33}@media print{body{margin:16px}}</style><h1>'+esc(transfer.transfer_number)+'</h1><p><b>Route:</b> '+esc(transfer.from_location?.name)+' → '+esc(transfer.to_location?.name)+'<br><b>Status:</b> '+esc(formatStatus(transfer.status))+'<br><b>Printed:</b> '+esc(new Date().toLocaleString())+'</p><table><thead><tr><th>SKU / scan label</th><th>Product</th><th>Requested</th><th>Allocated</th><th>Shipped</th><th>Received</th></tr></thead><tbody>'+lineRows+'</tbody></table><p>Every barcode encodes its printed SKU. “MISSING SKU” goes into the SKU-fix queue before use.</p>');
+    popup.document.close();popup.focus();setTimeout(()=>popup.print(),150);
   }
   function openScanner(transfer,action){
     scanSession={transfer,action,counts:new Map()};document.getElementById('transferScanPanel').hidden=false;document.getElementById('transferScanTitle').textContent=(action==='ship'?'Ship ':'Receive ')+transfer.transfer_number;
