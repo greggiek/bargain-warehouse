@@ -69,11 +69,11 @@
   }
 
   $('forecastNav').addEventListener('click', () => {
-    ['overviewView','inventoryView','snapshotView','transferView','receivingView','productionView','productSyncView','parLevelsView','bomManagementView','replenishmentView'].forEach(id => { const el = $(id); if (el) el.hidden = true; });
+    ['overviewView','inventoryView','snapshotView','transferView','productionView','productSyncView','parLevelsView','bomManagementView','replenishmentView'].forEach(id => { const el = $(id); if (el) el.hidden = true; });
     view.hidden = false; document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.id === 'forecastNav'));
     loadCategories().catch(error => { clearMetrics(); emptyTable('Unable to load categories.'); set(error.message, true); });
   });
-  ['overviewNav','inventoryNav','productSyncNav','snapshotNav','transfersNav','receivingNav','productionNav','parLevelsNav','bomManagementNav','replenishmentNav'].forEach(id => $(id)?.addEventListener('click', () => view.hidden = true));
+  ['overviewNav','inventoryNav','productSyncNav','snapshotNav','transfersNav','productionNav','parLevelsNav','bomManagementNav','replenishmentNav'].forEach(id => $(id)?.addEventListener('click', () => view.hidden = true));
   $('forecastRefresh').addEventListener('click', loadCategory);
   $('forecastSync').addEventListener('click', () => sync('daily'));
   $('forecastBackfill').addEventListener('click', () => sync('next', 1));
