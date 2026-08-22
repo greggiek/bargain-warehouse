@@ -171,7 +171,7 @@
   }
 
   async function open() {
-    ['overviewView', 'inventoryView', 'snapshotView', 'transferView', 'receivingView', 'productSyncView', 'parLevelsView', 'replenishmentView', 'bomManagementView'].forEach(id => {
+    ['overviewView', 'inventoryView', 'snapshotView', 'transferView', 'productSyncView', 'parLevelsView', 'replenishmentView', 'bomManagementView'].forEach(id => {
       if ($(id)) $(id).hidden = true;
     });
     view.hidden = false;

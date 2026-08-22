@@ -30,6 +30,14 @@ test('PO receiving posts only scanned expected lines', () => {
   assert.doesNotMatch(api, /body\.action === 'receive'/);
 });
 
+test('standalone inventory receiving is removed so inbound stock goes through a PO', () => {
+  assert.doesNotMatch(page, /id="receivingNav"/);
+  assert.doesNotMatch(page, /id="receivingView"/);
+  assert.doesNotMatch(page, /src="\/receiving\.js"/);
+  assert.equal(fs.existsSync(path.join(__dirname, '..', 'receiving.js')), false);
+  assert.equal(fs.existsSync(path.join(__dirname, '..', 'api', 'receipts.js')), false);
+});
+
 test('PO transactions are sent and idempotent server-side', () => {
   assert.match(migration, /create or replace function public\.send_v2_purchase_order/);
   assert.match(migration, /create or replace function public\.receive_v2_purchase_order_lines/);
