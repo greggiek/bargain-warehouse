@@ -361,6 +361,19 @@
       loginView.hidden = true;
       appView.hidden = false;
       document.getElementById('welcome').textContent = `Welcome, ${session.user.displayName}`;
+      applyRoleNavigation(session.user.role);
+    }
+
+    function applyRoleNavigation(role) {
+      if (role !== 'manager' && role !== 'warehouse') return;
+      const allowed = new Set(['overviewNav', 'transfersNav', 'receivingNav']);
+      document.querySelectorAll('.nav-item').forEach((item) => {
+        item.hidden = !allowed.has(item.id);
+      });
+      document.querySelectorAll('.nav-section').forEach((section) => {
+        const group = document.getElementById(section.getAttribute('aria-controls'));
+        section.hidden = !group || !group.querySelector('.nav-item:not([hidden])');
+      });
     }
 
     async function loadSession() {
