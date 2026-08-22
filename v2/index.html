@@ -150,7 +150,7 @@
           <button id="logoutButton" class="button secondary" type="button">Sign out</button>
         </div>
       </header>
-      <div id="overviewView"><section class="card section"><div class="eyebrow">BM Warehouse</div><h2>Operations</h2><p class="muted">Choose Inventory, Transfers, Production, or Replenishment from the left.</p><div class="inventory-actions"><button id="overviewReceivePo" class="button" type="button">Receive purchase order</button></div></section></div>
+      <div id="overviewView"><section class="card section"><div class="eyebrow">BM Warehouse</div><h2>Operations</h2><p class="muted">Choose Inventory, Transfers, Production, or Replenishment from the left.</p><div class="inventory-actions"><button id="overviewReceivePo" class="button" type="button">Receive purchase order</button><button id="overviewReceiveTransfer" class="button secondary" type="button">Receive transfer</button></div></section></div>
       <section id="inventoryView" hidden>
         <div class="inventory-head">
           <div><div class="eyebrow">Network inventory</div><h1>Inventory overview</h1><p class="muted">Live V2 on-hand inventory, including completed transfers. Shopify remains the catalog source of truth.</p></div>
@@ -206,16 +206,10 @@
       </section>
       <section id="transferView" hidden>
         <div class="inventory-head">
-          <div><div class="eyebrow">Transfers</div><h1>Move material with confidence</h1><p class="muted">Create outgoing V2 transfers or receive incoming material. Shopify and Qoblex are not changed.</p></div>
+          <div><div class="eyebrow">Transfers</div><h1>Transfer master</h1><p class="muted">Review every V2 transfer, then open the right workflow for shipping or receiving. Shopify and Qoblex are not changed.</p></div>
+          <div class="inventory-actions"><button id="transferNewButton" class="button" type="button">Create transfer</button></div>
         </div>
-        <section class="card section">
-          <div class="transfer-kicker">What are you doing?</div>
-          <div class="transfer-choice-grid">
-            <button id="transferCreateChoice" class="transfer-choice create" type="button"><span>↔</span><strong>Create transfer</strong><span>Move material from this warehouse to another location.</span></button>
-            <button id="transferReceiveChoice" class="transfer-choice receive" type="button"><span>▣ ✓</span><strong>Receive transfer</strong><span>Verify shipped material and record received, damaged, or missing pieces.</span></button>
-          </div>
-        </section>
-        <section id="transferCreatePanel" class="card section">
+        <section id="transferCreatePanel" class="card section" hidden>
           <div class="transfer-kicker">Outgoing transfer</div>
           <h2>Create transfer</h2>
           <div class="inventory-actions">
@@ -237,21 +231,21 @@
           <div class="inventory-actions"><input id="transferDocumentScanInput" class="inventory-search" autocomplete="off" placeholder="Scan transfer barcode or enter MT / DT number"><button id="transferDocumentCameraScan" class="button secondary" type="button">Use camera</button><button id="transferDocumentCancel" class="button secondary" type="button">Cancel</button></div>
           <p id="transferDocumentScanStatus" class="inventory-status"></p>
         </section>
-        <section class="card section">
+        <section id="transferInTransit" class="card section">
           <div class="transfer-kicker">Company-wide inventory</div><h2>In transit</h2><p class="muted">Material that left its source but has not fully arrived at destination.</p>
           <div class="transfer-metrics"><span id="inTransitPieces" class="transfer-metric">0 pieces</span><span id="inTransitTransfers" class="transfer-metric">0 transfers</span><span id="inTransitSkus" class="transfer-metric">0 SKUs</span></div>
           <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>SKU</th><th>Transfer</th><th>Route</th><th>Shipped</th><th>Received</th><th>Damaged</th><th>Still in transit</th></tr></thead><tbody id="inTransitRows"></tbody></table></div>
         </section>
         <section id="transferQueue" class="card section">
-          <div class="transfer-kicker">All locations</div><h2>Master transfer bucket</h2><p class="muted">Every active transfer across your assigned locations.</p>
+          <div class="transfer-kicker">All locations</div><h2>Transfers</h2><p class="muted">Search every transfer and filter by its current status.</p>
           <div class="transfer-filters"><input id="transferQueueSearch" class="inventory-search" type="search" placeholder="Search transfer, SKU, warehouse, or status"><select id="transferStatusFilter" class="transfer-filter"><option value="">All statuses</option><option value="allocated">Allocated</option><option value="in_transit">In transit</option><option value="partially_received">Partially received</option><option value="problem">Problem</option><option value="completed">Completed</option></select></div>
           <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Transfer</th><th>From</th><th>To</th><th>Status</th><th>Lines</th><th>Pieces</th><th>Action</th></tr></thead><tbody id="transferRows"></tbody></table></div>
         </section>
-        <section class="card section">
+        <section id="transferHistory" class="card section">
           <div class="transfer-kicker">Audit trail</div><h2>Transfer history</h2><p class="muted">Who created, shipped, received, or changed each transfer.</p>
           <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Transfer</th><th>What happened</th><th>Who</th><th>When</th></tr></thead><tbody id="transferHistoryRows"></tbody></table></div>
         </section>
-        <section class="card section">
+        <section id="transferExceptions" class="card section">
           <div class="transfer-kicker">Logistics exceptions</div><h2>Needs review <span id="exceptionCount" class="transfer-metric">0 open</span></h2><p class="muted">Damaged or missing material is kept visible for follow-up.</p>
           <div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Transfer</th><th>SKU</th><th>Issue</th><th>Quantity</th><th>Note</th></tr></thead><tbody id="transferExceptionRows"></tbody></table></div>
         </section>

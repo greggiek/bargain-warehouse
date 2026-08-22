@@ -1,7 +1,7 @@
 (() => {
   const nav = document.getElementById('transfersNav'), view = document.getElementById('transferView');
   if (!nav || !view) return;
-  const otherViews = ['overviewView','inventoryView','productSyncView','snapshotView'].map((id)=>document.getElementById(id));
+  const otherViews = ['overviewView','inventoryView','productSyncView','snapshotView','skuFixView','receivingView','productionView','bomManagementView','parLevelsView','forecastingView','purchaseOrdersView'].map((id)=>document.getElementById(id));
   const otherNavs = ['overviewNav','inventoryNav','productSyncNav','snapshotNav'].map((id)=>document.getElementById(id));
   const from=document.getElementById('transferFrom'), to=document.getElementById('transferTo');
   const sku=document.getElementById('transferSku'), quantity=document.getElementById('transferQty');
@@ -9,7 +9,13 @@
   const suggestions=document.getElementById('transferSuggestions'), rows=document.getElementById('transferRows');
   const queueSearch=document.getElementById('transferQueueSearch'), statusFilter=document.getElementById('transferStatusFilter');
   const documentScanPanel=document.getElementById('transferDocumentScanPanel'), documentScanInput=document.getElementById('transferDocumentScanInput'), documentScanStatus=document.getElementById('transferDocumentScanStatus');
-  let transfers=[], searchTimer, searchRequest=0;
+  const newTransferButton=document.getElementById('transferNewButton');
+  const createPanel=document.getElementById('transferCreatePanel');
+  const adminSections=['transferInTransit','transferQueue','transferHistory','transferExceptions'].map((id)=>document.getElementById(id));
+  const overviewReceiveTransfer=document.getElementById('overviewReceiveTransfer');
+  const transferQueue=document.getElementById('transferQueue'), transferInTransit=document.getElementById('transferInTransit');
+  if(transferQueue&&transferInTransit)transferQueue.parentNode.insertBefore(transferQueue,transferInTransit);
+  let transfers=[], searchTimer, searchRequest=0, createMode=false, capabilities={ canManageTransfers:false, canReceiveTransfers:false };
   let scanSession=null, pendingReceiptLines=null;
   const show=(message,failed=false)=>{status.textContent=message;status.classList.toggle('error',failed);};
   const cell=(row,value)=>{const element=document.createElement('td');element.textContent=value;row.append(element);};
@@ -17,6 +23,17 @@
   const formatStatus=(value)=>String(value||'').replace(/_/g,' ');
   const locationOption=(location)=>{const option=document.createElement('option');option.value=location.id;option.textContent=location.name;option.disabled=!location.canManage;return option;};
   const actionButton=(label,transfer,action)=>{const button=document.createElement('button');button.className='button secondary';button.type='button';button.textContent=label;button.addEventListener('click',()=>openScanner(transfer,action));return button;};
+  function applyCapabilities(receiveOnly=false){
+    const isAdmin=Boolean(capabilities.canManageTransfers);
+    newTransferButton.hidden=!isAdmin;
+    createPanel.hidden=!isAdmin || !createMode;
+    adminSections.forEach((section)=>{if(section)section.hidden=!isAdmin;});
+    if(receiveOnly || !isAdmin){
+      documentScanPanel.hidden=false;
+      documentScanStatus.textContent='Scan the main barcode printed on the incoming transfer to begin.';
+      documentScanStatus.classList.remove('error');
+    }
+  }
   function openCamera(onScan,statusElement){
     if(!('BarcodeDetector' in window))return statusElement.textContent='Camera scanning is not supported by this browser. Use the phone scanner field or a Bluetooth scanner.';
     const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px;background:#07101ddd';
@@ -29,6 +46,7 @@
   }
   function printTransfer(transfer){
     const lines=transfer.transfer_lines||[];
+    if(!capabilities.canManageTransfers)return show('Only administrators can print transfer paperwork.',true);
     const popup=window.open('about:blank','_blank','width=900,height=700');
     if(!popup)return show('Allow pop-ups to print this transfer.',true);
     const esc=value=>String(value??'').replace(/[&<>"']/g,x=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[x]));
@@ -62,6 +80,8 @@
     popup.document.close();popup.focus();setTimeout(()=>popup.print(),150);
   }
   function openScanner(transfer,action){
+    if(action==='ship'&&!capabilities.canManageTransfers)return show('Only administrators can ship transfers.',true);
+    if(action==='receive'&&!capabilities.canReceiveTransfers)return show('You do not have receiving access for this transfer.',true);
     scanSession={transfer,action,counts:new Map()};document.getElementById('transferScanPanel').hidden=false;document.getElementById('transferScanTitle').textContent=(action==='ship'?'Ship ':'Receive ')+transfer.transfer_number;
     document.getElementById('transferScanHelp').textContent=action==='ship'?'Scan every item leaving the origin. Confirming ships the transfer.':'Scan everything received. You can record discrepancies after the scan.';
     document.getElementById('transferScanStatus').textContent='';renderScan();document.getElementById('transferScanPanel').scrollIntoView({behavior:'smooth',block:'center'});document.getElementById('transferScanInput').focus();
@@ -124,7 +144,7 @@
     const term=queueSearch.value.trim().toLowerCase(),wanted=statusFilter.value;
     const visible=transfers.filter((transfer)=>{const line=transfer.transfer_lines?.[0],haystack=[transfer.transfer_number,transfer.from_location?.name,transfer.to_location?.name,transfer.status,line?.products?.sku,line?.products?.name].join(' ').toLowerCase();return (!term||haystack.includes(term))&&(!wanted||transfer.status===wanted);});
     if(!visible.length)return empty(rows,7,'No transfers match this view.');
-    rows.replaceChildren();visible.forEach((transfer)=>{const row=document.createElement('tr'),lines=transfer.transfer_lines||[],pieces=lines.reduce((sum,line)=>sum+Number(line.requested_quantity||0),0);cell(row,transfer.transfer_number);cell(row,transfer.from_location?.name||'—');cell(row,transfer.to_location?.name||'—');cell(row,formatStatus(transfer.status));cell(row,String(lines.length));cell(row,String(pieces));const action=document.createElement('td'),print=document.createElement('button');print.className='button secondary';print.type='button';print.textContent='Print';print.addEventListener('click',()=>printTransfer(transfer));action.append(print);if(transfer.status==='allocated')action.append(actionButton('Ship',transfer,'ship'));else if(['in_transit','partially_received'].includes(transfer.status))action.append(actionButton('Receive',transfer,'receive'));row.append(action);rows.append(row);});
+    rows.replaceChildren();visible.forEach((transfer)=>{const row=document.createElement('tr'),lines=transfer.transfer_lines||[],pieces=lines.reduce((sum,line)=>sum+Number(line.requested_quantity||0),0);cell(row,transfer.transfer_number);cell(row,transfer.from_location?.name||'—');cell(row,transfer.to_location?.name||'—');cell(row,formatStatus(transfer.status));cell(row,String(lines.length));cell(row,String(pieces));const action=document.createElement('td');if(capabilities.canManageTransfers){const print=document.createElement('button');print.className='button secondary';print.type='button';print.textContent='Print';print.addEventListener('click',()=>printTransfer(transfer));action.append(print);if(transfer.status==='allocated')action.append(actionButton('Ship',transfer,'ship'));}if(capabilities.canReceiveTransfers&&['in_transit','partially_received'].includes(transfer.status))action.append(actionButton('Receive',transfer,'receive'));if(!action.childNodes.length)action.textContent='—';row.append(action);rows.append(row);});
   }
   function renderInTransit(lines,summary){
     document.getElementById('inTransitPieces').textContent=summary.inTransitPieces+' pieces';
@@ -145,18 +165,22 @@
   async function load(){
     show('Loading your V2 transfer command center…');const response=await fetch('/api/transfers',{credentials:'same-origin'});const data=await response.json();
     if(!response.ok)return show(data.error||'Could not load transfers.',true);
+    capabilities=data.capabilities||capabilities;
     [from,to].forEach((select)=>{select.replaceChildren();const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Choose location';select.append(placeholder);data.locations.forEach((location)=>select.append(locationOption(location)));});
     transfers=data.transfers||[];renderQueue();renderInTransit(data.inTransitLines||[],data.summary||{inTransitPieces:0,activeTransfers:0,inTransitSkus:0});renderHistory(data.history||[]);renderExceptions(data.exceptions||[]);
-    show('Create, ship, and receive transfers in the V2 ledger. Shopify and Qoblex are not changed.');
+    applyCapabilities();
+    show(capabilities.canManageTransfers?'Create, print, ship, and receive transfers in the V2 ledger.':'Scan an incoming transfer to receive it into your assigned warehouse.');
   }
   queueSearch.addEventListener('input',renderQueue);statusFilter.addEventListener('change',renderQueue);
-  document.getElementById('transferCreateChoice').addEventListener('click',()=>{document.getElementById('transferCreatePanel').scrollIntoView({behavior:'smooth',block:'center'});sku.focus();});
-  document.getElementById('transferReceiveChoice').addEventListener('click',openDocumentScan);
-  nav.addEventListener('click',async()=>{otherViews.forEach((element)=>{if(element)element.hidden=true;});otherNavs.forEach((element)=>element&&element.classList.remove('active'));nav.classList.add('active');view.hidden=false;await load();});
+  newTransferButton.addEventListener('click',()=>{if(!capabilities.canManageTransfers)return show('Only administrators can create transfers.',true);createMode=true;applyCapabilities();createPanel.scrollIntoView({behavior:'smooth',block:'center'});sku.focus();});
+  async function openWorkspace(receiveOnly=false){otherViews.forEach((element)=>{if(element)element.hidden=true;});otherNavs.forEach((element)=>element&&element.classList.remove('active'));nav.classList.add('active');view.hidden=false;await load();applyCapabilities(receiveOnly);if(receiveOnly||!capabilities.canManageTransfers)openDocumentScan();}
+  nav.addEventListener('click',()=>openWorkspace(false));
+  overviewReceiveTransfer?.addEventListener('click',()=>openWorkspace(true));
   create.addEventListener('click',async()=>{
+    if(!capabilities.canManageTransfers)return show('Only administrators can create transfers.',true);
     if(!from.value||!to.value||!sku.value.trim()||!quantity.value)return show('Choose locations, an exact SKU, and a quantity.',true);
     if(from.value===to.value)return show('Choose two different locations.',true);create.disabled=true;show('Allocating transfer…');
-    try{const response=await fetch('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:'create',fromLocationId:from.value,toLocationId:to.value,sku:sku.value,quantity:quantity.value})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Transfer could not be allocated.');sku.value='';quantity.value='';await load();show('Transfer '+data.transfer.transferNumber+' created and allocated. Ship it when it leaves.');}
+    try{const response=await fetch('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:'create',fromLocationId:from.value,toLocationId:to.value,sku:sku.value,quantity:quantity.value})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Transfer could not be allocated.');sku.value='';quantity.value='';createMode=false;await load();show('Transfer '+data.transfer.transferNumber+' created and allocated. Ship it when it leaves.');}
     catch(error){show(error.message,true);}finally{create.disabled=false;}
   });
 })();
