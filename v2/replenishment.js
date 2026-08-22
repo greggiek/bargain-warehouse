@@ -21,8 +21,8 @@
     const host = $('purchaseOrderRows'); host.replaceChildren(); const open = purchaseOrders.filter(order => !['received', 'cancelled'].includes(order.status));
     open.forEach(order => {
       const row = document.createElement('tr'), lines = order.purchase_order_lines || []; cell(row, order.purchase_order_number); cell(row, order.vendor_name || 'Unassigned'); cell(row, String(lines.length)); cell(row, fmt(lines.reduce((sum, line) => sum + Number(line.ordered_quantity || 0), 0))); cell(row, order.status.replaceAll('_', ' '));
-      const action = document.createElement('td'), receive = document.createElement('button'); receive.className = 'button'; receive.type = 'button'; receive.textContent = 'Receive at 730';
-      receive.onclick = async () => { try { if (!confirm('Receive every outstanding line on ' + order.purchase_order_number + ' into 730?')) return; const response = await fetch('/api/purchase-orders', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'receive', purchaseOrderId: order.id }) }), data = await response.json(); if (!response.ok) throw Error(data.error || 'Could not receive purchase order'); poSet(data.purchaseOrder.purchaseOrderNumber + ' received into 730. Create MT transfers when you are ready to distribute it.'); await load(); } catch (error) { poSet(error.message, true); } };
+      const action = document.createElement('td'), receive = document.createElement('button'); receive.className = 'button secondary'; receive.type = 'button'; receive.textContent = 'Open PO';
+      receive.onclick = () => document.getElementById('purchaseOrdersNav')?.click();
       action.append(receive); row.append(action); host.append(row);
     });
     if (!open.length) { const row = document.createElement('tr'), td = document.createElement('td'); td.colSpan = 6; td.className = 'muted'; td.textContent = 'No open purchase orders for 730.'; row.append(td); host.append(row); }
