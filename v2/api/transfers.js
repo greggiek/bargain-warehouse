@@ -1,6 +1,8 @@
 const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
 
+const TRANSFER_ADMIN_ROLES = new Set(['admin', 'developer']);
+
 async function accessForUser(url, key, userId) {
   const response = await fetch(
     url + '/rest/v1/user_location_access?user_id=eq.' + userId + '&select=location_id,can_manage,locations(id,name,active)',
@@ -18,8 +20,11 @@ module.exports = async (req, res) => {
 
   try {
     const locations = await accessForUser(url, serviceRoleKey, auth.user.id);
+    const canManageTransfers = TRANSFER_ADMIN_ROLES.has(auth.user.role);
+    const managedLocationIds = new Set(locations.filter((location) => location.canManage).map((location) => location.id));
     const productSearch = String(req.query?.productSearch || '').trim();
     if (req.method === 'GET' && productSearch) {
+      if (!canManageTransfers) return res.status(403).json({ ok: false, error: 'Administrator access is required to create transfers.' });
       const term = productSearch.trim();
       if (term.length < 2) return res.status(200).json({ ok: true, products: [] });
       const response = await fetch(url + '/rest/v1/rpc/search_v2_products', {
@@ -39,7 +44,9 @@ module.exports = async (req, res) => {
       const transfers = await response.json();
       const allowed = new Set(locations.map((location) => location.id));
       const visibleTransfers = (Array.isArray(transfers) ? transfers : []).filter((transfer) =>
-        allowed.has(transfer.from_location_id) || allowed.has(transfer.to_location_id)
+        canManageTransfers
+          ? allowed.has(transfer.from_location_id) || allowed.has(transfer.to_location_id)
+          : managedLocationIds.has(transfer.to_location_id)
       );
       const productIds = [...new Set(visibleTransfers.flatMap((transfer) =>
         (transfer.transfer_lines || []).map((line) => Number(line.product_id)).filter(Number.isInteger)
@@ -59,9 +66,11 @@ module.exports = async (req, res) => {
         fetch(url + '/rest/v1/activity_events?select=id,action_type,document_number,description,status,created_at,user_name&document_type=eq.transfer&order=created_at.desc&limit=100', { headers: jsonHeaders(serviceRoleKey) }),
         fetch(url + '/rest/v1/transfer_discrepancies?select=id,discrepancy_type,quantity,note,created_at,transfers(transfer_number,from_location_id,to_location_id),transfer_lines(products(sku,name))&resolved_at=is.null&order=created_at.desc&limit=100', { headers: jsonHeaders(serviceRoleKey) })
       ]);
-      const history = historyResponse.ok ? await historyResponse.json() : [];
+      const history = canManageTransfers && historyResponse.ok ? await historyResponse.json() : [];
       const exceptions = exceptionResponse.ok ? (await exceptionResponse.json()).filter((item) =>
-        allowed.has(item.transfers?.from_location_id) || allowed.has(item.transfers?.to_location_id)
+        canManageTransfers
+          ? allowed.has(item.transfers?.from_location_id) || allowed.has(item.transfers?.to_location_id)
+          : managedLocationIds.has(item.transfers?.to_location_id)
       ) : [];
       const activeTransfers = visibleTransfers.filter((transfer) => !['completed', 'cancelled'].includes(transfer.status));
       const inTransit = visibleTransfers.filter((transfer) => ['in_transit', 'partially_received'].includes(transfer.status));
@@ -72,7 +81,8 @@ module.exports = async (req, res) => {
         inTransit: Number(line.shipped_quantity || 0) - Number(line.received_quantity || 0) - Number(line.damaged_quantity || 0) - Number(line.missing_quantity || 0)
       })));
       return res.status(response.status).json({
-        ok: response.ok, locations, transfers: visibleTransfers, history, exceptions, inTransitLines,
+        ok: response.ok, locations: canManageTransfers ? locations : locations.filter((location) => location.canManage), transfers: visibleTransfers, history,
+        capabilities: { canManageTransfers, canReceiveTransfers: managedLocationIds.size > 0 }, exceptions, inTransitLines,
         summary: {
           activeTransfers: activeTransfers.length,
           inTransitPieces: inTransitLines.reduce((sum, line) => sum + Math.max(0, line.inTransit), 0),
@@ -86,6 +96,7 @@ module.exports = async (req, res) => {
     const body = req.body || {};
     const action = body.action || 'create';
     if (action === 'create') {
+      if (!canManageTransfers) return res.status(403).json({ ok: false, error: 'Administrator access is required to create transfers.' });
       const sku = String(body.sku || '').trim();
       const quantity = Number(body.quantity);
       const fromLocationId = Number(body.fromLocationId);
@@ -114,6 +125,7 @@ module.exports = async (req, res) => {
     }
 
     if (action !== 'ship' && action !== 'receive') return res.status(400).json({ ok: false, error: 'Unknown transfer action.' });
+    if (action === 'ship' && !canManageTransfers) return res.status(403).json({ ok: false, error: 'Administrator access is required to ship transfers.' });
     const transferId = Number(body.transferId);
     if (!Number.isInteger(transferId) || transferId < 1) return res.status(400).json({ ok: false, error: 'A transfer is required.' });
     const transferResponse = await fetch(url + '/rest/v1/transfers?id=eq.' + transferId + '&select=id,from_location_id,to_location_id&limit=1', { headers: jsonHeaders(serviceRoleKey) });
