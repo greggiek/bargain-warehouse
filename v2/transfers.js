@@ -144,7 +144,6 @@
   document.getElementById('transferQuantityCancel').addEventListener('click',()=>{pendingQuantityLine=null;const dialog=document.getElementById('transferQuantityDialog');if(typeof dialog.close==='function')dialog.close();else dialog.hidden=true;});
   documentScanInput.addEventListener('keydown',(event)=>{if(event.key==='Enter'){event.preventDefault();openTransferFromPaperwork(event.currentTarget.value);}});
   document.getElementById('transferDocumentCameraScan').addEventListener('click',()=>openCamera(openTransferFromPaperwork,documentScanStatus));
-  document.getElementById('transferDocumentCancel').addEventListener('click',()=>{documentScanPanel.hidden=true;});
   function renderQueue(){
     const term=queueSearch.value.trim().toLowerCase(),wanted=statusFilter.value;
     const visible=transfers.filter((transfer)=>{const line=transfer.transfer_lines?.[0],haystack=[transfer.transfer_number,transfer.from_location?.name,transfer.to_location?.name,transfer.status,line?.products?.sku,line?.products?.name].join(' ').toLowerCase();return (!term||haystack.includes(term))&&(!wanted||transfer.status===wanted);});
