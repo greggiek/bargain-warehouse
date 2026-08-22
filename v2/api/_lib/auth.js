@@ -1,5 +1,7 @@
 const ACCESS_COOKIE = 'bm_v2_access_token';
 const REFRESH_COOKIE = 'bm_v2_refresh_token';
+const BMOS_COOKIE = 'bm_v2_bmos_session';
+const crypto = require('crypto');
 
 function configuration() {
   return {
@@ -32,12 +34,40 @@ function clearSessionCookies() {
   const expired = 'Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=0';
   return [
     `${ACCESS_COOKIE}=; ${expired}`,
-    `${REFRESH_COOKIE}=; ${expired}`
+    `${REFRESH_COOKIE}=; ${expired}`,
+    `${BMOS_COOKIE}=; ${expired}`
   ];
 }
 
 function accessToken(req) {
   return parseCookies(req.headers?.cookie)[ACCESS_COOKIE];
+}
+
+function hasBmOsSessionCookie(req) {
+  return Boolean(parseCookies(req.headers?.cookie)[BMOS_COOKIE]);
+}
+
+function bmOsSessionCookie(session, signingKey) {
+  const payload = Buffer.from(JSON.stringify({ ...session, expiresAt: Date.now() + 12 * 60 * 60 * 1000 })).toString('base64url');
+  const signature = crypto.createHmac('sha256', signingKey).update(payload).digest('base64url');
+  return `${BMOS_COOKIE}=${payload}.${signature}; Path=/; HttpOnly; Secure; SameSite=Lax; Max-Age=43200`;
+}
+
+function bmOsSession(req, signingKey) {
+  const token = parseCookies(req.headers?.cookie)[BMOS_COOKIE];
+  if (!token || !signingKey) return null;
+  const [payload, supplied] = token.split('.');
+  if (!payload || !supplied) return null;
+  const expected = crypto.createHmac('sha256', signingKey).update(payload).digest('base64url');
+  const a = Buffer.from(supplied);
+  const b = Buffer.from(expected);
+  if (a.length !== b.length || !crypto.timingSafeEqual(a, b)) return null;
+  try {
+    const session = JSON.parse(Buffer.from(payload, 'base64url').toString('utf8'));
+    return session.expiresAt > Date.now() ? session : null;
+  } catch (_error) {
+    return null;
+  }
 }
 
 function jsonHeaders(apiKey, bearer = apiKey) {
@@ -50,8 +80,11 @@ function jsonHeaders(apiKey, bearer = apiKey) {
 
 module.exports = {
   accessToken,
+  bmOsSession,
+  bmOsSessionCookie,
   clearSessionCookies,
   configuration,
+  hasBmOsSessionCookie,
   jsonHeaders,
   sessionCookies
 };

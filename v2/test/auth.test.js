@@ -30,11 +30,12 @@ test('login requires both credentials', async () => {
   assert.equal(capture.read().statusCode, 400);
 });
 
-test('logout expires both session cookies', () => {
+test('logout expires Google and BM OS session cookies', () => {
   const capture = responseCapture();
   logout({ method: 'POST' }, capture.res);
   assert.equal(capture.read().statusCode, 200);
-  assert.equal(capture.read().headers['Set-Cookie'].length, 2);
+  assert.equal(capture.read().headers['Set-Cookie'].length, 3);
+  assert.match(capture.read().headers['Set-Cookie'][2], /bm_v2_bmos_session/);
   assert.match(capture.read().headers['Set-Cookie'][0], /HttpOnly/);
   assert.match(capture.read().headers['Set-Cookie'][0], /Max-Age=0/);
 });
