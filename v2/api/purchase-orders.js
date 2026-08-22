@@ -92,6 +92,28 @@ module.exports = async function purchaseOrders(req, res) {
       if (!canManagePurchaseOrders) return res.status(403).json({ ok: false, error: 'Only an admin can send a purchase order.' });
       return res.status(200).json({ ok: true, purchaseOrder: await rpc(url, serviceRoleKey, 'send_v2_purchase_order', { p_purchase_order_id: purchaseOrderId, p_user_id: auth.user.id, p_user_name: auth.user.display_name }) });
     }
+    if (action === 'update-detailed') {
+      if (!canManagePurchaseOrders) return res.status(403).json({ ok: false, error: 'Only an admin can edit a purchase order.' });
+      if (order.status !== 'draft') return res.status(400).json({ ok: false, error: 'Only a draft purchase order can be edited.' });
+      const receivingLocationId = integer(body.receivingLocationId);
+      if (!receivingLocationId || !access.some(location => location.id === receivingLocationId)) return res.status(400).json({ ok: false, error: 'Choose an accessible receiving location.' });
+      const lines = (body.lines || []).map(line => ({ productId: integer(line.productId), quantity: Number(line.quantity), note: String(line.note || ''), uom: String(line.uom || 'EA').trim().toUpperCase(), unitCost: Number(line.unitCost || 0) })).filter(line => line.productId && Number.isFinite(line.quantity) && line.quantity > 0 && Number.isFinite(line.unitCost) && line.unitCost >= 0);
+      if (!lines.length) return res.status(400).json({ ok: false, error: 'Add at least one PO item with a quantity and non-negative unit cost.' });
+      return res.status(200).json({ ok: true, purchaseOrder: await rpc(url, serviceRoleKey, 'update_v2_purchase_order_with_details', {
+        p_purchase_order_id: purchaseOrderId,
+        p_vendor_name: String(body.vendorName || ''),
+        p_supplier_reference_number: String(body.supplierReferenceNumber || ''),
+        p_receiving_location_id: receivingLocationId,
+        p_order_date: body.orderDate || null,
+        p_expected_date: body.expectedDate || null,
+        p_shipping_cost: Number(body.shippingCost || 0),
+        p_lines: lines,
+        p_notes: String(body.notes || ''),
+        p_idempotency_key: String(body.idempotencyKey || ''),
+        p_user_id: auth.user.id,
+        p_user_name: auth.user.display_name
+      }) });
+    }
     if (action === 'receive-lines') {
       if (!manageable.some(entry => entry.id === Number(order.receiving_location_id))) return res.status(403).json({ ok: false, error: 'You need manager access to this PO receiving location.' });
       const lines = (body.lines || []).map(line => ({ lineId: integer(line.lineId), quantity: Number(line.quantity) })).filter(line => line.lineId && Number.isFinite(line.quantity) && line.quantity > 0);
