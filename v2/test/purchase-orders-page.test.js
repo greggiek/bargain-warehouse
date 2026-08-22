@@ -16,6 +16,9 @@ test('PO master drills into an order workspace and receiving is launched from Ov
   assert.match(page, /id="poDetailPanel"/);
   assert.match(page, /id="overviewReceivePo"/);
   assert.match(page, /id="poReceivingDialog"/);
+  assert.match(page, /id="poReceiveOrderScan"/);
+  assert.match(page, /Scan PO to start/);
+  assert.match(behavior, /scanPurchaseOrder/);
   assert.match(page, /Scan SKU or barcode, then press Enter/);
   assert.match(behavior, /action: 'send'/);
   assert.match(behavior, /action: 'receive-lines'/);
