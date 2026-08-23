@@ -1,7 +1,23 @@
-(() => { const $=id=>document.getElementById(id); let order=null; const set=(text,error=false)=>{$('salesOrderStatus').textContent=text;$('salesOrderStatus').classList.toggle('error',error)};
-  const dialog=$('salesOrderDialog'); const show=()=>{if(!dialog.open)dialog.showModal();$('salesOrderScanInput').focus()};
-  function render(){const host=$('salesOrderTicket'); if(!order){host.hidden=true;return}host.hidden=false; const will=order.route==='will_call';host.innerHTML='<section class="card section"><div class="transfer-kicker">'+(will?'Will Call':'Delivery')+'</div><h2>'+order.number+' · '+order.customer+'</h2><p class="muted">'+order.storeLabel+' · '+order.deliveryMethod+'</p><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>SKU</th><th>Item</th><th>To pick</th></tr></thead><tbody>'+order.lines.map(line=>'<tr><td>'+line.sku+'</td><td>'+line.name+'</td><td>'+line.remaining+'</td></tr>').join('')+'</tbody></table></div>'+ (will?'<button id="salesOrderComplete" class="button" type="button">Complete Will Call & notify customer</button>':'<p class="inventory-status">Delivery order: pick and stage this for EasyTeams. It is not marked delivered here.</p>')+'</section>'; $('salesOrderComplete')?.addEventListener('click',complete);}
-  async function lookup(){const scan=$('salesOrderScanInput').value.trim();if(!scan)return set('Scan or enter the receipt order number.',true);set('Finding the unfulfilled Shopify order…');const response=await fetch('/api/sales-orders?scan='+encodeURIComponent(scan),{credentials:'same-origin'}),data=await response.json().catch(()=>({}));if(!response.ok)throw Error(data.error||'Could not find the order.');order=data.order;$('salesOrderScanInput').value=order.number;set((order.route==='will_call'?'Will Call':'Delivery')+' order found.');render();}
-  async function complete(){if(!order)return;const button=$('salesOrderComplete');button.disabled=true;button.textContent='Completing…';const response=await fetch('/api/sales-orders',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'},body:JSON.stringify({storeKey:order.storeKey,orderId:order.id})}),data=await response.json().catch(()=>({}));if(!response.ok)throw Error(data.error||'Could not complete Will Call.');set(data.orderNumber+' fulfilled and Shopify customer notification sent.');$('salesOrderTicket').hidden=true;}
-  $('overviewSalesOrderScan').onclick=show;$('salesOrderFind').onclick=()=>lookup().catch(error=>set(error.message,true));$('salesOrderScanInput').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();lookup().catch(error=>set(error.message,true))}};$('salesOrderCamera').onclick=()=>window.BMWarehouseCamera?.open({onScan:value=>{$('salesOrderScanInput').value=value;lookup().catch(error=>set(error.message,true))},onError:message=>set(message,true),title:'Scan customer receipt'});
+(() => {
+  const $ = id => document.getElementById(id); let order = null;
+  const set = (text, error = false) => { $('salesOrderStatus').textContent = text; $('salesOrderStatus').classList.toggle('error', error); };
+  const dialog = $('salesOrderDialog');
+  const show = () => { if (!dialog.open) dialog.showModal(); $('salesOrderScanInput').focus(); };
+  function render() {
+    const host = $('salesOrderTicket'); if (!order) { host.hidden = true; return; } host.hidden = false;
+    const will = order.route === 'will_call';
+    host.innerHTML = '<section class="card section"><div class="transfer-kicker">' + (will ? 'Will Call' : 'Local Delivery') + '</div><h2>' + order.number + ' · ' + order.customer + '</h2><p class="muted">' + order.storeLabel + ' · ' + order.deliveryMethod + '</p><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>SKU</th><th>Item</th><th>To pick</th></tr></thead><tbody>' + order.lines.map(line => '<tr><td>' + line.sku + '</td><td>' + line.name + '</td><td>' + line.remaining + '</td></tr>').join('') + '</tbody></table></div><p class="inventory-status">Read-only test: verify and pick this order. BM Warehouse will not change Shopify yet.</p></section>';
+  }
+  async function lookup() {
+    const scan = $('salesOrderScanInput').value.trim(); if (!scan) return set('Scan or enter the receipt order number.', true);
+    set('Finding the unfulfilled Shopify order…');
+    const response = await fetch('/api/sales-orders?scan=' + encodeURIComponent(scan), {credentials:'same-origin'}), data = await response.json().catch(() => ({}));
+    if (!response.ok) throw Error(data.error || 'Could not find the order.');
+    order = data.order; $('salesOrderScanInput').value = order.number;
+    set((order.route === 'will_call' ? 'Will Call' : 'Local Delivery') + ' order found.'); render();
+  }
+  $('overviewSalesOrderScan').onclick = show;
+  $('salesOrderFind').onclick = () => lookup().catch(error => set(error.message, true));
+  $('salesOrderScanInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); lookup().catch(error => set(error.message, true)); } };
+  $('salesOrderCamera').onclick = () => window.BMWarehouseCamera?.open({onScan:value => { $('salesOrderScanInput').value = value; lookup().catch(error => set(error.message, true)); }, onError:message => set(message, true), title:'Scan customer receipt'});
 })();
