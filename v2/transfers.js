@@ -37,14 +37,8 @@
     }
   }
   function openCamera(onScan,statusElement){
-    if(!('BarcodeDetector' in window))return statusElement.textContent='Camera scanning is not supported by this browser. Use the phone scanner field or a Bluetooth scanner.';
-    const overlay=document.createElement('div');overlay.style.cssText='position:fixed;inset:0;z-index:50;display:grid;place-items:center;padding:20px;background:#07101ddd';
-    overlay.innerHTML='<section class="card" style="width:min(620px,100%)"><div class="topbar"><h2>Scan barcode</h2><button class="button secondary" type="button">Close</button></div><video playsinline muted style="display:block;width:100%;margin-top:14px;border-radius:12px;background:#000"></video><p class="muted" style="margin-bottom:0">Hold the transfer or SKU barcode inside the camera view.</p></section>';
-    const video=overlay.querySelector('video');let stream,frame;const close=()=>{cancelAnimationFrame(frame);stream?.getTracks().forEach(track=>track.stop());overlay.remove();};overlay.querySelector('button').addEventListener('click',close);document.body.append(overlay);
-    navigator.mediaDevices.getUserMedia({video:{facingMode:{ideal:'environment'}},audio:false}).then(async nextStream=>{
-      stream=nextStream;video.srcObject=stream;await video.play();const detector=new BarcodeDetector({formats:['code_39','code_128','qr_code','ean_13','ean_8','upc_a','upc_e','itf','codabar']});
-      const detect=async()=>{try{const [code]=await detector.detect(video);if(code?.rawValue){close();onScan(code.rawValue);return;}}catch(_){}frame=requestAnimationFrame(detect);};detect();
-    }).catch(()=>{close();statusElement.textContent='Camera permission was not granted. Scan with a Bluetooth scanner or enter the barcode number.';statusElement.classList.add('error');});
+    if(!window.BMWarehouseCamera){statusElement.textContent='Camera scanner is still loading. Try again in a moment.';statusElement.classList.add('error');return;}
+    window.BMWarehouseCamera.open({onScan,onError:message=>{statusElement.textContent=message;statusElement.classList.add('error');},title:'Scan transfer barcode',help:'Hold the transfer or SKU barcode inside the camera view.'});
   }
   function printTransfer(transfer){
     const lines=transfer.transfer_lines||[];
