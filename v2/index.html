@@ -346,6 +346,8 @@
       appView.hidden = false;
       document.getElementById('welcome').textContent = `Welcome, ${session.user.displayName}`;
       applyRoleNavigation(session.user.role);
+      const adjustment = document.getElementById('overviewInventoryAdjustment');
+      if (adjustment) adjustment.hidden = !['manager', 'admin', 'developer'].includes(session.user.role);
     }
 
     function applyRoleNavigation(role) {
