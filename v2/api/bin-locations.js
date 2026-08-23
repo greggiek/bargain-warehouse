@@ -47,12 +47,30 @@ module.exports = async function binLocations(req, res) {
         query(url, serviceRoleKey, 'inventory_bin_locations?location_id=eq.' + requested + '&select=id,product_id,bin_code,note,updated_at,updated_by_name,products(id,sku,name,category)&order=bin_code.asc&limit=5000'),
         query(url, serviceRoleKey, 'inventory_balances?location_id=eq.' + requested + '&select=product_id,quantity,products(id,sku,name,category)&limit=10000')
       ]);
-      const needle = search.toLowerCase();
-      const filtered = bins.filter(row => !needle || [row.bin_code, row.products?.sku, row.products?.name, row.products?.category].join(' ').toLowerCase().includes(needle));
-      const products = [...new Map(balances.map(row => [Number(row.product_id), {
-        id: Number(row.product_id), sku: row.products?.sku || '', name: row.products?.name || '', category: row.products?.category || '', quantity: Number(row.quantity || 0)
-      }])).values()].sort((a, b) => a.sku.localeCompare(b.sku));
-      return res.json({ ok: true, locations, locationId: requested, bins: filtered, products });
+      const binsByProduct = new Map(bins.map(row => [Number(row.product_id), row]));
+      const benchmark = [...new Map(balances.map(balance => {
+        const productId = Number(balance.product_id);
+        const bin = binsByProduct.get(productId);
+        return [productId, {
+          id: bin?.id || null,
+          product_id: productId,
+          bin_code: bin?.bin_code || null,
+          note: bin?.note || '',
+          updated_at: bin?.updated_at || null,
+          updated_by_name: bin?.updated_by_name || null,
+          products: balance.products || {},
+          quantity: Number(balance.quantity || 0)
+        }];
+      })).values()];
+      const filtered = benchmark.filter(row => !search || [row.bin_code, row.products?.sku, row.products?.name, row.products?.category].join(' ').toLowerCase().includes(search))
+        .sort((a, b) => Number(Boolean(a.bin_code)) - Number(Boolean(b.bin_code)) || String(a.bin_code || '').localeCompare(String(b.bin_code || '')) || String(a.products?.sku || '').localeCompare(String(b.products?.sku || '')));
+      const products = benchmark.map(row => ({
+        id: row.product_id, sku: row.products?.sku || '', name: row.products?.name || '', category: row.products?.category || '', quantity: row.quantity
+      })).sort((a, b) => a.sku.localeCompare(b.sku));
+      return res.json({
+        ok: true, locations, locationId: requested, bins: filtered, products,
+        summary: { total: benchmark.length, assigned: benchmark.filter(row => row.bin_code).length, unassigned: benchmark.filter(row => !row.bin_code).length }
+      });
     }
 
     if (req.method !== 'POST') { res.setHeader('Allow', 'GET, POST'); return res.status(405).json({ ok: false, error: 'method_not_allowed' }); }
