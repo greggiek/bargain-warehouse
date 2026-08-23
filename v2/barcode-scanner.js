@@ -1,43 +1,44 @@
+/* Cross-browser phone camera scanner. Mirrors the proven V1 ZXing fallback. */
 (() => {
-  const formats = ['code_39', 'code_128', 'qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf', 'codabar'];
-  const zxingFormats = () => (window.Html5QrcodeSupportedFormats ? [
-    Html5QrcodeSupportedFormats.CODE_39, Html5QrcodeSupportedFormats.CODE_128,
-    Html5QrcodeSupportedFormats.QR_CODE, Html5QrcodeSupportedFormats.EAN_13,
-    Html5QrcodeSupportedFormats.EAN_8, Html5QrcodeSupportedFormats.UPC_A,
-    Html5QrcodeSupportedFormats.UPC_E, Html5QrcodeSupportedFormats.ITF,
-    Html5QrcodeSupportedFormats.CODABAR
-  ] : undefined);
-
-  async function open({ onScan, onError, title = 'Scan barcode', help = 'Hold the printed barcode inside the camera view.' }) {
-    if (!navigator.mediaDevices?.getUserMedia) return onError('Camera access is not available in this browser. Enter the barcode number instead.');
-    const overlay = document.createElement('div'), targetId = 'warehouse-camera-' + Date.now();
+  const formats = ['code_128', 'code_39', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf', 'codabar', 'qr_code'];
+  let stream = null, loop = 0, zxingControls = null, closed = false;
+  const constraints = { video: { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 } }, audio: false };
+  function loadZxing() {
+    if (window.ZXingBrowser) return Promise.resolve(window.ZXingBrowser);
+    if (window.bmZxingPromise) return window.bmZxingPromise;
+    window.bmZxingPromise = new Promise((resolve, reject) => {
+      const script = document.createElement('script'); script.src = 'https://unpkg.com/@zxing/browser@latest'; script.crossOrigin = 'anonymous';
+      script.onload = () => window.ZXingBrowser ? resolve(window.ZXingBrowser) : reject(Error('Barcode reader did not load'));
+      script.onerror = () => reject(Error('Could not load the iPhone barcode reader')); document.head.append(script);
+    });
+    return window.bmZxingPromise;
+  }
+  function message(error) {
+    if (!window.isSecureContext) return 'Camera scanning requires the secure https:// app address.';
+    if (error?.name === 'NotAllowedError') return 'Camera permission is blocked. On iPhone: Settings → Firefox → Camera → Allow, then reload BM Warehouse.';
+    if (error?.name === 'NotFoundError') return 'No rear camera was found on this device.';
+    return 'Could not start the camera' + (error?.message ? ': ' + error.message : '.') + ' Enter the barcode number instead.';
+  }
+  async function open({ onScan, onError, title = 'Scan barcode', help = 'Hold the printed barcode inside the green box.' }) {
+    if (!navigator.mediaDevices?.getUserMedia) return onError('Camera access is unavailable in this browser. Enter the barcode number instead.');
+    const overlay = document.createElement('div'); closed = false;
     overlay.className = 'warehouse-camera-overlay';
-    overlay.innerHTML = '<section class="card warehouse-camera-panel"><div class="warehouse-camera-head"><div><div class="transfer-kicker">Camera scanner</div><h2>' + title + '</h2><p class="muted">' + help + '</p></div><button class="button secondary" type="button">Close</button></div><div id="' + targetId + '" class="warehouse-camera-view"></div></section>';
-    document.body.append(overlay);
-    let stream, frame, reader, closed = false;
-    const close = async () => {
-      if (closed) return; closed = true; cancelAnimationFrame(frame);
-      try { await reader?.stop(); } catch (_) {}
-      stream?.getTracks().forEach(track => track.stop()); overlay.remove();
-    };
-    overlay.querySelector('button').addEventListener('click', close);
-    const complete = async value => { await close(); onScan(value); };
+    overlay.innerHTML = '<section class="card warehouse-camera-panel" role="dialog" aria-modal="true"><div class="warehouse-camera-head"><div><div class="transfer-kicker">Camera scanner</div><h2>' + title + '</h2><p class="muted">' + help + '</p></div><button class="button secondary" type="button">Close</button></div><div class="warehouse-camera-viewport"><video playsinline muted></video><div class="warehouse-camera-guide"></div></div><p class="warehouse-camera-status">Starting rear camera…</p><p class="warehouse-camera-error" hidden></p></section>';
+    document.body.append(overlay); const video = overlay.querySelector('video'), status = overlay.querySelector('.warehouse-camera-status'), errorBox = overlay.querySelector('.warehouse-camera-error');
+    const close = async () => { if (closed) return; closed = true; cancelAnimationFrame(loop); loop = 0; try { zxingControls?.stop?.(); } catch (_) {} zxingControls = null; stream?.getTracks().forEach(track => track.stop()); stream = null; overlay.remove(); };
+    overlay.querySelector('button').onclick = close;
+    const complete = async value => { await close(); onScan(String(value || '').trim()); };
     try {
       if ('BarcodeDetector' in window) {
-        const video = document.createElement('video'); video.playsInline = true; video.muted = true; video.className = 'warehouse-camera-video'; document.getElementById(targetId).append(video);
-        stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false });
-        video.srcObject = stream; await video.play(); const detector = new BarcodeDetector({ formats });
-        const detect = async () => { try { const [code] = await detector.detect(video); if (code?.rawValue) return complete(code.rawValue); } catch (_) {} if (!closed) frame = requestAnimationFrame(detect); };
-        detect(); return;
+        const detector = new BarcodeDetector({ formats }); stream = await navigator.mediaDevices.getUserMedia(constraints); video.srcObject = stream; await video.play(); status.textContent = 'Hold the barcode inside the green box.';
+        const detect = async () => { if (!stream || closed) return; try { const codes = await detector.detect(video); if (codes[0]?.rawValue) return complete(codes[0].rawValue); } catch (_) {} loop = requestAnimationFrame(detect); }; detect();
+      } else {
+        status.textContent = 'Loading iPhone barcode reader…'; const ZXing = await loadZxing(), reader = new ZXing.BrowserMultiFormatReader();
+        zxingControls = await reader.decodeFromConstraints(constraints, video, result => { if (result) complete(result.getText?.() || result.text); });
+        stream = video.srcObject; status.textContent = 'Hold the barcode inside the green box.';
       }
-      if (!window.Html5Qrcode) throw Error('barcode_decoder_unavailable');
-      reader = new Html5Qrcode(targetId, { formatsToSupport: zxingFormats(), verbose: false });
-      await reader.start({ facingMode: { ideal: 'environment' } }, { fps: 10, qrbox: { width: 280, height: 180 }, aspectRatio: 1.333 }, value => complete(value), () => {});
-    } catch (error) {
-      await close();
-      const denied = error?.name === 'NotAllowedError' || /permission|denied/i.test(String(error?.message || ''));
-      onError(denied ? 'Camera permission was not granted. Allow camera access, then try again.' : 'The camera could not start. Enter the barcode number instead.');
-    }
+    } catch (error) { status.textContent = 'Camera scanner unavailable'; errorBox.hidden = false; errorBox.textContent = message(error); }
   }
   window.BMWarehouseCamera = { open };
+  window.addEventListener('pagehide', () => { try { zxingControls?.stop?.(); } catch (_) {} stream?.getTracks().forEach(track => track.stop()); });
 })();
