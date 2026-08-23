@@ -33,7 +33,7 @@ module.exports=async(req,res)=>{
     const lineResponse=await fetch(url+'/rest/v1/cycle_count_lines?id=eq.'+lineId+'&run_id=eq.'+runId+'&select=id,expected_quantity',{headers:jsonHeaders(key),signal:AbortSignal.timeout(8000)});
     const lines=await lineResponse.json();if(!lineResponse.ok||!lines.length)return res.status(404).json({ok:false,error:'Count item not found.'});
     const expected=Number(lines[0].expected_quantity),variance=counted-expected,status=variance===0?'counted':'variance';
-    const patch=await fetch(url+'/rest/v1/cycle_count_lines?id=eq.'+lineId,{method:'PATCH',headers:{...jsonHeaders(key),'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({counted_quantity:counted,status,counted_by_user_id:auth.user.id,counted_by_name:auth.user.display_name,counted_at:new Date().toISOString(),note:note||null}),signal:AbortSignal.timeout(8000)});
+    const patch=await fetch(url+'/rest/v1/cycle_count_lines?id=eq.'+lineId,{method:'PATCH',headers:{...jsonHeaders(key),'Content-Type':'application/json','Prefer':'return=minimal'},body:JSON.stringify({counted_quantity:counted,status,counted_by_user_id:auth.user.id,counted_by_name:auth.user.display_name,counted_at:new Date().toISOString(),note:note||null,review_status:'pending'}),signal:AbortSignal.timeout(8000)});
     if(!patch.ok)throw Error('Could not save physical count.');
     const all=await runPayload(url,key,runId);
     if(all.lines.every(line=>line.status!=='pending')&&all.status==='open'){
