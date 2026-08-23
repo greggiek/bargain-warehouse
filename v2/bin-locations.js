@@ -28,15 +28,19 @@
     const body = $('binLocationRows'); body.replaceChildren();
     rows.forEach(row => {
       const tr = document.createElement('tr');
-      [row.bin_code, row.products?.sku || '—', row.products?.name || '—', row.products?.category || '—', row.updated_by_name || '—', new Date(row.updated_at).toLocaleString(), row.note || '—'].forEach(value => {
+      const bin = document.createElement('td');
+      if (row.bin_code) { const label = document.createElement('span'); label.className = 'bin-code'; label.textContent = row.bin_code; bin.append(label); }
+      else { const label = document.createElement('span'); label.className = 'bin-not-set'; label.textContent = 'Not set'; bin.append(label); }
+      tr.append(bin);
+      [row.products?.sku || '—', row.products?.name || '—', row.products?.category || '—', row.quantity, row.updated_by_name || '—', row.updated_at ? new Date(row.updated_at).toLocaleString() : '—', row.note || '—'].forEach(value => {
         const td = document.createElement('td'); td.textContent = value; tr.append(td);
       });
       const actionCell = document.createElement('td'), change = document.createElement('button');
-      change.type = 'button'; change.className = 'button secondary'; change.textContent = 'Change';
+      change.type = 'button'; change.className = 'button secondary'; change.textContent = row.bin_code ? 'Change' : 'Set bin';
       change.onclick = () => openDialog(row);
       actionCell.append(change); tr.append(actionCell); body.append(tr);
     });
-    if (!rows.length) body.innerHTML = '<tr><td colspan="8" class="muted">No bins match this search. Use Change a bin to add the first one.</td></tr>';
+    if (!rows.length) body.innerHTML = '<tr><td colspan="9" class="muted">No inventory SKUs match this search.</td></tr>';
   }
   async function load() {
     const locationId = $('binLocationFilter').value;
@@ -54,7 +58,8 @@
     }
     products = data.products || [];
     renderRows(data.bins || []);
-    set((data.bins || []).length + ' bin location' + ((data.bins || []).length === 1 ? '' : 's') + ' at ' + filter.options[filter.selectedIndex]?.text + '.');
+    const summary = data.summary || {};
+    set((summary.total || 0) + ' inventory SKUs at ' + filter.options[filter.selectedIndex]?.text + ' · ' + (summary.unassigned || 0) + ' bins not set.');
   }
   function openDialog(row) {
     $('binLocationDialog').showModal();
