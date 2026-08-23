@@ -1,8 +1,8 @@
 (() => {
-  const $ = id => document.getElementById(id); let order = null;
+  const $ = id => document.getElementById(id); let order = null; let expectedRoute = null;
   const set = (text, error = false) => { $('salesOrderStatus').textContent = text; $('salesOrderStatus').classList.toggle('error', error); };
   const dialog = $('salesOrderDialog');
-  const show = () => { if (!dialog.open) dialog.showModal(); $('salesOrderScanInput').focus(); };
+  const show = route => { expectedRoute = route; order = null; render(); const will = route === 'will_call'; $('salesOrderKicker').textContent = will ? 'Will call' : 'Local delivery'; $('salesOrderTitle').textContent = will ? 'Pick will call' : 'Load local delivery'; $('salesOrderHelp').textContent = will ? 'Scan an in-store or pickup receipt to open its pick ticket.' : 'Scan a delivery receipt to open its loading ticket.'; $('salesOrderScanInput').value = ''; set(''); if (!dialog.open) dialog.showModal(); $('salesOrderScanInput').focus(); };
   function render() {
     const host = $('salesOrderTicket'); if (!order) { host.hidden = true; return; } host.hidden = false;
     const will = order.route === 'will_call';
@@ -10,13 +10,15 @@
   }
   async function lookup() {
     const scan = $('salesOrderScanInput').value.trim(); if (!scan) return set('Scan or enter the receipt order number.', true);
-    set('Finding the unfulfilled Shopify order…');
+    set('Finding the unfulfilled ' + (expectedRoute === 'will_call' ? 'Will Call' : 'Local Delivery') + ' order…');
     const response = await fetch('/api/sales-orders?scan=' + encodeURIComponent(scan), {credentials:'same-origin'}), data = await response.json().catch(() => ({}));
     if (!response.ok) throw Error(data.error || 'Could not find the order.');
     order = data.order; $('salesOrderScanInput').value = order.number;
+    if (order.route !== expectedRoute) { const correct = order.route === 'will_call' ? 'Will Call' : 'Local Delivery'; order = null; render(); throw Error('This receipt belongs in ' + correct + '. Start it from the ' + correct + ' button.'); }
     set((order.route === 'will_call' ? 'Will Call' : 'Local Delivery') + ' order found.'); render();
   }
-  $('overviewSalesOrderScan').onclick = show;
+  $('overviewWillCallScan').onclick = () => show('will_call');
+  $('overviewDeliveryScan').onclick = () => show('local_delivery');
   $('salesOrderFind').onclick = () => lookup().catch(error => set(error.message, true));
   $('salesOrderScanInput').onkeydown = e => { if (e.key === 'Enter') { e.preventDefault(); lookup().catch(error => set(error.message, true)); } };
   $('salesOrderCamera').onclick = () => window.BMWarehouseCamera?.open({onScan:value => { $('salesOrderScanInput').value = value; lookup().catch(error => set(error.message, true)); }, onError:message => set(message, true), title:'Scan customer receipt'});
