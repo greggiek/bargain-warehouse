@@ -85,6 +85,7 @@
     const inventory = view === 'inventory';
     document.getElementById('overviewView').hidden = inventory;
     document.getElementById('inventoryView').hidden = !inventory;
+    const ledger = document.getElementById('inventoryLedgerView'); if (ledger) ledger.hidden = true;
     document.getElementById('productSyncView').hidden = true;
     document.getElementById('snapshotView').hidden = true;
     document.getElementById('transferView').hidden = true;
@@ -93,6 +94,7 @@
     document.getElementById('productSyncNav').classList.remove('active');
     document.getElementById('snapshotNav').classList.remove('active');
     document.getElementById('transfersNav').classList.remove('active');
+    document.getElementById('inventoryLedgerNav')?.classList.remove('active');
     if (inventory && !loaded) load();
   }
 
