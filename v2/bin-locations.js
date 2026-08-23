@@ -87,6 +87,7 @@
     load().catch(error => set(error.message, true));
   }
   $('binLocationsNav').addEventListener('click', show);
+  document.querySelectorAll('.nav-item').forEach(item => { if (item.id !== 'binLocationsNav') item.addEventListener('click', () => { view.hidden = true; }); });
   $('overviewBinLocations').addEventListener('click', () => openDialog());
   $('binLocationNew').addEventListener('click', () => openDialog());
   $('binLocationRefresh').addEventListener('click', () => load().catch(error => set(error.message, true)));
