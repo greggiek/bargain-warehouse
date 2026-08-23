@@ -24,7 +24,9 @@
     const overlay = document.createElement('div'); closed = false;
     overlay.className = 'warehouse-camera-overlay';
     overlay.innerHTML = '<section class="card warehouse-camera-panel" role="dialog" aria-modal="true"><div class="warehouse-camera-head"><div><div class="transfer-kicker">Camera scanner</div><h2>' + title + '</h2><p class="muted">' + help + '</p></div><button class="button secondary" type="button">Close</button></div><div class="warehouse-camera-viewport"><video playsinline muted></video><div class="warehouse-camera-guide"></div></div><p class="warehouse-camera-status">Starting rear camera…</p><p class="warehouse-camera-error" hidden></p></section>';
-    document.body.append(overlay); const video = overlay.querySelector('video'), status = overlay.querySelector('.warehouse-camera-status'), errorBox = overlay.querySelector('.warehouse-camera-error');
+    // A native <dialog> is drawn in the browser's top layer. Mount the camera UI
+    // inside the open dialog so it stays visible instead of running behind it.
+    (document.querySelector('dialog[open]') || document.body).append(overlay); const video = overlay.querySelector('video'), status = overlay.querySelector('.warehouse-camera-status'), errorBox = overlay.querySelector('.warehouse-camera-error');
     const close = async () => { if (closed) return; closed = true; cancelAnimationFrame(loop); loop = 0; try { zxingControls?.stop?.(); } catch (_) {} zxingControls = null; stream?.getTracks().forEach(track => track.stop()); stream = null; overlay.remove(); };
     overlay.querySelector('button').onclick = close;
     const complete = async value => { await close(); onScan(String(value || '').trim()); };
