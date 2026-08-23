@@ -43,20 +43,8 @@
     $('poScanInput').focus();
   }
   function openCamera(onScan) {
-    if (!navigator.mediaDevices?.getUserMedia) return scanSet('Camera access is not available in this browser. Use Chrome or Safari on the phone, or enter the barcode number.', true);
-    if (!('BarcodeDetector' in window)) return scanSet('This browser can open the camera but cannot read barcodes. Use Chrome on Android or Safari on iPhone, or enter the barcode number.', true);
-    const overlay = document.createElement('div');
-    overlay.className = 'warehouse-camera-overlay';
-    overlay.innerHTML = '<section class="card warehouse-camera-panel"><div class="inventory-head"><div><div class="transfer-kicker">Camera scanner</div><h2>Scan barcode</h2><p class="muted">Hold the printed barcode inside the camera view.</p></div><button class="button secondary" type="button">Close</button></div><video playsinline muted></video></section>';
-    const video = overlay.querySelector('video'); let stream, frame;
-    const close = () => { cancelAnimationFrame(frame); stream?.getTracks().forEach(track => track.stop()); overlay.remove(); };
-    overlay.querySelector('button').addEventListener('click', close); document.body.append(overlay);
-    navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' } }, audio: false }).then(async nextStream => {
-      stream = nextStream; video.srcObject = stream; await video.play();
-      const detector = new BarcodeDetector({ formats: ['code_39', 'code_128', 'qr_code', 'ean_13', 'ean_8', 'upc_a', 'upc_e', 'itf', 'codabar'] });
-      const detect = async () => { try { const [code] = await detector.detect(video); if (code?.rawValue) { close(); onScan(code.rawValue); return; } } catch (_) {} frame = requestAnimationFrame(detect); };
-      detect();
-    }).catch(() => { close(); scanSet('Camera permission was not granted. Allow camera access, then try again.', true); });
+    if (!window.BMWarehouseCamera) return scanSet('Camera scanner is still loading. Try again in a moment.', true);
+    window.BMWarehouseCamera.open({ onScan, onError: message => scanSet(message, true) });
   }
   function renderEditor() {
     const order = selectedOrder(), canEdit = editable(), hasReceipts = (order?.purchase_order_lines || []).some(line => Number(line.received_quantity || 0) > 0), openOrder = ['ordered', 'partially_received'].includes(order?.status); $('poMasterList').hidden = true; $('poDetailPanel').hidden = false; $('poDetailTitle').textContent = order ? order.purchase_order_number : 'New purchase order'; $('poDetailHelp').textContent = order ? (order.status === 'draft' ? 'Edit this draft, then send it to enable warehouse receiving.' : canEdit ? 'Editing this open PO. Received quantities stay protected; changes apply only to the remaining order.' : 'This order is ' + order.status.replaceAll('_', ' ') + '. Use Edit PO for admin changes or Receive PO for the warehouse scan workflow.') : 'Normal procurement lands at 730. Select a retail location only for a direct-to-retail PO.'; $('poEdit').hidden = !(capabilities.canManagePurchaseOrders && openOrder && !canEdit); $('poSave').hidden = !canEdit; $('poSave').textContent = order ? (order.status === 'draft' ? 'Save draft changes' : 'Save PO changes') : 'Create draft'; $('poSend').hidden = !(order?.status === 'draft' && capabilities.canManagePurchaseOrders); $('poReceiveFromDetail').hidden = !expectedOrders().some(item => item.id === order?.id);
