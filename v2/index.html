@@ -220,16 +220,16 @@
           </div>
           <p id="transferStatus" class="inventory-status">Open Transfers to load your V2 transfer queue.</p>
         </section>
-        <section id="transferScanPanel" class="card section" hidden>
-          <div class="transfer-kicker">Transfer receiving</div><h2 id="transferScanTitle">Receive transfer</h2><p id="transferScanHelp" class="muted">Scan or enter each SKU. A quantity box will appear so you can add multiple pieces at once.</p>
+        <dialog id="transferScanPanel" class="card">
+          <div class="inventory-head"><div><div class="transfer-kicker">Warehouse receiving</div><h2 id="transferScanTitle">Receive transfer</h2><p id="transferScanHelp" class="muted">Scan or enter each SKU. A quantity box will appear so you can add multiple pieces at once.</p></div><button id="transferScanClose" class="button secondary" type="button">Close</button></div>
           <div class="inventory-actions"><input id="transferScanInput" class="inventory-search" autocomplete="off" placeholder="Scan or enter SKU"><button id="transferCameraScan" class="button secondary" type="button">Use camera</button><button id="transferCancelScan" class="button secondary" type="button">Cancel</button></div>
           <p id="transferScanStatus" class="inventory-status"></p><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>SKU</th><th>Expected</th><th>Scanned / received</th><th>Remaining</th></tr></thead><tbody id="transferScanRows"></tbody></table></div><div class="inventory-head"><span class="muted">All items must be checked before the transfer can close.</span><button id="transferFinishScan" class="button" type="button" disabled>Receive Transfer & Close</button></div>
-        </section>
-        <section id="transferDocumentScanPanel" class="card section" hidden>
-          <div class="transfer-kicker">Warehouse receiving</div><h2>Receive transfer</h2><p class="muted">Scan or enter the transfer number to start. Or tap an incoming transfer below.</p>
+        </dialog>
+        <dialog id="transferDocumentScanPanel" class="card">
+          <div class="inventory-head"><div><div class="transfer-kicker">Warehouse receiving</div><h2>Receive transfer</h2><p class="muted">Scan or enter the transfer number to start. Or tap an incoming transfer below.</p></div><button id="transferDocumentClose" class="button secondary" type="button">Close</button></div>
           <div class="inventory-actions"><input id="transferDocumentScanInput" class="inventory-search" autocomplete="off" placeholder="Scan or enter transfer number"><button id="transferDocumentCameraScan" class="button secondary" type="button">Use camera</button></div>
           <p id="transferDocumentScanStatus" class="inventory-status"></p><div id="transferIncomingList" class="transfer-choice-grid"></div>
-        </section>
+        </dialog>
         <dialog id="transferQuantityDialog" class="card"><div class="transfer-kicker">Add received pieces</div><h2 id="transferQuantityTitle">SKU</h2><p id="transferQuantityHelp" class="muted"></p><input id="transferQuantityInput" class="inventory-search" type="number" min="1" step="1" value="1" aria-label="Pieces received"><div class="inventory-actions" style="margin-top:16px"><button id="transferQuantityConfirm" class="button" type="button">Add pieces</button><button id="transferQuantityCancel" class="button secondary" type="button">Cancel</button></div></dialog>
         <section id="transferInTransit" class="card section">
           <div class="transfer-kicker">Company-wide inventory</div><h2>In transit</h2><p class="muted">Material that left its source but has not fully arrived at destination.</p>
