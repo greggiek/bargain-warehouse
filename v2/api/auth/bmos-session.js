@@ -11,31 +11,46 @@ module.exports = async function bmosSession(req, res) {
     const identity = await exchange.json();
     if (!exchange.ok) return res.redirect('/?error=bmos_handoff_failed');
     const email = String(identity.email || '').trim().toLowerCase();
-    const usersResponse = await fetch(`${url}/rest/v1/app_users?email=eq.${encodeURIComponent(email)}&select=id,display_name,email,role&limit=1`, { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
-    let users = usersResponse.ok ? await usersResponse.json() : [];
+    let users = await findUsers(url, serviceRoleKey, 'bm_os_identity_id', identity.identityId);
+    if (!users.length) users = await findUsers(url, serviceRoleKey, 'email', email);
     const role = ['administrator', 'company_manager'].includes(identity.accessLevel) ? 'admin' : identity.accessLevel === 'location_manager' ? 'manager' : 'warehouse';
     if (!users.length) {
-      const createResponse = await fetch(`${url}/rest/v1/app_users`, { method: 'POST', headers: { ...jsonHeaders(serviceRoleKey), Prefer: 'return=representation' }, body: JSON.stringify({ display_name: identity.displayName, email, role, active: true }), signal: AbortSignal.timeout(8000) });
+      const createResponse = await fetch(`${url}/rest/v1/app_users`, { method: 'POST', headers: { ...jsonHeaders(serviceRoleKey), Prefer: 'return=representation' }, body: JSON.stringify({ bm_os_identity_id: identity.identityId, display_name: identity.displayName, email, role, active: true }), signal: AbortSignal.timeout(8000) });
       if (!createResponse.ok) throw new Error('app user creation failed');
       users = await createResponse.json();
     } else {
-      await fetch(`${url}/rest/v1/app_users?id=eq.${users[0].id}`, { method: 'PATCH', headers: jsonHeaders(serviceRoleKey), body: JSON.stringify({ display_name: identity.displayName, role, active: true }), signal: AbortSignal.timeout(8000) });
+      await fetch(`${url}/rest/v1/app_users?id=eq.${users[0].id}`, { method: 'PATCH', headers: jsonHeaders(serviceRoleKey), body: JSON.stringify({ bm_os_identity_id: identity.identityId, display_name: identity.displayName, email, role, active: true }), signal: AbortSignal.timeout(8000) });
     }
     const user = users[0];
-    if (identity.locationName) await ensureLocationAccess(url, serviceRoleKey, user.id, identity.locationName, role);
+    if (role === 'admin') await ensureAllLocationAccess(url, serviceRoleKey, user.id);
+    else if (identity.locationName) await ensureLocationAccess(url, serviceRoleKey, user.id, identity.locationName, role);
     res.setHeader('Set-Cookie', bmOsSessionCookie({ userId: user.id, identityId: identity.identityId }, serviceRoleKey));
     return res.redirect('/');
   } catch (_error) { return res.redirect('/?error=bmos_handoff_failed'); }
 };
 
-async function ensureLocationAccess(url, key, userId, locationName, role) {
-  const response = await fetch(`${url}/rest/v1/locations?name=ilike.${encodeURIComponent(`*${locationName}*`)}&active=eq.true&select=id&limit=1`, { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
+async function findUsers(url, key, field, value) {
+  if (!value) return [];
+  const response = await fetch(`${url}/rest/v1/app_users?${field}=eq.${encodeURIComponent(value)}&select=id,display_name,email,role&limit=1`, { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
+  return response.ok ? response.json() : [];
+}
+
+async function ensureAllLocationAccess(url, key, userId) {
+  const response = await fetch(`${url}/rest/v1/locations?active=eq.true&select=id`, { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
   const locations = response.ok ? await response.json() : [];
-  if (!locations.length) return;
-  const locationId = locations[0].id;
+  await Promise.all(locations.map(location => upsertLocationAccess(url, key, userId, location.id, true)));
+}
+
+async function ensureLocationAccess(url, key, userId, locationName, role) {
+  const response = await fetch(`${url}/rest/v1/locations?name=ilike.${encodeURIComponent(`*${locationName}*`)}&active=eq.true&select=id`, { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
+  const locations = response.ok ? await response.json() : [];
+  await Promise.all(locations.map(location => upsertLocationAccess(url, key, userId, location.id, role === 'manager')));
+}
+
+async function upsertLocationAccess(url, key, userId, locationId, canManage) {
   const currentResponse = await fetch(`${url}/rest/v1/user_location_access?user_id=eq.${userId}&location_id=eq.${locationId}&select=user_id`, { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
   const current = currentResponse.ok ? await currentResponse.json() : [];
-  const body = JSON.stringify({ can_manage: role === 'manager' || role === 'admin' });
-  if (current.length) await fetch(`${url}/rest/v1/user_location_access?user_id=eq.${userId}&location_id=eq.${locationId}`, { method: 'PATCH', headers: jsonHeaders(key), body, signal: AbortSignal.timeout(8000) });
-  else await fetch(`${url}/rest/v1/user_location_access`, { method: 'POST', headers: jsonHeaders(key), body: JSON.stringify({ user_id: userId, location_id: locationId, can_manage: role === 'manager' || role === 'admin' }), signal: AbortSignal.timeout(8000) });
+  const body = JSON.stringify({ can_manage: canManage });
+  if (current.length) return fetch(`${url}/rest/v1/user_location_access?user_id=eq.${userId}&location_id=eq.${locationId}`, { method: 'PATCH', headers: jsonHeaders(key), body, signal: AbortSignal.timeout(8000) });
+  return fetch(`${url}/rest/v1/user_location_access`, { method: 'POST', headers: jsonHeaders(key), body: JSON.stringify({ user_id: userId, location_id: locationId, can_manage: canManage }), signal: AbortSignal.timeout(8000) });
 }
