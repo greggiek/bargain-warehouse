@@ -129,7 +129,8 @@
   <script src="/inventory-adjustments.js" defer></script>
   <script src="/daily-cycle-count.js" defer></script>
   <script src="/cycle-count-review.js" defer></script>
-  <script src="/dashboard.js" defer></script>\n  <script src="/at-a-glance.js" defer></script>
+  <script src="/dashboard.js" defer></script>
+  <script src="/at-a-glance.js" defer></script>
   <script src="/inventory-ledger.js" defer></script>
   <script src="/bin-locations.js" defer></script>
   <script src="/forecasting.js" defer></script>
@@ -367,7 +368,8 @@
       loginView.hidden = true;
       appView.hidden = false;
       document.getElementById('welcome').textContent = `Welcome, ${session.user.displayName}`;
-      applyRoleNavigation(session.user.role);\n      if (['admin', 'developer'].includes(session.user.role)) setTimeout(() => window.openAtGlance?.(), 0);
+      applyRoleNavigation(session.user.role);
+      if (['admin', 'developer'].includes(session.user.role)) setTimeout(() => window.openAtGlance?.(), 0);
       const adjustment = document.getElementById('overviewInventoryAdjustment');
       if (adjustment) adjustment.hidden = !['manager', 'admin', 'developer'].includes(session.user.role);
       const cycleCount = document.getElementById('overviewDailyCycleCount');
