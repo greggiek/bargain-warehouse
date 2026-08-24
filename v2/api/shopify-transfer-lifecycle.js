@@ -57,7 +57,6 @@ async function loadLink(url, key, id) {
   const rows = await postgrest(url, 'shopify_transfer_links?select=*,shopify_transfer_link_lines(*)&id=eq.' + encodeURIComponent(id) + '&limit=1', 'GET', key);
   const link = rows[0];
   if (!link) throw new Error('Shopify transfer link not found.');
-  if (link.route_type !== 'same_store' || !link.source_shopify_transfer_id) throw new Error('Only linked native Shopify transfers can use this workflow.');
   return link;
 }
 
@@ -99,7 +98,7 @@ const receiveShipmentMutation = `mutation ReceiveShipment($id: ID!, $idempotency
   }
 }`;
 
-async function ship(url, key, auth, link) {
+async function shipNative(url, key, auth, link) {
   if (link.status !== 'draft') throw new Error('This Shopify transfer is already ' + link.status + '.');
   const store = storeFor(link.source_store_key);
   const lines = link.shopify_transfer_link_lines || [];
@@ -131,7 +130,7 @@ async function ship(url, key, auth, link) {
   return { message: 'Transfer ' + link.bm_reference + ' is now in transit in Shopify.', status: 'shipped' };
 }
 
-async function receive(url, key, auth, link) {
+async function receiveNative(url, key, auth, link) {
   if (link.status !== 'shipped' && link.status !== 'partially_received') throw new Error('This Shopify transfer is not waiting to be received.');
   const shipmentId = link.metadata?.shopify_shipment_id;
   if (!shipmentId) throw new Error('The linked Shopify shipment ID is missing. Receive it in Shopify, then refresh this page.');
@@ -146,6 +145,153 @@ async function receive(url, key, auth, link) {
   return { message: 'Transfer ' + link.bm_reference + ' was received into the destination in Shopify.', status: 'completed' };
 }
 
+
+// Cross-store movements are not customer sales. Each leg uses Shopify's inventory
+// adjustment mutation at only the relevant legal entity's location. The attempt
+// row stores the idempotency key before Shopify is called, making retries safe.
+const intercompanyItemsQuery = `query IntercompanyInventoryItems($ids: [ID!]!, $locationId: ID!) {
+  nodes(ids: $ids) {
+    ... on ProductVariant {
+      id
+      sku
+      inventoryItem {
+        id
+        inventoryLevel(locationId: $locationId) {
+          quantities(names: ["available"]) { name quantity }
+        }
+      }
+    }
+  }
+}`;
+
+const adjustQuantitiesMutation = `mutation AdjustIntercompanyInventory($input: InventoryAdjustQuantitiesInput!, $key: String!) {
+  inventoryAdjustQuantities(input: $input) @idempotent(key: $key) {
+    inventoryAdjustmentGroup { id referenceDocumentUri }
+    userErrors { field message }
+  }
+}`;
+
+async function findIntercompanyAttempt(url, key, linkId, leg) {
+  const existing = await postgrest(url, 'intercompany_transfer_attempts?select=*&transfer_link_id=eq.' + encodeURIComponent(linkId) + '&leg=eq.' + leg + '&limit=1', 'GET', key);
+  if (existing[0]) return existing[0];
+  try {
+    const created = await postgrest(url, 'intercompany_transfer_attempts', 'POST', key, {
+      transfer_link_id: linkId,
+      leg,
+      idempotency_key: crypto.randomUUID(),
+      status: 'pending'
+    }, 'return=representation');
+    if (created[0]) return created[0];
+  } catch (error) {
+    const raced = await postgrest(url, 'intercompany_transfer_attempts?select=*&transfer_link_id=eq.' + encodeURIComponent(linkId) + '&leg=eq.' + leg + '&limit=1', 'GET', key);
+    if (raced[0]) return raced[0];
+    throw error;
+  }
+  throw new Error('Could not create the protected intercompany movement record.');
+}
+
+async function patchIntercompanyAttempt(url, key, attempt, patch) {
+  await postgrest(url, 'intercompany_transfer_attempts?id=eq.' + encodeURIComponent(attempt.id), 'PATCH', key, {
+    ...patch,
+    updated_at: new Date().toISOString()
+  });
+}
+
+function availableQuantity(node) {
+  return Number(node?.inventoryItem?.inventoryLevel?.quantities?.find(item => item.name === 'available')?.quantity);
+}
+
+async function postIntercompanyLeg(url, key, auth, link, leg) {
+  const isShip = leg === 'ship';
+  const expected = isShip ? ['draft', 'prepared'] : ['shipped', 'partially_received'];
+  if (!expected.includes(link.status)) throw new Error(isShip ? 'This intercompany transfer has already been shipped or closed.' : 'Ship the intercompany transfer before receiving it.');
+  const lines = link.shopify_transfer_link_lines || [];
+  if (!lines.length) throw new Error('This intercompany transfer has no linked SKU lines.');
+
+  const attempt = await findIntercompanyAttempt(url, key, link.id, leg);
+  if (attempt.status === 'applied') {
+    return { message: 'Intercompany ' + leg + ' was already posted for ' + link.bm_reference + '.', status: link.status };
+  }
+
+  const store = storeFor(isShip ? link.source_store_key : link.destination_store_key);
+  const locationId = isShip ? link.source_shopify_location_id : link.destination_shopify_location_id;
+  const variants = lines.map(line => isShip ? line.source_shopify_variant_id : line.destination_shopify_variant_id);
+  if (variants.some(value => !value)) throw new Error('A Shopify variant mapping is missing for this intercompany transfer.');
+  const data = await graphql(store, intercompanyItemsQuery, { ids: variants, locationId });
+  const byVariant = new Map((data.nodes || []).filter(node => node?.id && node.inventoryItem?.id).map(node => [node.id, node]));
+
+  const changes = lines.map((line, index) => {
+    const variantId = variants[index];
+    const node = byVariant.get(variantId);
+    const quantity = Number(line.quantity);
+    if (!node) throw new Error('Could not find the ' + (isShip ? 'source' : 'destination') + ' Shopify inventory item for ' + line.sku + '.');
+    if (!Number.isInteger(quantity) || quantity <= 0) throw new Error('Invalid quantity for ' + line.sku + '.');
+    const current = availableQuantity(node);
+    if (!Number.isFinite(current)) throw new Error('Shopify could not read current available stock for ' + line.sku + '.');
+    if (isShip && current < quantity) throw new Error(line.sku + ' has only ' + current + ' available at the sending warehouse. Nothing was moved.');
+    return {
+      inventoryItemId: node.inventoryItem.id,
+      locationId,
+      delta: isShip ? -quantity : quantity,
+      changeFromQuantity: current
+    };
+  });
+
+  const result = await graphql(store, adjustQuantitiesMutation, {
+    key: attempt.idempotency_key,
+    input: {
+      reason: 'correction',
+      name: 'available',
+      referenceDocumentUri: 'bmwarehouse://intercompany/' + link.bm_reference + '/' + leg,
+      changes
+    }
+  });
+  errorsFor(result.inventoryAdjustQuantities);
+  const group = result.inventoryAdjustQuantities?.inventoryAdjustmentGroup;
+  if (!group?.id) throw new Error('Shopify did not confirm the intercompany inventory adjustment.');
+
+  await patchIntercompanyAttempt(url, key, attempt, {
+    status: 'shopify_confirmed',
+    shopify_adjustment_id: group.id,
+    error: null
+  });
+
+  const status = isShip ? 'shipped' : 'completed';
+  const now = new Date().toISOString();
+  const metadata = {
+    ...(link.metadata || {}),
+    inventory_effect: isShip ? 'source deducted; destination unchanged until received' : 'source deducted; destination received',
+    [isShip ? 'outbound_status' : 'inbound_status']: isShip ? 'shipped' : 'received',
+    [isShip ? 'ship_adjustment_group_id' : 'receive_adjustment_group_id']: group.id,
+    [isShip ? 'shipped_by' : 'received_by']: auth.user.display_name
+  };
+  await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'PATCH', key, {
+    status,
+    ...(isShip ? { shipped_at: now, source_shopify_adjustment_reference: group.id } : { received_at: now }),
+    metadata
+  });
+  await patchIntercompanyAttempt(url, key, attempt, { status: 'applied', completed_at: now });
+
+  return {
+    message: isShip
+      ? 'Intercompany transfer ' + link.bm_reference + ' shipped. Only the sending Shopify location was reduced.'
+      : 'Intercompany transfer ' + link.bm_reference + ' received. Only the destination Shopify location was increased.',
+    status
+  };
+}
+
+async function ship(url, key, auth, link) {
+  if (link.route_type === 'cross_store') return postIntercompanyLeg(url, key, auth, link, 'ship');
+  if (link.route_type === 'same_store' && link.source_shopify_transfer_id) return shipNative(url, key, auth, link);
+  throw new Error('This transfer is not configured for shipping.');
+}
+
+async function receive(url, key, auth, link) {
+  if (link.route_type === 'cross_store') return postIntercompanyLeg(url, key, auth, link, 'receive');
+  if (link.route_type === 'same_store' && link.source_shopify_transfer_id) return receiveNative(url, key, auth, link);
+  throw new Error('This transfer is not configured for receiving.');
+}
+
 module.exports = async function shopifyTransferLifecycle(req, res) {
   const auth = await requireUser(req);
   if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
@@ -157,7 +303,7 @@ module.exports = async function shopifyTransferLifecycle(req, res) {
     const isAdmin = TRANSFER_ADMIN_ROLES.has(auth.user.role);
 
     if (req.method === 'GET') {
-      const links = await postgrest(url, 'shopify_transfer_links?select=id,bm_reference,status,source_location_id,destination_location_id,source_store_key,destination_store_key,created_at,metadata,shopify_transfer_link_lines(sku,quantity)&order=created_at.desc&limit=50', 'GET', serviceRoleKey);
+      const links = await postgrest(url, 'shopify_transfer_links?select=id,bm_reference,route_type,status,source_location_id,destination_location_id,source_store_key,destination_store_key,created_at,metadata,shopify_transfer_link_lines(sku,quantity)&order=created_at.desc&limit=50', 'GET', serviceRoleKey);
       const visible = (Array.isArray(links) ? links : []).filter(link => isAdmin
         ? managed.has(Number(link.source_location_id)) || managed.has(Number(link.destination_location_id))
         : managed.has(Number(link.destination_location_id)));
