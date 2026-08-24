@@ -2,6 +2,28 @@ const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
 
 const PROCUREMENT_ROLES = new Set(['admin', 'developer']);
+const API_VERSION='2026-07';
+const cleanDomain=value=>String(value||'').replace(/^https?:\/\//,'').replace(/\/+$/,'');
+const stores=()=>[{key:'store_1',domain:process.env.SHOPIFY_STORE_1_DOMAIN,clientId:process.env.SHOPIFY_STORE_1_CLIENT_ID,clientSecret:process.env.SHOPIFY_STORE_1_CLIENT_SECRET},{key:'store_2',domain:process.env.SHOPIFY_STORE_2_DOMAIN,clientId:process.env.SHOPIFY_STORE_2_CLIENT_ID,clientSecret:process.env.SHOPIFY_STORE_2_CLIENT_SECRET}];
+async function shopifyGraphql(store,query,variables){
+ const shop=cleanDomain(store.domain);if(!shop||!store.clientId||!store.clientSecret)throw Error('Shopify connection is not configured.');
+ const tokenResponse=await fetch('https://'+shop+'/admin/oauth/access_token',{method:'POST',headers:{'Content-Type':'application/x-www-form-urlencoded'},body:new URLSearchParams({grant_type:'client_credentials',client_id:store.clientId,client_secret:store.clientSecret}),signal:AbortSignal.timeout(20000)});
+ const tokenBody=await tokenResponse.json().catch(()=>({}));if(!tokenResponse.ok||!tokenBody.access_token)throw Error('Shopify token request failed.');
+ const response=await fetch('https://'+shop+'/admin/api/'+API_VERSION+'/graphql.json',{method:'POST',headers:{'Content-Type':'application/json','X-Shopify-Access-Token':tokenBody.access_token},body:JSON.stringify({query,variables}),signal:AbortSignal.timeout(25000)});
+ const body=await response.json().catch(()=>({}));if(!response.ok||body.errors?.length)throw Error(body.errors?.map(e=>e.message).join('; ')||'Shopify request failed.');return body.data;
+}
+async function postReceiptToShopify(url,key,order,lines,idempotencyKey){
+ const mapResponse=await fetch(url+'/rest/v1/shopify_location_mappings?location_id=eq.'+order.receiving_location_id+'&select=store_key,shopify_location_id',{headers:jsonHeaders(key)});
+ const mapping=(await mapResponse.json().catch(()=>[]))[0];if(!mapResponse.ok||!mapping)throw Error('This PO warehouse is not mapped to Shopify.');
+ const store=stores().find(item=>item.key===mapping.store_key);if(!store)throw Error('Shopify store mapping is unavailable.');
+ const detailResponse=await fetch(url+'/rest/v1/purchase_order_lines?purchase_order_id=eq.'+order.id+'&select=id,ordered_quantity,received_quantity,products(sku)',{headers:jsonHeaders(key)});
+ const details=await detailResponse.json().catch(()=>[]);if(!detailResponse.ok)throw Error('Could not validate PO lines.');
+ const changes=[];
+ for(const input of lines){const line=details.find(item=>Number(item.id)===Number(input.lineId));if(!line||Number(input.quantity)<=0||Number(input.quantity)>Number(line.ordered_quantity)-Number(line.received_quantity))throw Error('Invalid receipt quantity.');
+ const result=await shopifyGraphql(store,`query($q:String!){productVariants(first:5,query:$q){nodes{id sku inventoryItem{id}}}}`,{q:'sku:"'+String(line.products?.sku||'').replace(/["\\]/g,'\\const PROCUREMENT_ROLES = new Set(['admin', 'developer']);')+'"'});const variant=(result.productVariants?.nodes||[]).find(v=>String(v.sku||'').toLowerCase()===String(line.products?.sku||'').toLowerCase());if(!variant?.inventoryItem?.id)throw Error('Shopify SKU lookup failed for '+line.products?.sku+'.');changes.push({inventoryItemId:variant.inventoryItem.id,locationId:mapping.shopify_location_id,delta:Number(input.quantity)});}
+ const result=await shopifyGraphql(store,`mutation($input:InventoryAdjustQuantitiesInput!,$key:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$key){inventoryAdjustmentGroup{id referenceDocumentUri} userErrors{message}}}`,{input:{reason:'correction',name:'available',referenceDocumentUri:'bmwarehouse://purchase-order/'+encodeURIComponent(order.purchase_order_number),changes},key:idempotencyKey});
+ const payload=result.inventoryAdjustQuantities;if(payload?.userErrors?.length)throw Error(payload.userErrors.map(e=>e.message).join('; '));if(!payload?.inventoryAdjustmentGroup?.id)throw Error('Shopify did not confirm the PO receipt.');return payload.inventoryAdjustmentGroup.id;
+}
 
 async function accessForUser(url, key, userId) {
   const response = await fetch(url + '/rest/v1/user_location_access?user_id=eq.' + encodeURIComponent(userId) + '&select=location_id,can_manage,locations(id,name,code,active)', { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
@@ -140,7 +162,10 @@ module.exports = async function purchaseOrders(req, res) {
       if (!manageable.some(entry => entry.id === Number(order.receiving_location_id))) return res.status(403).json({ ok: false, error: 'You need manager access to this PO receiving location.' });
       const lines = (body.lines || []).map(line => ({ lineId: integer(line.lineId), quantity: Number(line.quantity) })).filter(line => line.lineId && Number.isFinite(line.quantity) && line.quantity > 0);
       if (!lines.length) return res.status(400).json({ ok: false, error: 'Scan at least one expected PO item.' });
-      return res.status(200).json({ ok: true, purchaseOrder: await rpc(url, serviceRoleKey, 'receive_v2_purchase_order_lines', { p_purchase_order_id: purchaseOrderId, p_lines: lines, p_idempotency_key: String(body.idempotencyKey || ''), p_user_id: auth.user.id, p_user_name: auth.user.display_name }) });
+      const idempotencyKey=String(body.idempotencyKey||'');if(!idempotencyKey) return res.status(400).json({ok:false,error:'Receipt key is required.'});
+      const shopifyAdjustmentId=await postReceiptToShopify(url,serviceRoleKey,{...order,purchase_order_number:(await (async()=>{const r=await fetch(url+'/rest/v1/purchase_orders?id=eq.'+purchaseOrderId+'&select=purchase_order_number',{headers:jsonHeaders(serviceRoleKey)});return (await r.json())[0]?.purchase_order_number;})())},lines,idempotencyKey);
+      const purchaseOrder=await rpc(url,serviceRoleKey,'receive_v2_purchase_order_lines',{p_purchase_order_id:purchaseOrderId,p_lines:lines,p_idempotency_key:idempotencyKey,p_user_id:auth.user.id,p_user_name:auth.user.display_name});
+      return res.status(200).json({ok:true,purchaseOrder,shopifyAdjustmentId});
     }
     return res.status(400).json({ ok: false, error: 'unknown_action' });
   } catch (error) {
