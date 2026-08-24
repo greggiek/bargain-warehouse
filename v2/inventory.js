@@ -51,23 +51,32 @@
     });
   }
 
-  function renderLookup(rows) {
+  function renderLookup(rows, locations) {
     $('inventoryCategoryBoard').hidden = true; $('inventoryLookup').hidden = false;
+    const warehouseNames = (locations || []).map(location => location.name);
+    const head = $('inventoryLookupHead'); head.replaceChildren();
+    const headerRow = document.createElement('tr');
+    ['SKU', 'Product', 'Category', ...warehouseNames, 'Total on hand', 'Allocated', 'Available'].forEach(label => {
+      const th = document.createElement('th'); th.textContent = label; headerRow.append(th);
+    });
+    head.append(headerRow);
+
     const body = $('inventoryRows'); body.replaceChildren();
     rows.forEach(row => {
       const tr = document.createElement('tr');
-      const breakdown = (row.locations || []).map(location => location.location + ': ' + number(location.available)).join(' · ');
-      [row.sku, row.name, row.category, number(row.onHand), number(row.allocated), number(row.available), breakdown || '—'].forEach((value, index) => {
+      const byWarehouse = new Map((row.locations || []).map(location => [location.location, location]));
+      [row.sku, row.name, row.category, ...warehouseNames.map(name => number(byWarehouse.get(name)?.available || 0)),
+        number(row.onHand), number(row.allocated), number(row.available)
+      ].forEach((value, index) => {
         const td = document.createElement('td'); td.textContent = value;
         if (index === 0) td.className = 'sku';
         tr.append(td);
       });
       body.append(tr);
     });
-    if (!rows.length) body.innerHTML = '<tr><td colspan="7" class="muted">No V2 inventory matches this SKU or product search.</td></tr>';
+    if (!rows.length) body.innerHTML = '<tr><td colspan="' + (warehouseNames.length + 6) + '" class="muted">No V2 inventory matches this SKU or product search.</td></tr>';
     $('inventoryCount').textContent = number(rows.length) + ' matching SKU' + (rows.length === 1 ? '' : 's');
   }
-
   async function load() {
     request?.abort(); request = new AbortController();
     const refresh = $('inventoryRefresh'); refresh.disabled = true;
@@ -84,7 +93,7 @@
       $('inventoryOnHand').textContent = number(data.summary?.onHand);
       $('inventoryAvailable').textContent = number(data.summary?.available);
       $('inventoryWarehouseCount').textContent = number(data.summary?.warehouses);
-      if (data.mode === 'lookup') renderLookup(data.rows || []);
+      if (data.mode === 'lookup') renderLookup(data.rows || [], data.locations || []);
       else renderBoard(data.warehouses || []);
       setStatus(data.mode === 'lookup'
         ? 'SKU lookup across ' + number(data.summary?.warehouses) + ' warehouse' + (data.summary?.warehouses === 1 ? '' : 's') + '.'
