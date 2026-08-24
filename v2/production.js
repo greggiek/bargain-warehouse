@@ -270,6 +270,7 @@
     picker.append(search, groups);
     legacyBomSelect.after(picker);
     $('productionNav').addEventListener('click', () => open().catch(e => say(e.message, true)));
+    const overviewManufacturing = $('overviewManufacturing'); if (overviewManufacturing) overviewManufacturing.addEventListener('click', () => open().catch(e => say(e.message, true)));
     $('productionBomSearch').oninput = renderBomPicker;
     $('productionBomSearch').onfocus = renderBomPicker;
     $('productionAddLine').onclick = () => {
