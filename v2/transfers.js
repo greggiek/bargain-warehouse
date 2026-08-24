@@ -175,6 +175,7 @@
     capabilities=data.capabilities||capabilities;
     [from,to].forEach((select)=>{select.replaceChildren();const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Choose location';select.append(placeholder);data.locations.forEach((location)=>select.append(locationOption(location)));});
     transfers=data.transfers||[];renderQueue();renderIncomingTransfers();renderInTransit(data.inTransitLines||[],data.summary||{inTransitPieces:0,activeTransfers:0,inTransitSkus:0});renderHistory(data.history||[]);renderExceptions(data.exceptions||[]);
+    await loadShopifyTransfers();
     applyCapabilities();
     show(capabilities.canManageTransfers?'Create, print, ship, and receive transfers in the V2 ledger.':'Scan an incoming transfer to receive it into your assigned warehouse.');
   }
@@ -190,6 +191,49 @@
     try{const response=await fetch('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:'create',fromLocationId:from.value,toLocationId:to.value,sku:sku.value,quantity:quantity.value})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Transfer could not be allocated.');sku.value='';quantity.value='';createMode=false;await load();show('Transfer '+data.transfer.transferNumber+' created and allocated. Ship it when it leaves.');}
     catch(error){show(error.message,true);}finally{create.disabled=false;}
   });
+
+  // Shopify-native transfers are inventory-authoritative. They appear separately from the
+  // legacy V2 ledger so employees cannot accidentally move stock through the wrong workflow.
+  const shopifyLifecyclePanel=document.createElement('section');
+  shopifyLifecyclePanel.className='card';
+  shopifyLifecyclePanel.hidden=true;
+  shopifyLifecyclePanel.innerHTML='<p class="eyebrow">SHOPIFY INVENTORY TRANSFERS</p><h2>Shopify transfers in progress</h2><p class="muted">These transfers move stock in Shopify. Ship starts in-transit; Receive puts it into the destination warehouse.</p><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Route</th><th>Shopify status</th><th>Action</th></tr></thead><tbody id="shopifyTransferLifecycleRows"></tbody></table></div>';
+  transferQueue.parentNode.insertBefore(shopifyLifecyclePanel,transferQueue);
+  const shopifyLifecycleRows=shopifyLifecyclePanel.querySelector('#shopifyTransferLifecycleRows');
+  let shopifyTransferLinks=[], shopifyTransferCapabilities={canShip:false,canReceive:false};
+  function lifecycleButton(label,link,action){
+    const button=document.createElement('button');button.type='button';button.className=action==='ship'?'button':'button secondary';button.textContent=label;
+    button.addEventListener('click',async()=>{
+      const question=action==='ship'
+        ? 'Ship '+link.bm_reference+' in Shopify? This starts the real in-transit inventory movement from '+link.source_name+' to '+link.destination_name+'.'
+        : 'Receive '+link.bm_reference+' in Shopify? This adds the material into '+link.destination_name+'.';
+      if(!confirm(question))return;
+      button.disabled=true;show(action==='ship'?'Shipping in Shopify…':'Receiving in Shopify…');
+      try{
+        const response=await fetch('/api/shopify-transfer-lifecycle',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action,linkId:link.id})});
+        const data=await response.json();if(!response.ok)throw new Error(data.error||'Shopify transfer action failed.');
+        show(data.message);await loadShopifyTransfers();
+      }catch(error){show(error.message||'Shopify transfer action failed.',true);}finally{button.disabled=false;}
+    });
+    return button;
+  }
+  function renderShopifyTransfers(){
+    shopifyLifecycleRows.replaceChildren();
+    shopifyLifecyclePanel.hidden=!shopifyTransferLinks.length;
+    shopifyTransferLinks.forEach(link=>{
+      const row=document.createElement('tr');cell(row,link.bm_reference);cell(row,link.source_name+' → '+link.destination_name);cell(row,formatStatus(link.status));
+      const actions=document.createElement('td');
+      if(link.status==='draft'&&shopifyTransferCapabilities.canShip)actions.append(lifecycleButton('Ship in Shopify',link,'ship'));
+      if((link.status==='shipped'||link.status==='partially_received')&&shopifyTransferCapabilities.canReceive)actions.append(lifecycleButton('Receive in Shopify',link,'receive'));
+      if(!actions.childNodes.length)actions.textContent='—';row.append(actions);shopifyLifecycleRows.append(row);
+    });
+  }
+  async function loadShopifyTransfers(){
+    const response=await fetch('/api/shopify-transfer-lifecycle',{credentials:'same-origin'});
+    const data=await response.json();
+    if(!response.ok){show(data.error||'Could not load Shopify transfer links.',true);return;}
+    shopifyTransferLinks=data.links||[];shopifyTransferCapabilities=data.capabilities||shopifyTransferCapabilities;renderShopifyTransfers();
+  }
 
   // Native Shopify transfers are deliberately separate from the legacy V2 ledger path.
   // The button is admin-only, creates a DRAFT in Shopify, and requires a second explicit
