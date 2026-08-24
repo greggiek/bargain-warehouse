@@ -80,11 +80,11 @@
 
   function show(viewName) {
     const inventory = viewName === 'inventory';
-    ['overviewView', 'atGlanceView', 'snapshotView', 'transferView', 'productionView', 'productSyncView', 'parLevelsView', 'bomManagementView', 'inventoryLedgerView', 'cycleCountReviewView', 'replenishmentView', 'binLocationsView'].forEach(id => {
-      const node = $(id); if (node) node.hidden = inventory;
-    });
+    const otherViews = ['atGlanceView', 'snapshotView', 'transferView', 'productionView', 'productSyncView', 'parLevelsView', 'bomManagementView', 'inventoryLedgerView', 'cycleCountReviewView', 'replenishmentView', 'binLocationsView'];
+    otherViews.forEach(id => { const node = $(id); if (node) node.hidden = true; });
+    $('overviewView').hidden = inventory;
     view.hidden = !inventory;
-    document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', inventory && item.id === 'inventoryNav'));
+    document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', (inventory && item.id === 'inventoryNav') || (!inventory && item.id === 'overviewNav')));
     if (inventory && !loaded) load();
   }
 
