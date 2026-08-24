@@ -95,6 +95,47 @@ module.exports = async (req, res) => {
 
     const body = req.body || {};
     const action = body.action || 'create';
+    if (action === 'create_recommended_drafts') {
+      if (!canManageTransfers) return res.status(403).json({ ok: false, error: 'Administrator access is required to create transfers.' });
+      const inputLines = Array.isArray(body.lines) ? body.lines : [];
+      if (!inputLines.length) return res.status(400).json({ ok: false, error: 'Select at least one suggested transfer line.' });
+      if (inputLines.length > 200) return res.status(400).json({ ok: false, error: 'Create no more than 200 suggested lines at once.' });
+
+      const grouped = new Map();
+      for (const input of inputLines) {
+        const productId = Number(input.productId);
+        const fromLocationId = Number(input.fromLocationId);
+        const toLocationId = Number(input.toLocationId);
+        const quantity = Number(input.quantity);
+        const source = locations.find((location) => location.id === fromLocationId);
+        const destination = locations.find((location) => location.id === toLocationId);
+        if (!Number.isInteger(productId) || !Number.isInteger(fromLocationId) || !Number.isInteger(toLocationId)
+          || !Number.isFinite(quantity) || quantity <= 0 || fromLocationId === toLocationId) {
+          return res.status(400).json({ ok: false, error: 'Every suggested line needs a product, two different warehouses, and a positive quantity.' });
+        }
+        if (!source?.canManage || !destination?.canManage) {
+          return res.status(403).json({ ok: false, error: 'You need manage access to both warehouses on every suggested route.' });
+        }
+        const routeKey = fromLocationId + ':' + toLocationId;
+        if (!grouped.has(routeKey)) grouped.set(routeKey, { fromLocationId, toLocationId, lines: new Map() });
+        const route = grouped.get(routeKey);
+        route.lines.set(productId, (route.lines.get(productId) || 0) + quantity);
+      }
+
+      const drafts = [...grouped.values()].map((route) => ({
+        fromLocationId: route.fromLocationId,
+        toLocationId: route.toLocationId,
+        lines: [...route.lines.entries()].map(([productId, quantity]) => ({ productId, quantity }))
+      }));
+      const response = await fetch(url + '/rest/v1/rpc/create_v2_transfer_drafts', {
+        method: 'POST', headers: jsonHeaders(serviceRoleKey),
+        body: JSON.stringify({ p_transfers: drafts, p_user: auth.user.id, p_name: auth.user.display_name })
+      });
+      const result = await response.json();
+      if (!response.ok) return res.status(response.status).json({ ok: false, error: result.message || 'Could not create transfer drafts.' });
+      return res.status(201).json({ ok: true, transfers: result });
+    }
+
     if (action === 'create') {
       if (!canManageTransfers) return res.status(403).json({ ok: false, error: 'Administrator access is required to create transfers.' });
       const sku = String(body.sku || '').trim();
@@ -124,15 +165,15 @@ module.exports = async (req, res) => {
       return res.status(201).json({ ok: true, transfer: result });
     }
 
-    if (action !== 'ship' && action !== 'receive') return res.status(400).json({ ok: false, error: 'Unknown transfer action.' });
-    if (action === 'ship' && !canManageTransfers) return res.status(403).json({ ok: false, error: 'Administrator access is required to ship transfers.' });
+    if (action !== 'allocate' && action !== 'ship' && action !== 'receive') return res.status(400).json({ ok: false, error: 'Unknown transfer action.' });
+    if ((action === 'allocate' || action === 'ship') && !canManageTransfers) return res.status(403).json({ ok: false, error: 'Administrator access is required to allocate or ship transfers.' });
     const transferId = Number(body.transferId);
     if (!Number.isInteger(transferId) || transferId < 1) return res.status(400).json({ ok: false, error: 'A transfer is required.' });
     const transferResponse = await fetch(url + '/rest/v1/transfers?id=eq.' + transferId + '&select=id,from_location_id,to_location_id&limit=1', { headers: jsonHeaders(serviceRoleKey) });
     const records = await transferResponse.json();
     const transfer = records[0];
     if (!transfer) return res.status(404).json({ ok: false, error: 'Transfer not found.' });
-    const requiredLocationId = action === 'ship' ? transfer.from_location_id : transfer.to_location_id;
+    const requiredLocationId = action === 'receive' ? transfer.to_location_id : transfer.from_location_id;
     const access = locations.find((location) => location.id === requiredLocationId);
     if (!access || !access.canManage) return res.status(403).json({ ok: false, error: 'You need manage access to this transfer location.' });
 
@@ -140,11 +181,12 @@ module.exports = async (req, res) => {
     if (action === 'receive' && receiptLines.length === 0) {
       return res.status(400).json({ ok: false, error: 'Enter receipt quantities.' });
     }
-    const response = await fetch(url + '/rest/v1/rpc/' + (action === 'ship' ? 'ship_v2_transfer' : 'receive_v2_transfer_details'), {
-      method: 'POST', headers: jsonHeaders(serviceRoleKey),
-      body: JSON.stringify(action === 'ship'
-        ? { p_transfer_id: transferId, p_user_id: auth.user.id, p_user_name: auth.user.display_name }
-        : { p_transfer_id: transferId, p_lines: receiptLines, p_user_id: auth.user.id, p_user_name: auth.user.display_name })
+    const rpc = action === 'allocate' ? 'allocate_v2_transfer' : action === 'ship' ? 'ship_v2_transfer' : 'receive_v2_transfer_details';
+    const payload = action === 'receive'
+      ? { p_transfer_id: transferId, p_lines: receiptLines, p_user_id: auth.user.id, p_user_name: auth.user.display_name }
+      : { p_transfer_id: transferId, p_user_id: auth.user.id, p_user_name: auth.user.display_name };
+    const response = await fetch(url + '/rest/v1/rpc/' + rpc, {
+      method: 'POST', headers: jsonHeaders(serviceRoleKey), body: JSON.stringify(payload)
     });
     const result = await response.json();
     if (!response.ok) return res.status(response.status).json({ ok: false, error: result.message || 'Transfer action failed.' });
