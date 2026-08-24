@@ -1,7 +1,8 @@
 (() => {
   const $ = id => document.getElementById(id), view = $('replenishmentView');
   if (!view) return;
-  let all = [], recommendations = [], purchaseQueue = [], purchaseOrders = [], showAllPurchaseQueue = false, selected = null, boardData = [];
+  let all = [], recommendations = [], purchaseQueue = [], purchaseOrders = [], showAllPurchaseQueue = false, selected = null, boardData = [], categoryDrafts = [];
+  const sourceOverrides = new Map();
   const expandedWarehouses = new Set();
   const purchaseQueueLimit = 15, fmt = n => new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
   const set = (text, error = false) => { $('replenishmentStatus').textContent = text; $('replenishmentStatus').classList.toggle('error', error); };
@@ -81,45 +82,57 @@
     const host = $('lowStockDrilldownRows'); host.replaceChildren();
     if (!selected) return;
     const rows = all.filter(x => x.locationId === selected.locationId && x.category === selected.category).sort((a, b) => b.shortage - a.shortage || a.sku.localeCompare(b.sku));
-    const suggestionsByProduct = new Map(
-      recommendations
-        .filter(item => item.toLocationId === selected.locationId)
-        .map(item => [item.productId, item])
+    const recommendationsByProduct = new Map(
+      recommendations.filter(item => item.toLocationId === selected.locationId).map(item => [item.productId, item])
     );
-    let transferable = 0;
+    categoryDrafts = [];
     rows.forEach(x => {
-      const suggestion = suggestionsByProduct.get(x.productId);
+      const defaultSource = recommendationsByProduct.get(x.productId);
+      const sourceKey = selected.locationId + ':' + x.productId;
+      const sources = x.availableSources || [];
+      const selectedSourceId = Number(sourceOverrides.get(sourceKey) || defaultSource?.fromLocationId || sources[0]?.locationId);
+      const source = sources.find(item => Number(item.locationId) === selectedSourceId) || null;
+      const quantity = source ? Math.min(Number(x.shortage), Number(source.available)) : 0;
       const row = document.createElement('tr');
       const choose = document.createElement('td');
-      if (suggestion) {
+      if (source && quantity > 0) {
         const input = document.createElement('input'); input.type = 'checkbox'; input.checked = true;
-        input.dataset.categoryTransfer = String(x.productId); choose.append(input); transferable += 1;
+        input.dataset.categoryTransfer = String(x.productId); choose.append(input);
+        categoryDrafts.push({ productId: x.productId, fromLocationId: source.locationId, toLocationId: selected.locationId, quantity });
       } else {
         choose.textContent = '—';
       }
       row.append(choose);
-      [x.sku, x.product, fmt(x.onHand), fmt(x.parQuantity), fmt(x.shortage),
-        suggestion ? suggestion.from : 'No source available',
-        suggestion ? fmt(suggestion.availableQuantity == null ? suggestion.quantity : suggestion.availableQuantity) : '—',
-        suggestion ? fmt(suggestion.quantity) : '—'
-      ].forEach((value, index) => {
+      [x.sku, x.product, fmt(x.onHand), fmt(x.parQuantity), fmt(x.shortage)].forEach((value, index) => {
         const td = document.createElement('td'); td.textContent = value;
         if (index === 4) td.className = 'low-stock-shortage';
         row.append(td);
       });
+      const sourceCell = document.createElement('td');
+      if (sources.length) {
+        const select = document.createElement('select'); select.className = 'transfer-filter'; select.dataset.categorySource = String(x.productId);
+        sources.forEach(item => {
+          const option = document.createElement('option'); option.value = String(item.locationId);
+          option.textContent = item.location; option.selected = Number(item.locationId) === selectedSourceId; select.append(option);
+        });
+        select.addEventListener('change', event => { sourceOverrides.set(sourceKey, Number(event.currentTarget.value)); renderDrilldown(); });
+        sourceCell.append(select);
+      } else {
+        sourceCell.textContent = 'No source available';
+      }
+      row.append(sourceCell);
+      cell(row, source ? fmt(source.available) : '—');
+      cell(row, source ? fmt(quantity) : '—');
       host.append(row);
     });
     if (!rows.length) host.innerHTML = '<tr><td colspan="9" class="muted">No low items in this category.</td></tr>';
     $('lowStockDrilldownCount').textContent = rows.length + ' low SKUs · ' + fmt(rows.reduce((n, x) => n + x.shortage, 0)) + ' pieces short';
-    $('createCategoryTransfers').disabled = transferable === 0;
-    $('createCategoryTransfers').dataset.recommendations = JSON.stringify(
-      [...suggestionsByProduct.values()]
-    );
-    transferSet(transferable
-      ? 'Select the lines to draft from the available source warehouse. Inventory will not move until the draft is allocated and shipped.'
+    $('createCategoryTransfers').disabled = categoryDrafts.length === 0;
+    $('createCategoryTransfers').dataset.recommendations = JSON.stringify(categoryDrafts);
+    transferSet(categoryDrafts.length
+      ? 'Destination: ' + (rows[0]?.location || 'this warehouse') + '. Choose a source warehouse for any SKU, then select the lines to draft.'
       : 'No source warehouse has enough available inventory for this category right now.');
   }
-
   function render() {
     const term = $('replenishmentSearch').value.trim().toLowerCase(), locationId = $('replenishmentLocation').value;
     const filtered = all.filter(x => (!locationId || String(x.locationId) === locationId) && (!term || [x.sku, x.product, x.category, x.barcode, x.location].join(' ').toLowerCase().includes(term)));
