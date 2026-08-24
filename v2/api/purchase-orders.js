@@ -162,6 +162,12 @@ module.exports = async function purchaseOrders(req, res) {
         p_user_name: auth.user.display_name
       }) });
     }
+    if (action === 'delete') {
+      if (!canManagePurchaseOrders) return res.status(403).json({ ok: false, error: 'Only an admin can delete a purchase order.' });
+      return res.status(200).json({ ok: true, result: await rpc(url, serviceRoleKey, 'delete_v2_purchase_order', {
+        p_purchase_order_id: purchaseOrderId, p_user_id: auth.user.id, p_user_name: auth.user.display_name
+      }) });
+    }
     if (action === 'receive-lines') {
       if (!manageable.some(entry => entry.id === Number(order.receiving_location_id))) return res.status(403).json({ ok: false, error: 'You need manager access to this PO receiving location.' });
       const lines = (body.lines || []).map(line => ({ lineId: integer(line.lineId), quantity: Number(line.quantity) })).filter(line => line.lineId && Number.isFinite(line.quantity) && line.quantity > 0);
@@ -191,7 +197,21 @@ module.exports = async function purchaseOrders(req, res) {
         p_user_name:auth.user.display_name
       });
       await rpc(url,serviceRoleKey,'complete_v2_purchase_order_receipt',{p_attempt_id:attempt.attemptId});
-      return res.status(200).json({ok:true,purchaseOrder,shopifyAdjustmentId,receiptResumed:Boolean(attempt.reused)});
+      const notificationKey = 'po-receipt:' + attempt.attemptId;
+      const notificationPayload = { purchaseOrderNumber: order.purchase_order_number, vendorName: order.vendor_name, receivedAt: new Date().toISOString(), receivedBy: auth.user.display_name, lines };
+      const existingNoticeResponse = await fetch(url + '/rest/v1/purchase_order_accounting_notifications?idempotency_key=eq.' + encodeURIComponent(notificationKey) + '&select=id,status', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+      const existingNotice = (await existingNoticeResponse.json().catch(() => []))[0];
+      let accountingNotification = existingNotice?.status || 'pending_configuration';
+      if (existingNotice?.status !== 'sent' && process.env.RESEND_API_KEY) {
+        const linesText = lines.map(line => '<li>Line ' + line.lineId + ': ' + line.quantity + '</li>').join('');
+        const emailResponse = await fetch('https://api.resend.com/emails', { method: 'POST', headers: { Authorization: 'Bearer ' + process.env.RESEND_API_KEY, 'Content-Type': 'application/json' }, body: JSON.stringify({ from: process.env.PO_ACCOUNTING_FROM_EMAIL || 'BM Warehouse <warehouse@bargainmoulding.com>', to: ['accounting@bargainmoulding.com'], subject: 'PO received: ' + order.purchase_order_number, html: '<h2>Purchase order received</h2><p><strong>PO:</strong> ' + order.purchase_order_number + '</p><p><strong>Received by:</strong> ' + auth.user.display_name + '</p><ul>' + linesText + '</ul>' }), signal: AbortSignal.timeout(15000) });
+        const emailData = await emailResponse.json().catch(() => ({}));
+        accountingNotification = emailResponse.ok ? 'sent' : 'failed';
+        await fetch(url + '/rest/v1/purchase_order_accounting_notifications?on_conflict=idempotency_key', { method: 'POST', headers: { ...jsonHeaders(serviceRoleKey), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ purchase_order_id: purchaseOrderId, receipt_attempt_id: attempt.attemptId, idempotency_key: notificationKey, status: accountingNotification, provider_message_id: emailData.id || null, error: emailResponse.ok ? null : (emailData.message || 'Resend delivery failed'), payload: notificationPayload, sent_at: emailResponse.ok ? new Date().toISOString() : null }), signal: AbortSignal.timeout(8000) });
+      } else if (!existingNotice) {
+        await fetch(url + '/rest/v1/purchase_order_accounting_notifications?on_conflict=idempotency_key', { method: 'POST', headers: { ...jsonHeaders(serviceRoleKey), Prefer: 'resolution=merge-duplicates,return=minimal' }, body: JSON.stringify({ purchase_order_id: purchaseOrderId, receipt_attempt_id: attempt.attemptId, idempotency_key: notificationKey, status: 'pending_configuration', payload: notificationPayload }), signal: AbortSignal.timeout(8000) });
+      }
+      return res.status(200).json({ok:true,purchaseOrder,shopifyAdjustmentId,receiptResumed:Boolean(attempt.reused),accountingNotification});
     }
     return res.status(400).json({ ok: false, error: 'unknown_action' });
   } catch (error) {
