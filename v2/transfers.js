@@ -85,6 +85,7 @@
   }
   function openDocumentScan(){showDialog(documentScanPanel);documentScanInput.value='';documentScanStatus.textContent='Scan or enter the transfer number to begin.';documentScanStatus.classList.remove('error');documentScanInput.focus();}
   function openTransferFromPaperwork(value){
+    if(scanShopifyTransfer(value))return;
     const scanned=String(value||'').trim().toUpperCase();
     const transfer=transfers.find(item=>String(item.transfer_number||'').toUpperCase()===scanned);
     if(!transfer){documentScanStatus.textContent='No visible transfer matches '+scanned+'. Make sure you are signed into the destination warehouse.';documentScanStatus.classList.add('error');return;}
@@ -201,20 +202,21 @@
   transferQueue.parentNode.insertBefore(shopifyLifecyclePanel,transferQueue);
   const shopifyLifecycleRows=shopifyLifecyclePanel.querySelector('#shopifyTransferLifecycleRows');
   let shopifyTransferLinks=[], shopifyTransferCapabilities={canShip:false,canReceive:false};
+  async function runShopifyLifecycle(link,action,button){
+    const question=action==='ship'
+      ? 'Ship '+link.bm_reference+' in Shopify? This starts the real in-transit inventory movement from '+link.source_name+' to '+link.destination_name+'.'
+      : 'Receive '+link.bm_reference+' in Shopify? This adds the material into '+link.destination_name+'.';
+    if(!confirm(question))return;
+    if(button)button.disabled=true;show(action==='ship'?'Shipping in Shopify…':'Receiving in Shopify…');
+    try{
+      const response=await fetch('/api/shopify-transfer-lifecycle',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action,linkId:link.id})});
+      const data=await response.json();if(!response.ok)throw new Error(data.error||'Shopify transfer action failed.');
+      show(data.message);await loadShopifyTransfers();
+    }catch(error){show(error.message||'Shopify transfer action failed.',true);}finally{if(button)button.disabled=false;}
+  }
   function lifecycleButton(label,link,action){
     const button=document.createElement('button');button.type='button';button.className=action==='ship'?'button':'button secondary';button.textContent=label;
-    button.addEventListener('click',async()=>{
-      const question=action==='ship'
-        ? 'Ship '+link.bm_reference+' in Shopify? This starts the real in-transit inventory movement from '+link.source_name+' to '+link.destination_name+'.'
-        : 'Receive '+link.bm_reference+' in Shopify? This adds the material into '+link.destination_name+'.';
-      if(!confirm(question))return;
-      button.disabled=true;show(action==='ship'?'Shipping in Shopify…':'Receiving in Shopify…');
-      try{
-        const response=await fetch('/api/shopify-transfer-lifecycle',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action,linkId:link.id})});
-        const data=await response.json();if(!response.ok)throw new Error(data.error||'Shopify transfer action failed.');
-        show(data.message);await loadShopifyTransfers();
-      }catch(error){show(error.message||'Shopify transfer action failed.',true);}finally{button.disabled=false;}
-    });
+    button.addEventListener('click',()=>runShopifyLifecycle(link,action,button));
     return button;
   }
   function renderShopifyTransfers(){
@@ -223,10 +225,34 @@
     shopifyTransferLinks.forEach(link=>{
       const row=document.createElement('tr');cell(row,link.bm_reference);cell(row,link.source_name+' → '+link.destination_name);cell(row,formatStatus(link.status));
       const actions=document.createElement('td');
+      if(shopifyTransferCapabilities.canShip)actions.append(shopifyPrintButton(link));
       if(link.status==='draft'&&shopifyTransferCapabilities.canShip)actions.append(lifecycleButton('Ship in Shopify',link,'ship'));
       if((link.status==='shipped'||link.status==='partially_received')&&shopifyTransferCapabilities.canReceive)actions.append(lifecycleButton('Receive in Shopify',link,'receive'));
       if(!actions.childNodes.length)actions.textContent='—';row.append(actions);shopifyLifecycleRows.append(row);
     });
+  }
+  function barcode39(value){
+    const map={'0':'nnnwwnwnn','1':'wnnwnnnnw','2':'nnwwnnnnw','3':'wnwwnnnnn','4':'nnnwwnnnw','5':'wnnwwnnnn','6':'nnwwwnnnn','7':'nnnwnnwnw','8':'wnnwnnwnn','9':'nnwwnnwnn','A':'wnnnnwnnw','B':'nnwnnwnnw','C':'wnwnnwnnn','D':'nnnnwwnnw','E':'wnnnwwnnn','F':'nnwnwwnnn','G':'nnnnnwwnw','H':'wnnnnwwnn','I':'nnwnnwwnn','J':'nnnnwwwnn','K':'wnnnnnnww','L':'nnwnnnnww','M':'wnwnnnnwn','N':'nnnnwnnww','O':'wnnnwnnwn','P':'nnwnwnnwn','Q':'nnnnnnwww','R':'wnnnnnwwn','S':'nnwnnnwwn','T':'nnnnwnwwn','U':'wwnnnnnnw','V':'nwwnnnnnw','W':'wwwnnnnnn','X':'nwnnwnnnw','Y':'wwnnwnnnn','Z':'nwwnwnnnn','-':'nwnnnnwnw',' ':'nwwnnnwnn','*':'nwnnwnwnn'};
+    const chars='*'+String(value||'').toUpperCase()+'*';if([...chars].some(c=>!map[c]))return '';
+    let x=10,rects='';[...chars].forEach((c,index)=>{[...map[c]].forEach((w,pos)=>{const width=(w==='w'?6:2);if(pos%2===0)rects+='<rect x="'+x+'" y="0" width="'+width+'" height="64"/>';x+=width;});if(index<chars.length-1)x+=2;});
+    return '<svg viewBox="0 0 '+(x+10)+' 64" width="360" height="64" aria-label="Transfer barcode">'+rects+'</svg>';
+  }
+  function shopifyPrintButton(link){
+    const button=document.createElement('button');button.type='button';button.className='button secondary';button.textContent='Print ticket';
+    button.addEventListener('click',()=>{
+      const popup=window.open('about:blank','_blank','width=820,height=700');if(!popup)return show('Allow pop-ups to print this transfer ticket.',true);
+      const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const lines=(link.shopify_transfer_link_lines||[]).map(line=>'<tr><td><b>'+esc(line.sku)+'</b></td><td>'+esc(line.quantity)+'</td></tr>').join('')||'<tr><td colspan="2">Line details are unavailable. Refresh the transfer list and try again.</td></tr>';
+      popup.document.write('<!doctype html><title>'+esc(link.bm_reference)+' transfer ticket</title><style>body{font:16px Arial;color:#16263c;margin:34px}h1{margin:0 0 8px}.route{font-size:20px;margin-bottom:22px}.barcode{border:2px solid #16263c;border-radius:8px;padding:16px;max-width:420px;margin:20px 0}.barcode b{font-family:monospace;font-size:22px}svg{display:block;max-width:100%;margin:10px 0}table{border-collapse:collapse;width:100%;margin-top:24px}th,td{border:1px solid #cbd5e1;padding:11px;text-align:left}th{background:#edf3fa}@media print{body{margin:16px}}</style><h1>Transfer ticket · '+esc(link.bm_reference)+'</h1><div class="route"><b>From:</b> '+esc(link.source_name)+' &nbsp; → &nbsp; <b>To:</b> '+esc(link.destination_name)+'</div><div class="barcode"><small>SCAN THIS BARCODE AT RECEIVING</small>'+barcode39(link.bm_reference)+'<b>'+esc(link.bm_reference)+'</b></div><h2>Items to move</h2><table><thead><tr><th>SKU</th><th>Quantity</th></tr></thead><tbody>'+lines+'</tbody></table><p>At the destination: open BM Warehouse → Receive transfer → scan this ticket. The scan opens the exact Shopify transfer for confirmation.</p>');
+      popup.document.close();popup.focus();setTimeout(()=>popup.print(),150);
+    });return button;
+  }
+  function scanShopifyTransfer(value){
+    const code=String(value||'').trim().toUpperCase();
+    const link=shopifyTransferLinks.find(item=>String(item.bm_reference||'').toUpperCase()===code);
+    if(!link)return false;
+    if(!['shipped','partially_received'].includes(link.status)){documentScanStatus.textContent=link.bm_reference+' is '+formatStatus(link.status)+'. It must be shipped before it can be received.';documentScanStatus.classList.add('error');return true;}
+    hideDialog(documentScanPanel);runShopifyLifecycle(link,'receive');return true;
   }
   async function loadShopifyTransfers(){
     const response=await fetch('/api/shopify-transfer-lifecycle',{credentials:'same-origin'});
