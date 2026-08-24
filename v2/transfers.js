@@ -269,7 +269,7 @@
   // The button is admin-only, creates a DRAFT in Shopify, and requires a second explicit
   // confirmation after the live availability preview has returned.
   const nativeCreate=document.createElement('button');
-  nativeCreate.type='button';nativeCreate.className='button secondary';nativeCreate.textContent='Create draft in Shopify';
+  nativeCreate.type='button';nativeCreate.className='button secondary';nativeCreate.textContent='Create transfer draft';
   create.insertAdjacentElement('afterend',nativeCreate);
   function nativePayload(){return {sourceLocationId:Number(from.value),destinationLocationId:Number(to.value),lines:[{sku:sku.value.trim(),quantity:Number(quantity.value)}]};}
   nativeCreate.addEventListener('click',async()=>{
@@ -280,13 +280,17 @@
     try{
       const previewResponse=await fetch('/api/shopify-transfer-preview',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:'preview',...nativePayload()})});
       const plan=await previewResponse.json();if(!previewResponse.ok)throw new Error(plan.error||'Shopify availability lookup failed.');
-      if(plan.routeType!=='same_store')throw new Error('This is a cross-store route. It needs the linked inbound PO workflow and is not enabled for live creation yet.');
       if(!plan.allLinesAvailable)throw new Error('Shopify reports insufficient available stock. Nothing was created.');
       const line=plan.lines[0];
-      if(!confirm('Create a DRAFT native Shopify transfer for '+line.quantity+' × '+line.sku+' from '+plan.source.warehouse+' to '+plan.destination.warehouse+'? This does not move stock until it is marked Ready to ship in Shopify.'))return;
-      show('Creating draft in Shopify…');
-      const response=await fetch('/api/shopify-transfer-preview',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:'create_native_same_store',...nativePayload()})});
-      const result=await response.json();if(!response.ok)throw new Error(result.error||'Shopify transfer could not be created.');
+      const intercompany=plan.routeType==='cross_store';
+      const action=intercompany?'create_intercompany_draft':'create_native_same_store';
+      const wording=intercompany
+        ? 'Create an intercompany DRAFT for '+line.quantity+' × '+line.sku+' from '+plan.source.warehouse+' to '+plan.destination.warehouse+'? This only creates the linked NY/CT workflow. It will not change Shopify inventory.'
+        : 'Create a DRAFT native Shopify transfer for '+line.quantity+' × '+line.sku+' from '+plan.source.warehouse+' to '+plan.destination.warehouse+'? This does not move stock until it is marked Ready to ship in Shopify.';
+      if(!confirm(wording))return;
+      show(intercompany?'Creating linked intercompany draft…':'Creating draft in Shopify…');
+      const response=await fetch('/api/shopify-transfer-preview',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action,...nativePayload()})});
+      const result=await response.json();if(!response.ok)throw new Error(result.error||'Transfer draft could not be created.');
       sku.value='';quantity.value='';show(result.message);
     }catch(error){show(error.message||'Shopify transfer creation failed.',true);}finally{nativeCreate.disabled=false;}
   });
