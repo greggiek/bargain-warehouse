@@ -97,6 +97,7 @@ module.exports = async function shopifyWebhookSetup(req, res) {
     }
 
     if (body.action === 'enable_paid_orders') {
+      return res.status(409).json({ ok: false, error: 'Paid-order webhooks are disabled. Shopify remains the inventory authority while the Shopify-backed transfer workflow is being configured.' });
       const callbackUrl = String(body.callbackUrl || '').trim();
       if (!/^https:\/\/.+\/api\/webhooks\/shopify-order-paid$/.test(callbackUrl)) return res.status(400).json({ ok: false, error: 'Invalid webhook callback URL.' });
       const existing = await load(url, serviceRoleKey);
