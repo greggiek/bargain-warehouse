@@ -93,6 +93,14 @@ module.exports = async (req, res) => {
     }
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method_not_allowed' });
 
+    // V2-only transfer mutations are retired. Inventory movement is now performed
+    // exclusively by Shopify-native transfers through /api/shopify-transfer-preview
+    // and /api/shopify-transfer-lifecycle. GET remains for historical V2 audit views.
+    return res.status(410).json({
+      ok: false,
+      error: 'Legacy V2 transfers are retired. Create and move transfers through the Shopify transfer workflow.'
+    });
+
     const body = req.body || {};
     const action = body.action || 'create';
     if (action === 'create_recommended_drafts') {
