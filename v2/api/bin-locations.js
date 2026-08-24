@@ -18,6 +18,14 @@ async function query(url, key, path) {
   if (!response.ok) throw Error(data.message || 'bin location lookup failed');
   return data;
 }
+async function queryAll(url, key, path, pageSize = 1000) {
+  const rows = [];
+  for (let offset = 0; ; offset += pageSize) {
+    const page = await query(url, key, path + '&limit=' + pageSize + '&offset=' + offset);
+    rows.push(...page);
+    if (page.length < pageSize) return rows;
+  }
+}
 async function rpc(url, key, payload) {
   const response = await fetch(url + '/rest/v1/rpc/set_v2_inventory_bin_location', {
     method: 'POST',
@@ -44,8 +52,8 @@ module.exports = async function binLocations(req, res) {
     if (req.method === 'GET') {
       const search = clean(req.query?.search, 80).toLowerCase();
       const [bins, balances] = await Promise.all([
-        query(url, serviceRoleKey, 'inventory_bin_locations?location_id=eq.' + requested + '&select=id,product_id,bin_code,note,updated_at,updated_by_name,products(id,sku,name,category)&order=bin_code.asc&limit=5000'),
-        query(url, serviceRoleKey, 'inventory_balances?location_id=eq.' + requested + '&select=product_id,quantity,products(id,sku,name,category)&limit=10000')
+        queryAll(url, serviceRoleKey, 'inventory_bin_locations?location_id=eq.' + requested + '&select=id,product_id,bin_code,note,updated_at,updated_by_name,products(id,sku,name,category)&order=product_id.asc'),
+        queryAll(url, serviceRoleKey, 'inventory_balances?location_id=eq.' + requested + '&select=product_id,quantity,products(id,sku,name,category)&order=product_id.asc')
       ]);
       const binsByProduct = new Map(bins.map(row => [Number(row.product_id), row]));
       const benchmark = [...new Map(balances.map(balance => {
