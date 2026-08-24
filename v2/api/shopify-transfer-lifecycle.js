@@ -157,7 +157,7 @@ module.exports = async function shopifyTransferLifecycle(req, res) {
     const isAdmin = TRANSFER_ADMIN_ROLES.has(auth.user.role);
 
     if (req.method === 'GET') {
-      const links = await postgrest(url, 'shopify_transfer_links?select=id,bm_reference,status,source_location_id,destination_location_id,source_store_key,destination_store_key,created_at,metadata&order=created_at.desc&limit=50', 'GET', serviceRoleKey);
+      const links = await postgrest(url, 'shopify_transfer_links?select=id,bm_reference,status,source_location_id,destination_location_id,source_store_key,destination_store_key,created_at,metadata,shopify_transfer_link_lines(sku,quantity)&order=created_at.desc&limit=50', 'GET', serviceRoleKey);
       const visible = (Array.isArray(links) ? links : []).filter(link => isAdmin
         ? managed.has(Number(link.source_location_id)) || managed.has(Number(link.destination_location_id))
         : managed.has(Number(link.destination_location_id)));
