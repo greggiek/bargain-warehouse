@@ -11,6 +11,12 @@
     if (!r.ok) throw Error(d.error || 'Request failed');
     return d;
   };
+  const manufacturing = async (body) => {
+    const options = body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) } : {};
+    const r = await fetch('/api/manufacturing-work-orders', options), d = await r.json();
+    if (!r.ok) throw Error(d.error || 'Manufacturing request failed');
+    return d;
+  };
   const add = (s, t, v) => {
     const o = document.createElement('option');
     o.textContent = t; o.value = v; s.append(o);
@@ -156,9 +162,58 @@
     });
   }
 
+  function renderMadeToOrder(rows) {
+    const h = $('mtoWorkOrderRows');
+    h.replaceChildren();
+    if (!rows.length) {
+      h.innerHTML = '<tr><td colspan="6" class="muted">No Shopify made-to-order sales have released work orders yet.</td></tr>';
+      return;
+    }
+    rows.forEach(event => {
+      const work = event.production_work_orders || {};
+      const finished = event.product_boms?.products?.name || event.sku || '—';
+      const tr = document.createElement('tr');
+      [work.work_order_number || '—', event.shopify_order_name || event.shopify_order_id || '—', finished, work.destination?.name || '—', event.status].forEach(value => {
+        const td = document.createElement('td'); td.textContent = value; tr.append(td);
+      });
+      const td = document.createElement('td');
+      if (event.status === 'released' && work.status === 'allocated') {
+        const complete = document.createElement('button');
+        complete.type = 'button'; complete.className = 'button'; complete.textContent = 'Complete';
+        complete.onclick = async () => {
+          try {
+            if (!confirm('Complete ' + work.work_order_number + '? This consumes the reserved 730 components and allocates the finished item to its destination.')) return;
+            const result = await post({ action: 'completeWorkOrder', workOrderId: event.production_work_order_id });
+            say(result.alreadyCompleted ? 'Work order was already completed.' : result.workOrderNumber + ' complete. ' + result.transferNumber + ' is ready to ship.');
+            await refresh();
+          } catch (error) { say(error.message, true); }
+        };
+        td.append(complete);
+      } else {
+        td.textContent = event.error || 'Review';
+      }
+      tr.append(td); h.append(tr);
+    });
+  }
+  async function refreshMadeToOrder() {
+    const d = await manufacturing();
+    const destination = $('mtoDestination');
+    const current = destination.value;
+    destination.replaceChildren();
+    add(destination, 'Choose final destination', '');
+    (d.locations || []).forEach(location => add(destination, location.name, location.id));
+    const trigger = (d.triggers || []).find(x => x.shopify_store_key === 'store_1' && x.shopify_product_id === $('mtoShopifyProductId').value.replace(/\\D/g, ''));
+    destination.value = String(trigger?.destination?.id || current || '');
+    $('mtoTriggerStatus').textContent = trigger
+      ? 'Active: Shopify paid sales of product ' + trigger.shopify_product_id + ' create work orders for ' + (trigger.destination?.name || 'the selected destination') + '.'
+      : 'Enter a Shopify product ID, choose its destination, then save the trigger.';
+    renderMadeToOrder(d.workOrders || []);
+  }
+
   async function refresh() {
     const d = await get('');
     renderJobs(d.activeProductionJobs || []);
+    await refreshMadeToOrder();
     const h = $('productionHistoryRows');
     h.replaceChildren();
     (d.history || []).forEach(x => {
@@ -228,6 +283,19 @@
         preview(); renderLines(); say('Door added. Add more SKUs, then release the full job.');
       } catch (e) { say(e.message, true); }
     };
+    $('mtoSaveTrigger').onclick = async () => {
+      try {
+        const shopifyProductId = $('mtoShopifyProductId').value.replace(/\\D/g, '');
+        const destinationLocationId = Number($('mtoDestination').value);
+        if (!shopifyProductId) throw Error('Enter the Shopify product ID from its Shopify admin URL.');
+        if (!destinationLocationId) throw Error('Choose the final destination for this made-to-order product.');
+        await manufacturing({ action: 'saveTrigger', storeKey: 'store_1', shopifyProductId, destinationLocationId, enabled: true });
+        await refreshMadeToOrder();
+        say('Shopify sale trigger saved. Paid sales will release a work order once the orders/paid webhook reaches BM Warehouse.');
+      } catch (error) { $('mtoTriggerStatus').textContent = error.message; $('mtoTriggerStatus').classList.add('error'); }
+    };
+    $('mtoShopifyProductId').onchange = () => refreshMadeToOrder().catch(error => say(error.message, true));
+
     $('releaseProduction').onclick = async () => {
       try {
         if (!lines.length) throw Error('Add at least one door BOM.');
