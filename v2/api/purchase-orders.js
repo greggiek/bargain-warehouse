@@ -170,10 +170,32 @@ module.exports = async function purchaseOrders(req, res) {
       if (!manageable.some(entry => entry.id === Number(order.receiving_location_id))) return res.status(403).json({ ok: false, error: 'You need manager access to this PO receiving location.' });
       const lines = (body.lines || []).map(line => ({ lineId: integer(line.lineId), quantity: Number(line.quantity) })).filter(line => line.lineId && Number.isFinite(line.quantity) && line.quantity > 0);
       if (!lines.length) return res.status(400).json({ ok: false, error: 'Scan at least one expected PO item.' });
-      const idempotencyKey=String(body.idempotencyKey||'');if(!idempotencyKey) return res.status(400).json({ok:false,error:'Receipt key is required.'});
-      const shopifyAdjustmentId=await postReceiptToShopify(url,serviceRoleKey,order,lines,idempotencyKey);
-      const purchaseOrder=await rpc(url,serviceRoleKey,'receive_v2_purchase_order_lines',{p_purchase_order_id:purchaseOrderId,p_lines:lines,p_idempotency_key:idempotencyKey,p_user_id:auth.user.id,p_user_name:auth.user.display_name});
-      return res.status(200).json({ok:true,purchaseOrder,shopifyAdjustmentId});
+      // The server owns the durable receipt key. If the browser or Wi-Fi drops,
+      // submitting the same PO lines resumes this attempt instead of adding stock again.
+      const attempt=await rpc(url,serviceRoleKey,'begin_v2_purchase_order_receipt',{
+        p_purchase_order_id:purchaseOrderId,
+        p_receiving_location_id:Number(order.receiving_location_id),
+        p_lines:lines,
+        p_user_id:auth.user.id,
+        p_user_name:auth.user.display_name
+      });
+      let shopifyAdjustmentId=attempt.shopifyAdjustmentId;
+      if(!shopifyAdjustmentId){
+        shopifyAdjustmentId=await postReceiptToShopify(url,serviceRoleKey,order,lines,attempt.idempotencyKey);
+        await rpc(url,serviceRoleKey,'confirm_v2_purchase_order_receipt_shopify',{
+          p_attempt_id:attempt.attemptId,
+          p_shopify_adjustment_id:shopifyAdjustmentId
+        });
+      }
+      const purchaseOrder=await rpc(url,serviceRoleKey,'receive_v2_purchase_order_lines',{
+        p_purchase_order_id:purchaseOrderId,
+        p_lines:lines,
+        p_idempotency_key:attempt.idempotencyKey,
+        p_user_id:auth.user.id,
+        p_user_name:auth.user.display_name
+      });
+      await rpc(url,serviceRoleKey,'complete_v2_purchase_order_receipt',{p_attempt_id:attempt.attemptId});
+      return res.status(200).json({ok:true,purchaseOrder,shopifyAdjustmentId,receiptResumed:Boolean(attempt.reused)});
     }
     return res.status(400).json({ ok: false, error: 'unknown_action' });
   } catch (error) {
