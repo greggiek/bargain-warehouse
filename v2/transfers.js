@@ -288,7 +288,7 @@
       const intercompany=link.route_type==='cross_store';
       const row=document.createElement('tr');cell(row,link.bm_reference);cell(row,link.source_name+' → '+link.destination_name);cell(row,(intercompany?'Intercompany · ':'')+formatStatus(link.status));
       const actions=document.createElement('td');
-      if(shopifyTransferCapabilities.canShip)actions.append(shopifyPrintButton(link));
+      if(shopifyTransferCapabilities.canShip){ actions.append(shopifyPrintButton(link)); actions.append(shopifyLabelButton(link)); }
       if(link.status==='draft'&&shopifyTransferCapabilities.canShip)actions.append(lifecycleButton(intercompany?'Ship intercompany':'Ship in Shopify',link,'ship'));
       if((link.status==='shipped'||link.status==='partially_received')&&shopifyTransferCapabilities.canReceive)actions.append(lifecycleButton(intercompany?'Receive intercompany':'Receive in Shopify',link,'receive'));
       if(!actions.childNodes.length)actions.textContent='—';row.append(actions);shopifyLifecycleRows.append(row);
@@ -299,6 +299,18 @@
     const chars='*'+String(value||'').toUpperCase()+'*';if([...chars].some(c=>!map[c]))return '';
     let x=10,rects='';[...chars].forEach((c,index)=>{[...map[c]].forEach((w,pos)=>{const width=(w==='w'?6:2);if(pos%2===0)rects+='<rect x="'+x+'" y="0" width="'+width+'" height="64"/>';x+=width;});if(index<chars.length-1)x+=2;});
     return '<svg viewBox="0 0 '+(x+10)+' 64" width="360" height="64" aria-label="Transfer barcode">'+rects+'</svg>';
+  }
+  function shopifyLabelButton(link){
+    const button=document.createElement('button');button.type='button';button.className='button secondary';button.textContent='Print Zebra labels';
+    button.addEventListener('click',()=>{
+      const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+      const lines=link.shopify_transfer_link_lines||[];
+      if(!lines.length)return show('This transfer has no item labels to print. Refresh and try again.',true);
+      const labels=lines.map((line,index)=>'<section class="zebra-label"><div class="eyebrow">BARGAIN MOULDING · TRANSFER</div><div class="doc">'+esc(link.bm_reference)+'</div><div class="route">'+esc(link.source_name)+' → '+esc(link.destination_name)+'</div><div class="sku">'+esc(line.sku||'—')+'</div>'+barcode39(line.sku||'')+'<div class="code">'+esc(line.sku||'—')+'</div><div class="bottom">Qty: '+esc(line.quantity)+' · Label '+(index+1)+' of '+lines.length+'</div></section>').join('');
+      const popup=window.open('about:blank','_blank');if(!popup)return show('Allow pop-ups to print Zebra labels.',true);
+      popup.document.write('<!doctype html><title>'+esc(link.bm_reference)+' labels</title><style>@page{size:3in 5in;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Arial;color:#000}.zebra-label{width:3in;height:5in;padding:.22in;page-break-after:always;display:flex;flex-direction:column;border:1px dashed #ddd}.zebra-label:last-child{page-break-after:auto}.eyebrow{font-size:9pt;font-weight:800;letter-spacing:1px}.doc{font-size:15pt;font-weight:800;margin:7px 0}.route{font-size:10pt;line-height:1.25;min-height:.45in}.sku{font:17pt monospace;font-weight:800;margin:8px 0}.zebra-label svg{width:100%;height:.78in;fill:#000;display:block;margin-top:auto}.code{font:12pt monospace;font-weight:bold;text-align:center;margin-top:4px}.bottom{border-top:1px solid #000;margin-top:8px;padding-top:7px;font-size:10pt;font-weight:700}</style></head><body>'+labels+'</body></html>');
+      popup.document.close();popup.focus();setTimeout(()=>popup.print(),250);
+    });return button;
   }
   function shopifyPrintButton(link){
     const button=document.createElement('button');button.type='button';button.className='button secondary';button.textContent='Print ticket';
