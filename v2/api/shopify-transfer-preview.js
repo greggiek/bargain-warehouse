@@ -91,8 +91,8 @@ async function preview(url, key, body) {
   }
   if (!lines.length || lines.length > 50) throw new Error('Preview between 1 and 50 SKU lines.');
   const normalizedLines = lines.map(line => ({ sku: normalizeSku(line.sku), quantity: Number(line.quantity) }));
-  if (normalizedLines.some(line => !line.sku || !Number.isFinite(line.quantity) || line.quantity <= 0)) {
-    throw new Error('Every line needs an exact SKU and a quantity above zero.');
+  if (normalizedLines.some(line => !line.sku || !Number.isInteger(line.quantity) || line.quantity <= 0)) {
+    throw new Error('Every line needs an exact SKU and a whole-piece quantity above zero.');
   }
   if (new Set(normalizedLines.map(line => line.sku.toLowerCase())).size !== normalizedLines.length) {
     throw new Error('Each SKU may be included once.');
@@ -200,7 +200,7 @@ async function createNativeTransfer(url, key, auth, body) {
       input: {
         originLocationId: source.shopify_location_id,
         destinationLocationId: destination.shopify_location_id,
-        lineItems: plan.lines.map(line => ({ inventoryItemId: line.sourceInventoryItemId, quantity: Math.round(line.quantity) })),
+        lineItems: plan.lines.map(line => ({ inventoryItemId: line.sourceInventoryItemId, quantity: line.quantity })),
         referenceName: bmReference,
         note: 'Created by BM Warehouse V2. Draft only; Shopify remains inventory authority.',
         tags: ['BM Warehouse', 'BM Transfer']
