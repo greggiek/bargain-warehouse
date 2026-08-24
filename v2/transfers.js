@@ -28,6 +28,7 @@
   function applyCapabilities(receiveOnly=false){
     const isAdmin=Boolean(capabilities.canManageTransfers);
     newTransferButton.hidden=!isAdmin;
+    if(typeof nativeCreate!=='undefined')nativeCreate.hidden=!isAdmin;
     createPanel.hidden=!isAdmin || !createMode;
     adminSections.forEach((section)=>{if(section)section.hidden=!isAdmin;});
     if(receiveOnly || !isAdmin){
@@ -188,5 +189,31 @@
     if(from.value===to.value)return show('Choose two different locations.',true);create.disabled=true;show('Allocating transfer…');
     try{const response=await fetch('/api/transfers',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:'create',fromLocationId:from.value,toLocationId:to.value,sku:sku.value,quantity:quantity.value})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Transfer could not be allocated.');sku.value='';quantity.value='';createMode=false;await load();show('Transfer '+data.transfer.transferNumber+' created and allocated. Ship it when it leaves.');}
     catch(error){show(error.message,true);}finally{create.disabled=false;}
+  });
+
+  // Native Shopify transfers are deliberately separate from the legacy V2 ledger path.
+  // The button is admin-only, creates a DRAFT in Shopify, and requires a second explicit
+  // confirmation after the live availability preview has returned.
+  const nativeCreate=document.createElement('button');
+  nativeCreate.type='button';nativeCreate.className='button secondary';nativeCreate.textContent='Create Shopify draft';
+  create.insertAdjacentElement('afterend',nativeCreate);
+  function nativePayload(){return {sourceLocationId:Number(from.value),destinationLocationId:Number(to.value),lines:[{sku:sku.value.trim(),quantity:Number(quantity.value)}]};}
+  nativeCreate.addEventListener('click',async()=>{
+    if(!capabilities.canManageTransfers)return show('Only administrators can create Shopify transfers.',true);
+    if(!from.value||!to.value||!sku.value.trim()||!quantity.value)return show('Choose locations, an exact SKU, and a quantity.',true);
+    if(from.value===to.value)return show('Choose two different locations.',true);
+    nativeCreate.disabled=true;show('Checking Shopify availability…');
+    try{
+      const previewResponse=await fetch('/api/shopify-transfer-preview',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:'preview',...nativePayload()})});
+      const plan=await previewResponse.json();if(!previewResponse.ok)throw new Error(plan.error||'Shopify availability lookup failed.');
+      if(plan.routeType!=='same_store')throw new Error('This is a cross-store route. It needs the linked inbound PO workflow and is not enabled for live creation yet.');
+      if(!plan.allLinesAvailable)throw new Error('Shopify reports insufficient available stock. Nothing was created.');
+      const line=plan.lines[0];
+      if(!confirm('Create a DRAFT native Shopify transfer for '+line.quantity+' × '+line.sku+' from '+plan.source.warehouse+' to '+plan.destination.warehouse+'? This does not move stock until it is marked Ready to ship in Shopify.'))return;
+      show('Creating draft in Shopify…');
+      const response=await fetch('/api/shopify-transfer-preview',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action:'create_native_same_store',...nativePayload()})});
+      const result=await response.json();if(!response.ok)throw new Error(result.error||'Shopify transfer could not be created.');
+      sku.value='';quantity.value='';show(result.message);
+    }catch(error){show(error.message||'Shopify transfer creation failed.',true);}finally{nativeCreate.disabled=false;}
   });
 })();
