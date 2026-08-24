@@ -24,9 +24,7 @@ function verified(raw, supplied, secret) {
   return actual.length === wanted.length && crypto.timingSafeEqual(actual, wanted);
 }
 
-module.exports.config = { api: { bodyParser: false } };
-
-module.exports = async function shopifyPaidOrderWebhook(req, res) {
+async function shopifyPaidOrderWebhook(req, res) {
   if (req.method !== 'POST') {
     res.setHeader('Allow', 'POST');
     return res.status(405).json({ ok: false, error: 'method_not_allowed' });
@@ -80,4 +78,7 @@ module.exports = async function shopifyPaidOrderWebhook(req, res) {
     console.error('Shopify paid-order webhook failed', error);
     return res.status(500).json({ ok: false, error: error.message || 'shopify_paid_webhook_failed' });
   }
-};
+}
+
+module.exports = shopifyPaidOrderWebhook;
+module.exports.config = { api: { bodyParser: false } };
