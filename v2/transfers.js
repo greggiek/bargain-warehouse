@@ -207,11 +207,16 @@
   const shopifyLifecycleRows=shopifyLifecyclePanel.querySelector('#shopifyTransferLifecycleRows');
   let shopifyTransferLinks=[], shopifyTransferCapabilities={canShip:false,canReceive:false};
   async function runShopifyLifecycle(link,action,button){
+    const intercompany=link.route_type==='cross_store';
     const question=action==='ship'
-      ? 'Ship '+link.bm_reference+' in Shopify? This starts the real in-transit inventory movement from '+link.source_name+' to '+link.destination_name+'.'
-      : 'Receive '+link.bm_reference+' in Shopify? This adds the material into '+link.destination_name+'.';
+      ? (intercompany
+        ? 'Ship intercompany transfer '+link.bm_reference+'? This deducts only '+link.source_name+' in Shopify. It does not create a customer sale.'
+        : 'Ship '+link.bm_reference+' in Shopify? This starts the real in-transit inventory movement from '+link.source_name+' to '+link.destination_name+'.')
+      : (intercompany
+        ? 'Receive intercompany transfer '+link.bm_reference+'? This adds stock only into '+link.destination_name+' in Shopify. It does not create a customer sale.'
+        : 'Receive '+link.bm_reference+' in Shopify? This adds the material into '+link.destination_name+'.');
     if(!confirm(question))return;
-    if(button)button.disabled=true;show(action==='ship'?'Shipping in Shopify…':'Receiving in Shopify…');
+    if(button)button.disabled=true;show(action==='ship'?'Posting shipment…':'Posting receipt…');
     try{
       const response=await fetch('/api/shopify-transfer-lifecycle',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action,linkId:link.id})});
       const data=await response.json();if(!response.ok)throw new Error(data.error||'Shopify transfer action failed.');
@@ -227,11 +232,12 @@
     shopifyLifecycleRows.replaceChildren();
     shopifyLifecyclePanel.hidden=!shopifyTransferLinks.length;
     shopifyTransferLinks.forEach(link=>{
-      const row=document.createElement('tr');cell(row,link.bm_reference);cell(row,link.source_name+' → '+link.destination_name);cell(row,formatStatus(link.status));
+      const intercompany=link.route_type==='cross_store';
+      const row=document.createElement('tr');cell(row,link.bm_reference);cell(row,link.source_name+' → '+link.destination_name);cell(row,(intercompany?'Intercompany · ':'')+formatStatus(link.status));
       const actions=document.createElement('td');
       if(shopifyTransferCapabilities.canShip)actions.append(shopifyPrintButton(link));
-      if(link.status==='draft'&&shopifyTransferCapabilities.canShip)actions.append(lifecycleButton('Ship in Shopify',link,'ship'));
-      if((link.status==='shipped'||link.status==='partially_received')&&shopifyTransferCapabilities.canReceive)actions.append(lifecycleButton('Receive in Shopify',link,'receive'));
+      if(link.status==='draft'&&shopifyTransferCapabilities.canShip)actions.append(lifecycleButton(intercompany?'Ship intercompany':'Ship in Shopify',link,'ship'));
+      if((link.status==='shipped'||link.status==='partially_received')&&shopifyTransferCapabilities.canReceive)actions.append(lifecycleButton(intercompany?'Receive intercompany':'Receive in Shopify',link,'receive'));
       if(!actions.childNodes.length)actions.textContent='—';row.append(actions);shopifyLifecycleRows.append(row);
     });
   }
