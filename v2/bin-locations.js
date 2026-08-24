@@ -9,7 +9,8 @@
   function renderProducts() {
     const term = $('binLocationProductSearch').value.trim().toLowerCase(), host = $('binLocationProductOptions');
     host.replaceChildren();
-    products.filter(product => !term || (product.sku + ' ' + product.name + ' ' + product.category).toLowerCase().includes(term)).slice(0, 12).forEach(product => {
+    if (term.length < 2) { host.hidden = true; return; }
+    products.filter(product => (product.sku + ' ' + product.name + ' ' + product.category).toLowerCase().includes(term)).slice(0, 6).forEach(product => {
       const option = document.createElement('button'); option.type = 'button'; option.className = 'product-suggestion';
       option.innerHTML = '<strong></strong> · <span></span><small></small>';
       option.querySelector('strong').textContent = product.sku;
@@ -19,6 +20,7 @@
         $('binLocationProductId').value = product.id;
         $('binLocationProductSearch').value = product.sku + ' · ' + product.name;
         host.hidden = true;
+        $('binLocationCode').focus();
       };
       host.append(option);
     });
@@ -68,8 +70,8 @@
     $('binLocationProductSearch').value = row ? ((row.products?.sku || '') + ' · ' + (row.products?.name || '')) : '';
     $('binLocationCode').value = row?.bin_code || '';
     $('binLocationNote').value = row?.note || '';
-    setDialog(row ? 'Update the bin location, then save it.' : 'Choose a warehouse item and enter its bin location.');
-    renderProducts();
+    setDialog(row ? 'Confirm the warehouse and bin, then save.' : 'Search the SKU, enter the bin, then save.');
+    $('binLocationProductOptions').hidden = true;
   }
   async function save() {
     const productId = Number($('binLocationProductId').value), binCode = $('binLocationCode').value.trim();
@@ -99,7 +101,6 @@
   $('binLocationFilter').addEventListener('change', () => load().catch(error => set(error.message, true)));
   $('binLocationSearch').addEventListener('input', () => load().catch(error => set(error.message, true)));
   $('binLocationProductSearch').addEventListener('input', renderProducts);
-  $('binLocationProductSearch').addEventListener('focus', renderProducts);
   $('binLocationWarehouse').addEventListener('change', () => {
     $('binLocationFilter').value = $('binLocationWarehouse').value;
     load().then(() => { $('binLocationWarehouse').value = $('binLocationFilter').value; renderProducts(); }).catch(error => setDialog(error.message, true));
