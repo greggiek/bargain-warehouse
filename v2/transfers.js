@@ -27,10 +27,14 @@
   const hideDialog=dialog=>{if(typeof dialog.close==='function'&&dialog.open)dialog.close();dialog.hidden=true;};
   function applyCapabilities(receiveOnly=false){
     const isAdmin=Boolean(capabilities.canManageTransfers);
+    // Shopify is the only live inventory-movement workflow. Keep old V2 transfer
+    // cards as hidden history so nobody can accidentally use a second ledger.
     newTransferButton.hidden=!isAdmin;
+    newTransferButton.textContent='Create Shopify transfer';
+    create.hidden=true;
     if(typeof nativeCreate!=='undefined')nativeCreate.hidden=!isAdmin;
     createPanel.hidden=!isAdmin || !createMode;
-    adminSections.forEach((section)=>{if(section)section.hidden=!isAdmin;});
+    adminSections.forEach((section)=>{if(section)section.hidden=true;});
     if(receiveOnly || !isAdmin){
       documentScanPanel.hidden=false;
       documentScanStatus.textContent='Scan the main barcode printed on the incoming transfer to begin.';
@@ -178,10 +182,10 @@
     transfers=data.transfers||[];renderQueue();renderIncomingTransfers();renderInTransit(data.inTransitLines||[],data.summary||{inTransitPieces:0,activeTransfers:0,inTransitSkus:0});renderHistory(data.history||[]);renderExceptions(data.exceptions||[]);
     await loadShopifyTransfers();
     applyCapabilities();
-    show(capabilities.canManageTransfers?'Create, print, ship, and receive transfers in the V2 ledger.':'Scan an incoming transfer to receive it into your assigned warehouse.');
+    show(capabilities.canManageTransfers?'Create and move transfers through Shopify.':'Scan an incoming Shopify transfer to receive it into your assigned warehouse.');
   }
   queueSearch.addEventListener('input',renderQueue);statusFilter.addEventListener('change',renderQueue);
-  newTransferButton.addEventListener('click',()=>{if(!capabilities.canManageTransfers)return show('Only administrators can create transfers.',true);createMode=true;applyCapabilities();createPanel.scrollIntoView({behavior:'smooth',block:'center'});sku.focus();});
+  newTransferButton.addEventListener('click',()=>{if(!capabilities.canManageTransfers)return show('Only administrators can create Shopify transfers.',true);createMode=true;applyCapabilities();createPanel.scrollIntoView({behavior:'smooth',block:'center'});sku.focus();});
   async function openWorkspace(receiveOnly=false){otherViews.forEach((element)=>{if(element)element.hidden=true;});otherNavs.forEach((element)=>element&&element.classList.remove('active'));nav.classList.add('active');view.hidden=false;await load();applyCapabilities(receiveOnly);if(receiveOnly||!capabilities.canManageTransfers)openDocumentScan();}
   nav.addEventListener('click',()=>openWorkspace(false));
   overviewReceiveTransfer?.addEventListener('click',()=>openWorkspace(true));
@@ -265,7 +269,7 @@
   // The button is admin-only, creates a DRAFT in Shopify, and requires a second explicit
   // confirmation after the live availability preview has returned.
   const nativeCreate=document.createElement('button');
-  nativeCreate.type='button';nativeCreate.className='button secondary';nativeCreate.textContent='Create Shopify draft';
+  nativeCreate.type='button';nativeCreate.className='button secondary';nativeCreate.textContent='Create draft in Shopify';
   create.insertAdjacentElement('afterend',nativeCreate);
   function nativePayload(){return {sourceLocationId:Number(from.value),destinationLocationId:Number(to.value),lines:[{sku:sku.value.trim(),quantity:Number(quantity.value)}]};}
   nativeCreate.addEventListener('click',async()=>{
