@@ -19,8 +19,16 @@ async function postReceiptToShopify(url,key,order,lines,idempotencyKey){
  const detailResponse=await fetch(url+'/rest/v1/purchase_order_lines?purchase_order_id=eq.'+order.id+'&select=id,ordered_quantity,received_quantity,products(sku)',{headers:jsonHeaders(key)});
  const details=await detailResponse.json().catch(()=>[]);if(!detailResponse.ok)throw Error('Could not validate PO lines.');
  const changes=[];
- for(const input of lines){const line=details.find(item=>Number(item.id)===Number(input.lineId));if(!line||Number(input.quantity)<=0||Number(input.quantity)>Number(line.ordered_quantity)-Number(line.received_quantity))throw Error('Invalid receipt quantity.');
- const result=await shopifyGraphql(store,`query($q:String!){productVariants(first:5,query:$q){nodes{id sku inventoryItem{id}}}}`,{q:'sku:"'+String(line.products?.sku||'').replace(/["\\\\]/g,'\\\\String(line.products?.sku||'').replace(/["\\]/g,'\\const PROCUREMENT_ROLES = new Set(['admin', 'developer']);')')+'"'});const variant=(result.productVariants?.nodes||[]).find(v=>String(v.sku||'').toLowerCase()===String(line.products?.sku||'').toLowerCase());if(!variant?.inventoryItem?.id)throw Error('Shopify SKU lookup failed for '+line.products?.sku+'.');changes.push({inventoryItemId:variant.inventoryItem.id,locationId:mapping.shopify_location_id,delta:Number(input.quantity)});}
+ for(const input of lines){
+  const line=details.find(item=>Number(item.id)===Number(input.lineId));
+  if(!line||Number(input.quantity)<=0||Number(input.quantity)>Number(line.ordered_quantity)-Number(line.received_quantity))throw Error('Invalid receipt quantity.');
+  const sku=String(line.products?.sku||'');
+  const escapedSku=sku.replace(/["\\]/g,'\\$&');
+  const result=await shopifyGraphql(store,`query($q:String!){productVariants(first:5,query:$q){nodes{id sku inventoryItem{id}}}}`,{q:'sku:"'+escapedSku+'"'});
+  const variant=(result.productVariants?.nodes||[]).find(v=>String(v.sku||'').toLowerCase()===sku.toLowerCase());
+  if(!variant?.inventoryItem?.id)throw Error('Shopify SKU lookup failed for '+sku+'.');
+  changes.push({inventoryItemId:variant.inventoryItem.id,locationId:mapping.shopify_location_id,delta:Number(input.quantity)});
+ }
  const result=await shopifyGraphql(store,`mutation($input:InventoryAdjustQuantitiesInput!,$key:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$key){inventoryAdjustmentGroup{id referenceDocumentUri} userErrors{message}}}`,{input:{reason:'correction',name:'available',referenceDocumentUri:'bmwarehouse://purchase-order/'+encodeURIComponent(order.purchase_order_number),changes},key:idempotencyKey});
  const payload=result.inventoryAdjustQuantities;if(payload?.userErrors?.length)throw Error(payload.userErrors.map(e=>e.message).join('; '));if(!payload?.inventoryAdjustmentGroup?.id)throw Error('Shopify did not confirm the PO receipt.');return payload.inventoryAdjustmentGroup.id;
 }
