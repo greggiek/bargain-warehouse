@@ -99,6 +99,29 @@
     });
   }
 
+  function printWorkOrder(job) {
+    const esc = value => String(value ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const lines = job.production_job_lines || [];
+    if (!lines.length) throw Error('This work order has no finished-door lines to print.');
+    const components = new Map();
+    lines.forEach(line => {
+      const recipe = line.product_boms || {}, output = Number(line.output_quantity || 0), yieldQty = Number(recipe.yield_quantity || 1);
+      (recipe.product_bom_components || []).forEach(component => {
+        const product = component.products || {}, key = component.component_product_id || product.sku || product.name;
+        const row = components.get(key) || { sku: product.sku || '—', name: product.name || 'Unnamed component', quantity: 0, uom: component.uom || 'EA' };
+        row.quantity += output * Number(component.quantity_per_yield || 0) / yieldQty;
+        components.set(key, row);
+      });
+    });
+    const finishedRows = lines.map(line => {
+      const recipe = line.product_boms || {}, product = recipe.products || {};
+      return '<tr><td><b>'+esc(product.sku || '—')+'</b><br>'+esc(product.name || recipe.finishedTitle || 'Finished door')+'</td><td>'+esc(line.output_quantity)+'</td><td>'+esc(recipe.yield_quantity || 1)+'</td></tr>';
+    }).join('');
+    const componentRows = [...components.values()].sort((a,b) => String(a.sku).localeCompare(String(b.sku))).map(row => '<tr><td><b>'+esc(row.sku)+'</b></td><td>'+esc(row.name)+'</td><td>'+Number(row.quantity).toLocaleString('en-US',{maximumFractionDigits:2})+' '+esc(row.uom)+'</td></tr>').join('') || '<tr><td colspan="3">Component detail is unavailable for this work order.</td></tr>';
+    const popup = window.open('','_blank'); if (!popup) throw Error('Allow pop-ups to print this work order.');
+    popup.document.write('<!doctype html><html><head><title>'+esc(job.job_number)+' work order</title><style>body{font:14px Arial;color:#172b48;margin:30px}.header{border-bottom:3px solid #123b61;padding-bottom:16px;margin-bottom:22px}.eyebrow{font-size:11px;color:#159765;font-weight:800;letter-spacing:1.5px}.number{font-size:30px;font-weight:800;margin:5px 0}.route{font-size:16px;margin:8px 0}h2{margin:26px 0 8px;font-size:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cfd9e6;padding:10px;text-align:left;vertical-align:top}th{background:#edf3fa;font-size:12px}.notes{margin-top:28px;border:1px solid #cfd9e6;border-radius:8px;min-height:100px;padding:12px;color:#61718a}@media print{body{margin:12mm}tr{break-inside:avoid}}</style></head><body><div class="header"><div class="eyebrow">BARGAIN MOULDING · MANUFACTURING WORK ORDER</div><div class="number">'+esc(job.job_number)+'</div><div class="route"><b>Build at:</b> 730 Windham Rd<br><b>Destination:</b> '+esc(job.destination?.name || '—')+'<br><b>Reference:</b> '+esc(job.reference || '—')+'<br><b>Printed:</b> '+esc(new Date().toLocaleString())+'</div></div><h2>Finished doors to build</h2><table><thead><tr><th>SKU / finished door</th><th>Build qty</th><th>BOM yield</th></tr></thead><tbody>'+finishedRows+'</tbody></table><h2>Components to pull</h2><table><thead><tr><th>SKU</th><th>Component</th><th>Total required</th></tr></thead><tbody>'+componentRows+'</tbody></table><div class="notes"><b>Production notes</b><br><br>____________________________________________________________<br><br>____________________________________________________________</div></body></html>');
+    popup.document.close(); popup.focus(); setTimeout(() => popup.print(), 250);
+  }
   function renderJobs(rows) {
     const h = $('activeWorkOrderRows');
     h.replaceChildren();
@@ -158,7 +181,7 @@
           await refresh();
         } catch (e) { say(e.message, true); }
       };
-      td.append(toggle, b); tr.append(td); h.append(tr, detail);
+      const print = document.createElement('button'); print.type = 'button'; print.className = 'button secondary'; print.textContent = 'Print work order'; print.onclick = () => { try { printWorkOrder(j); } catch (error) { say(error.message, true); } }; td.append(print, toggle, b); tr.append(td); h.append(tr, detail);
     });
   }
 
