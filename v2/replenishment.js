@@ -6,7 +6,7 @@
   const purchaseQueueLimit = 15, fmt = n => new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
   const set = (text, error = false) => { $('replenishmentStatus').textContent = text; $('replenishmentStatus').classList.toggle('error', error); };
   const poSet = (text, error = false) => { $('purchaseOrderStatus').textContent = text; $('purchaseOrderStatus').classList.toggle('error', error); };
-  const transferSet = (text, error = false) => { $('transferFirstStatus').textContent = text; $('transferFirstStatus').classList.toggle('error', error); };
+  const transferSet = (text, error = false) => { $('lowStockDrilldownStatus').textContent = text; $('lowStockDrilldownStatus').classList.toggle('error', error); };
   const cell = (row, value) => { const td = document.createElement('td'); td.textContent = value; row.append(td); };
 
   function choose(locationId, category) {
@@ -81,15 +81,43 @@
     const host = $('lowStockDrilldownRows'); host.replaceChildren();
     if (!selected) return;
     const rows = all.filter(x => x.locationId === selected.locationId && x.category === selected.category).sort((a, b) => b.shortage - a.shortage || a.sku.localeCompare(b.sku));
+    const suggestionsByProduct = new Map(
+      recommendations
+        .filter(item => item.toLocationId === selected.locationId)
+        .map(item => [item.productId, item])
+    );
+    let transferable = 0;
     rows.forEach(x => {
+      const suggestion = suggestionsByProduct.get(x.productId);
       const row = document.createElement('tr');
-      [x.sku, x.product, fmt(x.onHand), fmt(x.parQuantity), fmt(x.shortage), x.mainWarehouseOnHand == null ? '—' : fmt(x.mainWarehouseOnHand), x.mainWarehouseAvailable == null ? '—' : fmt(x.mainWarehouseAvailable)].forEach((value, index) => {
-        const td = document.createElement('td'); td.textContent = value; if (index === 4) td.className = 'low-stock-shortage'; row.append(td);
+      const choose = document.createElement('td');
+      if (suggestion) {
+        const input = document.createElement('input'); input.type = 'checkbox'; input.checked = true;
+        input.dataset.categoryTransfer = String(x.productId); choose.append(input); transferable += 1;
+      } else {
+        choose.textContent = '—';
+      }
+      row.append(choose);
+      [x.sku, x.product, fmt(x.onHand), fmt(x.parQuantity), fmt(x.shortage),
+        suggestion ? suggestion.from : 'No source available',
+        suggestion ? fmt(suggestion.availableQuantity == null ? suggestion.quantity : suggestion.availableQuantity) : '—',
+        suggestion ? fmt(suggestion.quantity) : '—'
+      ].forEach((value, index) => {
+        const td = document.createElement('td'); td.textContent = value;
+        if (index === 4) td.className = 'low-stock-shortage';
+        row.append(td);
       });
       host.append(row);
     });
-    if (!rows.length) host.innerHTML = '<tr><td colspan="7" class="muted">No low items in this category.</td></tr>';
+    if (!rows.length) host.innerHTML = '<tr><td colspan="9" class="muted">No low items in this category.</td></tr>';
     $('lowStockDrilldownCount').textContent = rows.length + ' low SKUs · ' + fmt(rows.reduce((n, x) => n + x.shortage, 0)) + ' pieces short';
+    $('createCategoryTransfers').disabled = transferable === 0;
+    $('createCategoryTransfers').dataset.recommendations = JSON.stringify(
+      [...suggestionsByProduct.values()]
+    );
+    transferSet(transferable
+      ? 'Select the lines to draft from the available source warehouse. Inventory will not move until the draft is allocated and shipped.'
+      : 'No source warehouse has enough available inventory for this category right now.');
   }
 
   function render() {
@@ -122,19 +150,7 @@
     const toggle = $('purchaseQueueToggle'); toggle.hidden = purchaseQueue.length <= purchaseQueueLimit; toggle.textContent = showAllPurchaseQueue ? 'Show top ' + purchaseQueueLimit : 'Show all ' + purchaseQueue.length;
     $('purchaseQueueVisible').textContent = 'Selected lines create a draft PO received into 730.';
 
-    const recHost = $('transferFirstRows'); recHost.replaceChildren();
-    const recs = recommendations.filter(x => !term || [x.sku, x.product, x.from, x.to].join(' ').toLowerCase().includes(term));
-    recs.forEach((x, index) => {
-      const row = document.createElement('tr');
-      const pick = document.createElement('input'); pick.type = 'checkbox'; pick.checked = true; pick.dataset.suggestedTransfer = String(index);
-      const pickCell = document.createElement('td'); pickCell.append(pick); row.append(pickCell);
-      [x.sku, x.product, x.from, x.to, fmt(x.quantity)].forEach(value => cell(row, value));
-      recHost.append(row);
-    });
-    if (!recs.length) recHost.innerHTML = '<tr><td colspan="6" class="muted">No internal transfer opportunity found for the current shortage queue.</td></tr>';
-    $('transferFirstCount').textContent = recs.length + ' suggested moves';
-    $('createSuggestedTransfers').disabled = !recs.length;
-    $('createSuggestedTransfers').dataset.recommendations = JSON.stringify(recs);
+
   }
 
   async function loadOrders() {
@@ -157,34 +173,32 @@
     set('High-level health board loaded. Select a category to see item detail and main-warehouse availability.');
   }
 
-  $('createSuggestedTransfers').addEventListener('click', async () => {
+  $('createCategoryTransfers').addEventListener('click', async () => {
     try {
-      const current = JSON.parse($('createSuggestedTransfers').dataset.recommendations || '[]');
-      const lines = [...document.querySelectorAll('[data-suggested-transfer]')]
-        .filter(input => input.checked)
-        .map(input => current[Number(input.dataset.suggestedTransfer)])
-        .filter(Boolean)
-        .map(item => ({ productId: item.productId, fromLocationId: item.fromLocationId, toLocationId: item.toLocationId, quantity: item.quantity }));
-      if (!lines.length) throw Error('Select at least one suggested move.');
+      const current = JSON.parse($('createCategoryTransfers').dataset.recommendations || '[]');
+      const selectedIds = new Set([...document.querySelectorAll('[data-category-transfer]')].filter(input => input.checked).map(input => Number(input.dataset.categoryTransfer)));
+      const lines = current.filter(item => selectedIds.has(Number(item.productId))).map(item => ({
+        productId: item.productId, fromLocationId: item.fromLocationId, toLocationId: item.toLocationId, quantity: item.quantity
+      }));
+      if (!lines.length) throw Error('Select at least one line with an available transfer source.');
       const routes = new Set(lines.map(line => line.fromLocationId + ':' + line.toLocationId)).size;
-      if (!confirm('Create ' + routes + ' draft transfer' + (routes === 1 ? '' : 's') + ' from ' + lines.length + ' suggested line' + (lines.length === 1 ? '' : 's') + '? Inventory will not move or be reserved until you allocate the drafts.')) return;
-      $('createSuggestedTransfers').disabled = true; transferSet('Creating draft transfers…');
+      if (!confirm('Create ' + routes + ' draft transfer' + (routes === 1 ? '' : 's') + ' from ' + lines.length + ' selected line' + (lines.length === 1 ? '' : 's') + '? Inventory will not move or be reserved until you allocate the draft.')) return;
+      $('createCategoryTransfers').disabled = true; transferSet('Creating draft transfer…');
       const response = await fetch('/api/transfers', {
         method: 'POST', credentials: 'same-origin', headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ action: 'create_recommended_drafts', lines })
       });
       const data = await response.json();
-      if (!response.ok) throw Error(data.error || 'Could not create draft transfers.');
+      if (!response.ok) throw Error(data.error || 'Could not create the transfer draft.');
       const created = data.transfers || [];
-      transferSet(created.length + ' draft transfer' + (created.length === 1 ? '' : 's') + ' created. Open Transfers to allocate and ship them.');
+      transferSet(created.length + ' draft transfer' + (created.length === 1 ? '' : 's') + ' created. Open Transfers when you are ready to allocate and ship.');
       await load();
     } catch (error) {
       transferSet(error.message, true);
     } finally {
-      $('createSuggestedTransfers').disabled = false;
+      $('createCategoryTransfers').disabled = false;
     }
   });
-  $('openSuggestedTransfers').addEventListener('click', () => $('transfersNav')?.click());
 
   $('createPurchaseOrder').addEventListener('click', async () => {
     try {
