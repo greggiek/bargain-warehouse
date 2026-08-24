@@ -201,6 +201,49 @@ function availableQuantity(node) {
   return Number(node?.inventoryItem?.inventoryLevel?.quantities?.find(item => item.name === 'available')?.quantity);
 }
 
+async function movingAverageCostForSku(url, key, sku) {
+  const rows = await postgrest(url, 'products?select=id,moving_average_cost,purchase_price&sku=eq.' + encodeURIComponent(sku) + '&limit=1', 'GET', key);
+  const product = rows[0];
+  if (!product) return { productId: null, unitCost: 0 };
+  const unitCost = Number(product.moving_average_cost ?? product.purchase_price ?? 0);
+  return { productId: product.id, unitCost: Number.isFinite(unitCost) && unitCost >= 0 ? unitCost : 0 };
+}
+
+async function recordIntercompanyShipmentValue(url, key, link, adjustmentId) {
+  const lines = link.shopify_transfer_link_lines || [];
+  const snapshots = await Promise.all(lines.map(async line => {
+    const cost = await movingAverageCostForSku(url, key, line.sku);
+    return {
+      transfer_link_id: link.id,
+      transfer_line_id: line.id,
+      bm_reference: link.bm_reference,
+      status: 'shipped',
+      source_entity: link.metadata?.source_entity || link.source_store_key,
+      destination_entity: link.metadata?.destination_entity || link.destination_store_key,
+      source_location_id: link.source_location_id,
+      destination_location_id: link.destination_location_id,
+      sku: line.sku,
+      product_id: cost.productId,
+      quantity: Number(line.quantity),
+      unit_cost: cost.unitCost,
+      source_shopify_adjustment_id: adjustmentId,
+      shipped_at: new Date().toISOString()
+    };
+  }));
+  if (snapshots.length) {
+    await postgrest(url, 'intercompany_transfer_ledger_lines?on_conflict=transfer_line_id', 'POST', key, snapshots, 'resolution=merge-duplicates,return=minimal');
+  }
+}
+
+async function recordIntercompanyReceiptValue(url, key, link, adjustmentId) {
+  await postgrest(url, 'intercompany_transfer_ledger_lines?transfer_link_id=eq.' + encodeURIComponent(link.id), 'PATCH', key, {
+    status: 'completed',
+    destination_shopify_adjustment_id: adjustmentId,
+    received_at: new Date().toISOString(),
+    updated_at: new Date().toISOString()
+  });
+}
+
 async function postIntercompanyLeg(url, key, auth, link, leg) {
   const isShip = leg === 'ship';
   const expected = isShip ? ['draft', 'prepared'] : ['shipped', 'partially_received'];
@@ -255,6 +298,9 @@ async function postIntercompanyLeg(url, key, auth, link, leg) {
     shopify_adjustment_id: group.id,
     error: null
   });
+
+  if (isShip) await recordIntercompanyShipmentValue(url, key, link, group.id);
+  else await recordIntercompanyReceiptValue(url, key, link, group.id);
 
   const status = isShip ? 'shipped' : 'completed';
   const now = new Date().toISOString();
