@@ -4,12 +4,19 @@
   "functions": {
     "api/sales-history-sync.js": {
       "maxDuration": 300
+    },
+    "api/shopify-inventory-sync.js": {
+      "maxDuration": 60
     }
   },
   "crons": [
     {
       "path": "/api/sales-history-sync",
       "schedule": "0 13 * * *"
+    },
+    {
+      "path": "/api/shopify-inventory-sync",
+      "schedule": "*/10 12-22 * * 1-5"
     }
   ]
 }
