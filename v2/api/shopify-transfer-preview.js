@@ -234,6 +234,71 @@ async function createNativeTransfer(url, key, auth, body) {
   }
 }
 
+
+function legalEntityFor(storeKey) {
+  return storeKey === 'store_1'
+    ? 'Bargain Build Inc. (NY)'
+    : 'Bargain Build CT Inc. (CT)';
+}
+
+async function createIntercompanyDraft(url, key, auth, body) {
+  const plan = await preview(url, key, body);
+  if (plan.routeType !== 'cross_store') throw new Error('Choose warehouses in different legal entities for an intercompany draft.');
+  if (!plan.allLinesAvailable) throw new Error('One or more SKUs do not have enough available source stock. Nothing was created.');
+
+  const sourceLocationId = Number(body.sourceLocationId);
+  const destinationLocationId = Number(body.destinationLocationId);
+  const config = await loadConfig(url, key);
+  const source = config.mappings.find(mapping => Number(mapping.location_id) === sourceLocationId);
+  const destination = config.mappings.find(mapping => Number(mapping.location_id) === destinationLocationId);
+  const bmReference = 'BM-IC-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + crypto.randomUUID().slice(0, 8).toUpperCase();
+
+  const linkRows = await postgrest(url, 'shopify_transfer_links', 'POST', key, {
+    bm_reference: bmReference,
+    route_type: 'cross_store',
+    status: 'draft',
+    source_location_id: sourceLocationId,
+    destination_location_id: destinationLocationId,
+    source_store_key: source.store_key,
+    destination_store_key: destination.store_key,
+    source_shopify_location_id: source.shopify_location_id,
+    destination_shopify_location_id: destination.shopify_location_id,
+    created_by_user_id: auth.user.id,
+    created_by_name: auth.user.display_name,
+    metadata: {
+      created_from: 'bm_warehouse_v2',
+      write_mode: 'intercompany_draft_only',
+      source_entity: legalEntityFor(source.store_key),
+      destination_entity: legalEntityFor(destination.store_key),
+      inventory_effect: 'none',
+      next_steps: ['Prepare the outbound shipment.', 'Create the matching inbound receipt.', 'Only then post the Shopify inventory movements.']
+    }
+  }, 'return=representation');
+  const link = linkRows[0];
+  if (!link) throw new Error('Could not create the intercompany transfer link.');
+
+  try {
+    await postgrest(url, 'shopify_transfer_link_lines', 'POST', key, plan.lines.map(line => ({
+      transfer_link_id: link.id,
+      sku: line.sku,
+      quantity: line.quantity,
+      source_shopify_variant_id: line.sourceVariantId,
+      destination_shopify_variant_id: line.destinationVariantId
+    })));
+    return {
+      bmReference,
+      intercompanyDraft: true,
+      message: 'Intercompany draft ' + bmReference + ' created for ' + legalEntityFor(source.store_key) + ' → ' + legalEntityFor(destination.store_key) + '. No Shopify inventory changed. The next step is the paired ship/receive workflow.'
+    };
+  } catch (error) {
+    await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'PATCH', key, {
+      status: 'failed',
+      error: error.message || 'Could not create intercompany lines.'
+    }).catch(() => {});
+    throw error;
+  }
+}
+
 module.exports = async function shopifyTransferPreview(req, res) {
   const auth = await requireUser(req);
   if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
@@ -248,6 +313,7 @@ module.exports = async function shopifyTransferPreview(req, res) {
       const action = (req.body || {}).action;
       if (action === 'preview') return res.json({ ok: true, ...(await preview(url, serviceRoleKey, req.body || {})) });
       if (action === 'create_native_same_store') return res.status(201).json({ ok: true, ...(await createNativeTransfer(url, serviceRoleKey, auth, req.body || {})) });
+      if (action === 'create_intercompany_draft') return res.status(201).json({ ok: true, ...(await createIntercompanyDraft(url, serviceRoleKey, auth, req.body || {})) });
       return res.status(400).json({ ok: false, error: 'unknown_action' });
     }
     res.setHeader('Allow', 'GET, POST');
