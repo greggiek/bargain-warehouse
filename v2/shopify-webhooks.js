@@ -1,7 +1,6 @@
 (() => {
   let data = null;
   const $ = id => document.getElementById(id);
-  const callbackUrl = () => location.origin + '/api/webhooks/shopify-order-paid';
 
   function setStatus(message, error = false) {
     const node = $('shopifyWebhookStatus');
@@ -38,8 +37,7 @@
         [store.label, location.name].forEach(value => { const cell = document.createElement('td'); cell.textContent = value; row.append(cell); });
         const warehouseCell = document.createElement('td'); warehouseCell.append(select); row.append(warehouseCell);
         const status = document.createElement('td');
-        const subscription = (store.subscriptions || []).some(item => item.endpoint?.callbackUrl === callbackUrl());
-        status.textContent = subscription ? 'Paid-order webhook active' : 'Not enabled';
+        status.textContent = mapping ? 'Mapped for Shopify operations' : 'Not mapped';
         row.append(status); body.append(row);
       });
     });
@@ -57,12 +55,12 @@
   }
 
   async function load() {
-    setStatus('Loading Shopify locations and webhook status…');
+    setStatus('Loading Shopify locations and operation mappings…');
     const response = await fetch('/api/shopify-webhooks', { credentials: 'same-origin', cache: 'no-store' });
     const result = await response.json().catch(() => ({}));
     if (!response.ok || !result.ok) throw new Error(result.error || 'Could not load Shopify webhook setup.');
     data = result; render();
-    setStatus('Map each Shopify sale location to its matching V2 warehouse, then enable the paid-order webhook.');
+    setStatus('Map each Shopify location to its matching V2 warehouse. This enables safe transfer previews only; it does not enable sales webhooks or change inventory.');
   }
 
   function show() {
@@ -88,19 +86,24 @@
     await load();
   }
 
-  async function enable() {
-    if (!confirm('Enable paid-order webhooks for both Shopify stores? A mapped paid sale will deduct V2 inventory immediately and create an Inventory Ledger entry.')) return;
-    setStatus('Registering paid-order webhooks with Shopify…');
-    const response = await fetch('/api/shopify-webhooks', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify({ action: 'enable_paid_orders', callbackUrl: callbackUrl() }) });
+  async function testTransferSetup() {
+    setStatus('Testing both Shopify connections…');
+    const response = await fetch('/api/shopify-transfer-preview', { credentials: 'same-origin', cache: 'no-store' });
     const result = await response.json().catch(() => ({}));
-    if (!response.ok || !result.ok) throw new Error(result.error || 'Could not enable webhooks.');
-    const problems = (result.outcomes || []).filter(item => item.status === 'error');
-    setStatus(problems.length ? problems.map(item => item.store + ': ' + item.error).join(' · ') : 'Paid-order webhooks are enabled. The next mapped Shopify sale will deduct from V2 inventory.');
-    await load();
+    if (!response.ok || !result.ok) throw new Error(result.error || 'Could not test Shopify transfer setup.');
+    const healthy = (result.stores || []).filter(store => store.ok).map(store => store.label);
+    const failed = (result.stores || []).filter(store => !store.ok);
+    setStatus(failed.length ? healthy.join(' and ') + ' connected. ' + failed.map(store => store.label + ': ' + store.error).join(' · ') : healthy.join(' and ') + ' connected. ' + (result.mappings || []).length + ' warehouse mapping(s) are ready for preview-only transfer planning.');
   }
+
+  // Sales webhooks remain disabled while Shopify is the inventory authority.
+  $('shopifyWebhookEnable').hidden = true;
+  const test = document.createElement('button');
+  test.type = 'button'; test.className = 'button secondary'; test.textContent = 'Test Shopify connections';
+  $('shopifyWebhookRefresh').parentElement.append(test);
 
   $('shopifyWebhooksNav').addEventListener('click', show);
   $('shopifyWebhookRefresh').addEventListener('click', () => load().catch(error => setStatus(error.message, true)));
   $('shopifyWebhookSave').addEventListener('click', () => saveMappings().catch(error => setStatus(error.message, true)));
-  $('shopifyWebhookEnable').addEventListener('click', () => enable().catch(error => setStatus(error.message, true)));
+  test.addEventListener('click', () => testTransferSetup().catch(error => setStatus(error.message, true)));
 })();
