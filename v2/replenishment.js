@@ -1,7 +1,8 @@
 (() => {
   const $ = id => document.getElementById(id), view = $('replenishmentView');
   if (!view) return;
-  let all = [], recommendations = [], purchaseQueue = [], purchaseOrders = [], showAllPurchaseQueue = false, selected = null;
+  let all = [], recommendations = [], purchaseQueue = [], purchaseOrders = [], showAllPurchaseQueue = false, selected = null, boardData = [];
+  const expandedWarehouses = new Set();
   const purchaseQueueLimit = 15, fmt = n => new Intl.NumberFormat('en-US', { maximumFractionDigits: 2 }).format(n);
   const set = (text, error = false) => { $('replenishmentStatus').textContent = text; $('replenishmentStatus').classList.toggle('error', error); };
   const poSet = (text, error = false) => { $('purchaseOrderStatus').textContent = text; $('purchaseOrderStatus').classList.toggle('error', error); };
@@ -31,15 +32,21 @@
       const title = document.createElement('div'); title.innerHTML = '<span>WAREHOUSE</span><strong></strong>'; title.querySelector('strong').textContent = location;
       const total = groups.reduce((n, x) => n + x.below, 0), badge = document.createElement('span'); badge.className = 'low-stock-badge'; badge.textContent = total + ' SKUs below par';
       head.append(title, badge); card.append(head);
-      const top = groups.slice(0, 4);
-      top.forEach(x => {
+      const expanded = expandedWarehouses.has(location);
+      const shown = expanded ? groups : groups.slice(0, 4);
+      shown.forEach(x => {
         const row = document.createElement('button'); row.type = 'button'; row.className = 'low-stock-row low-stock-category';
         const name = document.createElement('span'), status = document.createElement('strong');
         name.textContent = x.category; status.className = 'needs'; status.textContent = x.below + ' SKUs · ' + fmt(x.deficit) + ' short';
         row.append(name, status); row.onclick = () => choose(x.locationId, x.category); card.append(row);
       });
-      if (groups.length > top.length) {
-        const more = document.createElement('p'); more.className = 'low-stock-more'; more.textContent = '+' + (groups.length - top.length) + ' more categories need attention';
+      if (groups.length > 4) {
+        const more = document.createElement('button'); more.type = 'button'; more.className = 'low-stock-more';
+        more.textContent = expanded ? 'Show fewer categories' : 'View all ' + groups.length + ' categories →';
+        more.onclick = () => {
+          if (expanded) expandedWarehouses.delete(location); else expandedWarehouses.add(location);
+          renderBoard(boardData);
+        };
         card.append(more);
       }
       host.append(card);
@@ -131,8 +138,8 @@
     set('Loading V2 low-stock health…');
     const response = await fetch('/api/replenishment', { credentials: 'same-origin', cache: 'no-store' }), data = await response.json();
     if (!response.ok) throw Error(data.error || 'Unable to load low stock');
-    all = data.items || []; recommendations = data.recommendations || [];
-    renderBoard(data.board || []);
+    all = data.items || []; recommendations = data.recommendations || []; boardData = data.board || [];
+    renderBoard(boardData);
     const select = $('replenishmentLocation'); const oldValue = select.value; select.replaceChildren();
     const option = document.createElement('option'); option.value = ''; option.textContent = 'All warehouses'; select.append(option);
     (data.locations || []).forEach(x => { const option = document.createElement('option'); option.value = x.id; option.textContent = x.name; select.append(option); });
