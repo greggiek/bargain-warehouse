@@ -116,7 +116,7 @@
   }
   sku.addEventListener('input',()=>{clearTimeout(searchTimer);searchTimer=setTimeout(searchProducts,180);});
   sku.addEventListener('blur',()=>setTimeout(hideSuggestions,160));
-  otherNavs.forEach((otherNav)=>otherNav.addEventListener('click',()=>{view.hidden=true;nav.classList.remove('active');hideSuggestions();}));
+  otherNavs.forEach((otherNav)=>otherNav?.addEventListener('click',()=>{view.hidden=true;nav.classList.remove('active');hideSuggestions();}));
   function receiptLines(transfer){
     if(pendingReceiptLines){const lines=pendingReceiptLines;pendingReceiptLines=null;return lines;}
     const lines=transfer.transfer_lines||[];if(lines.length!==1)throw new Error('Multi-line receipts are not enabled in this screen yet.');
@@ -188,7 +188,9 @@
   queueSearch.addEventListener('input',renderQueue);statusFilter.addEventListener('change',renderQueue);
   newTransferButton.addEventListener('click',()=>{if(!capabilities.canManageTransfers)return show('Only administrators can create Shopify transfers.',true);createMode=true;applyCapabilities();createPanel.scrollIntoView({behavior:'smooth',block:'center'});sku.focus();});
   async function openWorkspace(receiveOnly=false){otherViews.forEach((element)=>{if(element)element.hidden=true;});otherNavs.forEach((element)=>element&&element.classList.remove('active'));nav.classList.add('active');view.hidden=false;await load();applyCapabilities(receiveOnly);if(receiveOnly||!capabilities.canManageTransfers)openDocumentScan();}
-  nav.addEventListener('click',()=>openWorkspace(false));
+  window.BMWarehouseOpenTransfers=openWorkspace;
+  if(window.BMWarehousePendingTransfersOpen){window.BMWarehousePendingTransfersOpen=false;openWorkspace(false).catch(error=>show(error.message||'Could not load transfers.',true));}
+  nav.addEventListener('click',()=>openWorkspace(false).catch(error=>show(error.message||'Could not load transfers.',true)));
   overviewReceiveTransfer?.addEventListener('click',()=>openWorkspace(true));
   create.addEventListener('click',async()=>{
     if(!capabilities.canManageTransfers)return show('Only administrators can create transfers.',true);
