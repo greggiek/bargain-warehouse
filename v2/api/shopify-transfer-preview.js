@@ -125,6 +125,7 @@ async function preview(url, key, body) {
       sku: line.sku, quantity: line.quantity, product: sourceVariant.displayName || line.sku,
       sourceAvailable, canShip: sourceAvailable >= line.quantity,
       sourceVariantId: sourceVariant.id,
+      sourceInventoryItemId: sourceVariant.inventoryItem.id,
       destinationVariantId: destinationVariant?.id || sourceVariant.id
     });
   }
@@ -144,6 +145,95 @@ async function preview(url, key, body) {
   };
 }
 
+const createNativeTransferMutation = `mutation CreateNativeTransfer($input: InventoryTransferCreateInput!, $idempotencyKey: String!) {
+  inventoryTransferCreate(input: $input) @idempotent(key: $idempotencyKey) {
+    inventoryTransfer { id name status referenceName }
+    userErrors { field message }
+  }
+}`;
+
+async function postgrest(url, path, method, key, body, prefer) {
+  const response = await fetch(url + '/rest/v1/' + path, {
+    method,
+    headers: { ...jsonHeaders(key), ...(prefer ? { Prefer: prefer } : {}) },
+    body: body === undefined ? undefined : JSON.stringify(body)
+  });
+  const result = await response.json().catch(() => ({}));
+  if (!response.ok) throw new Error(result.message || result.hint || 'Could not save the Shopify transfer link.');
+  return result;
+}
+
+async function createNativeTransfer(url, key, auth, body) {
+  const plan = await preview(url, key, body);
+  if (plan.routeType !== 'same_store') {
+    throw new Error('Cross-store transfers are not enabled yet. This route needs the linked inbound PO workflow, so V2 will not create an incomplete move.');
+  }
+  if (!plan.allLinesAvailable) throw new Error('One or more SKUs do not have enough available source stock. Nothing was created.');
+
+  const sourceLocationId = Number(body.sourceLocationId);
+  const destinationLocationId = Number(body.destinationLocationId);
+  const config = await loadConfig(url, key);
+  const source = config.mappings.find(mapping => Number(mapping.location_id) === sourceLocationId);
+  const destination = config.mappings.find(mapping => Number(mapping.location_id) === destinationLocationId);
+  const store = stores().find(item => item.key === source.store_key);
+  const bmReference = 'BM-TR-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + crypto.randomUUID().slice(0, 8).toUpperCase();
+
+  const linkRows = await postgrest(url, 'shopify_transfer_links', 'POST', key, {
+    bm_reference: bmReference,
+    route_type: 'same_store',
+    status: 'draft',
+    source_location_id: sourceLocationId,
+    destination_location_id: destinationLocationId,
+    source_store_key: source.store_key,
+    destination_store_key: destination.store_key,
+    source_shopify_location_id: source.shopify_location_id,
+    destination_shopify_location_id: destination.shopify_location_id,
+    created_by_user_id: auth.user.id,
+    created_by_name: auth.user.display_name,
+    metadata: { created_from: 'bm_warehouse_v2', write_mode: 'native_shopify_transfer' }
+  }, 'return=representation');
+  const link = linkRows[0];
+  if (!link) throw new Error('Could not create the BM transfer audit link.');
+
+  try {
+    const data = await graphql(store, createNativeTransferMutation, {
+      input: {
+        originLocationId: source.shopify_location_id,
+        destinationLocationId: destination.shopify_location_id,
+        lineItems: plan.lines.map(line => ({ inventoryItemId: line.sourceInventoryItemId, quantity: Math.round(line.quantity) })),
+        referenceName: bmReference,
+        note: 'Created by BM Warehouse V2. Draft only; Shopify remains inventory authority.',
+        tags: ['BM Warehouse', 'BM Transfer']
+      },
+      idempotencyKey: crypto.randomUUID()
+    });
+    const payload = data.inventoryTransferCreate || {};
+    const errors = payload.userErrors || [];
+    if (errors.length) throw new Error(errors.map(item => item.message).join('; '));
+    if (!payload.inventoryTransfer?.id) throw new Error('Shopify did not return a transfer ID.');
+
+    await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'PATCH', key, {
+      source_shopify_transfer_id: payload.inventoryTransfer.id,
+      metadata: { created_from: 'bm_warehouse_v2', write_mode: 'native_shopify_transfer', shopify_transfer_name: payload.inventoryTransfer.name }
+    });
+    await postgrest(url, 'shopify_transfer_link_lines', 'POST', key, plan.lines.map(line => ({
+      transfer_link_id: link.id,
+      sku: line.sku,
+      quantity: line.quantity,
+      source_shopify_variant_id: line.sourceVariantId,
+      destination_shopify_variant_id: line.destinationVariantId
+    })));
+    return {
+      bmReference,
+      shopifyTransfer: payload.inventoryTransfer,
+      message: 'Draft Shopify transfer ' + (payload.inventoryTransfer.name || bmReference) + ' created. It has not moved stock; mark it Ready to ship in Shopify when material actually leaves.'
+    };
+  } catch (error) {
+    await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'PATCH', key, { status: 'failed', error: error.message || 'Shopify transfer creation failed' }).catch(() => {});
+    throw error;
+  }
+}
+
 module.exports = async function shopifyTransferPreview(req, res) {
   const auth = await requireUser(req);
   if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
@@ -155,8 +245,10 @@ module.exports = async function shopifyTransferPreview(req, res) {
       return res.json({ ok: true, previewOnly: true, ...config, stores: storesStatus });
     }
     if (req.method === 'POST') {
-      if ((req.body || {}).action !== 'preview') return res.status(400).json({ ok: false, error: 'unknown_action' });
-      return res.json({ ok: true, ...(await preview(url, serviceRoleKey, req.body || {})) });
+      const action = (req.body || {}).action;
+      if (action === 'preview') return res.json({ ok: true, ...(await preview(url, serviceRoleKey, req.body || {})) });
+      if (action === 'create_native_same_store') return res.status(201).json({ ok: true, ...(await createNativeTransfer(url, serviceRoleKey, auth, req.body || {})) });
+      return res.status(400).json({ ok: false, error: 'unknown_action' });
     }
     res.setHeader('Allow', 'GET, POST');
     return res.status(405).json({ ok: false, error: 'method_not_allowed' });
