@@ -78,15 +78,11 @@ module.exports = async function purchaseOrders(req, res) {
 
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method_not_allowed' });
     const body = req.body || {}, action = String(body.action || '');
-    if (action === 'create') {
-      if (!canManagePurchaseOrders) return res.status(403).json({ ok: false, error: 'Only an admin can create a purchase order.' });
-      const receivingLocationId = integer(body.receivingLocationId) || hub?.id;
-      if (!receivingLocationId || !access.some(location => location.id === receivingLocationId)) return res.status(400).json({ ok: false, error: 'Choose an accessible receiving location.' });
-      const lines = (body.lines || []).map(line => ({ productId: integer(line.productId), quantity: Number(line.quantity), note: String(line.note || '') })).filter(line => line.productId && Number.isFinite(line.quantity) && line.quantity > 0);
-      if (!lines.length) return res.status(400).json({ ok: false, error: 'Add at least one purchase item.' });
-      const result = await rpc(url, serviceRoleKey, 'create_v2_purchase_order', { p_vendor_name: String(body.vendorName || ''), p_receiving_location_id: receivingLocationId, p_lines: lines, p_notes: String(body.notes || ''), p_idempotency_key: String(body.idempotencyKey || ''), p_user_id: auth.user.id, p_user_name: auth.user.display_name });
-      return res.status(201).json({ ok: true, purchaseOrder: result });
-    }
+    // The original minimal create path is retired; the detailed PO workspace is the only create path.
+    if (action === 'create') return res.status(410).json({
+      ok: false,
+      error: 'Legacy PO creation is retired. Use the detailed purchase-order workspace.'
+    });
     if (action === 'create-detailed') {
       if (!canManagePurchaseOrders) return res.status(403).json({ ok: false, error: 'Only an admin can create a purchase order.' });
       const receivingLocationId = integer(body.receivingLocationId) || hub?.id;
