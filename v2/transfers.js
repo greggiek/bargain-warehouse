@@ -181,6 +181,7 @@
     [from,to].forEach((select)=>{select.replaceChildren();const placeholder=document.createElement('option');placeholder.value='';placeholder.textContent='Choose location';select.append(placeholder);data.locations.forEach((location)=>select.append(locationOption(location)));});
     transfers=data.transfers||[];renderQueue();renderIncomingTransfers();renderInTransit(data.inTransitLines||[],data.summary||{inTransitPieces:0,activeTransfers:0,inTransitSkus:0});renderHistory(data.history||[]);renderExceptions(data.exceptions||[]);
     await loadShopifyTransfers();
+    await loadIntercompanyLedger();
     applyCapabilities();
     show(capabilities.canManageTransfers?'Create and move transfers through Shopify.':'Scan an incoming Shopify transfer to receive it into your assigned warehouse.');
   }
@@ -205,6 +206,56 @@
   shopifyLifecyclePanel.innerHTML='<p class="eyebrow">SHOPIFY INVENTORY TRANSFERS</p><h2>Shopify transfers in progress</h2><p class="muted">These transfers move stock in Shopify. Ship starts in-transit; Receive puts it into the destination warehouse.</p><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Route</th><th>Shopify status</th><th>Action</th></tr></thead><tbody id="shopifyTransferLifecycleRows"></tbody></table></div>';
   transferQueue.parentNode.insertBefore(shopifyLifecyclePanel,transferQueue);
   const shopifyLifecycleRows=shopifyLifecyclePanel.querySelector('#shopifyTransferLifecycleRows');
+  const intercompanyLedgerPanel=document.createElement('section');
+  intercompanyLedgerPanel.className='card';
+  intercompanyLedgerPanel.hidden=true;
+  intercompanyLedgerPanel.innerHTML='<p class="eyebrow">MONTHLY BOOKKEEPING</p><div class="card-header"><div><h2>Intercompany ledger</h2><p class="muted">Completed NY ↔ CT movements, valued at the source moving-average cost frozen at shipment.</p></div><div class="inline-actions"><input id="intercompanyLedgerMonth" type="month" aria-label="Ledger month"><button id="intercompanyLedgerExport" class="button secondary" type="button">Export CSV</button></div></div><div id="intercompanyLedgerSummary" class="muted"></div><div class="table-wrap"><table><thead><tr><th>Date</th><th>Reference</th><th>Route</th><th>SKU</th><th>Qty</th><th>Unit cost</th><th>Value</th><th>Status</th></tr></thead><tbody id="intercompanyLedgerRows"></tbody></table></div>';
+  transferQueue.parentNode.insertBefore(intercompanyLedgerPanel,transferQueue);
+  const intercompanyLedgerMonth=intercompanyLedgerPanel.querySelector('#intercompanyLedgerMonth');
+  const intercompanyLedgerExport=intercompanyLedgerPanel.querySelector('#intercompanyLedgerExport');
+  const intercompanyLedgerSummary=intercompanyLedgerPanel.querySelector('#intercompanyLedgerSummary');
+  const intercompanyLedgerRows=intercompanyLedgerPanel.querySelector('#intercompanyLedgerRows');
+  let intercompanyLedgerRowsData=[];
+  intercompanyLedgerMonth.value=new Date().toISOString().slice(0,7);
+  const money=value=>new Intl.NumberFormat('en-US',{style:'currency',currency:'USD',minimumFractionDigits:2,maximumFractionDigits:4}).format(Number(value||0));
+  function renderIntercompanyLedger(){
+    intercompanyLedgerRows.replaceChildren();
+    if(!intercompanyLedgerRowsData.length){empty(intercompanyLedgerRows,8,'No intercompany transfers were shipped in this month.');return;}
+    intercompanyLedgerRowsData.forEach(line=>{
+      const row=document.createElement('tr');
+      cell(row,new Date(line.shipped_at).toLocaleDateString());
+      cell(row,line.bm_reference);
+      cell(row,line.source_entity+' → '+line.destination_entity);
+      cell(row,line.sku);
+      cell(row,line.quantity);
+      cell(row,money(line.unit_cost));
+      cell(row,money(line.extended_value));
+      cell(row,formatStatus(line.status));
+      intercompanyLedgerRows.append(row);
+    });
+  }
+  function exportIntercompanyLedger(){
+    const headers=['Date','Reference','From entity','To entity','SKU','Quantity','Unit cost','Extended value','Currency','Status','Source Shopify adjustment','Destination Shopify adjustment'];
+    const escape=value=>'"'+String(value??'').replace(/"/g,'""')+'"';
+    const lines=intercompanyLedgerRowsData.map(line=>[
+      line.shipped_at,line.bm_reference,line.source_entity,line.destination_entity,line.sku,line.quantity,line.unit_cost,line.extended_value,line.currency,line.status,line.source_shopify_adjustment_id,line.destination_shopify_adjustment_id
+    ].map(escape).join(','));
+    const blob=new Blob([[headers.join(','),...lines].join('\n')],{type:'text/csv;charset=utf-8'});
+    const link=document.createElement('a');link.href=URL.createObjectURL(blob);link.download='bm-intercompany-ledger-'+intercompanyLedgerMonth.value+'.csv';link.click();setTimeout(()=>URL.revokeObjectURL(link.href),0);
+  }
+  async function loadIntercompanyLedger(){
+    const response=await fetch('/api/intercompany-ledger?month='+encodeURIComponent(intercompanyLedgerMonth.value),{credentials:'same-origin'});
+    const data=await response.json();
+    if(response.status===403){intercompanyLedgerPanel.hidden=true;return;}
+    if(!response.ok){intercompanyLedgerPanel.hidden=true;return;}
+    intercompanyLedgerPanel.hidden=false;
+    intercompanyLedgerRowsData=data.rows||[];
+    const summary=data.summary||{};
+    intercompanyLedgerSummary.textContent=(summary.transfers||0)+' transfer'+((summary.transfers||0)===1?'':'s')+' · '+(summary.pieces||0)+' pieces · '+money(summary.value)+' total transfer value';
+    renderIntercompanyLedger();
+  }
+  intercompanyLedgerMonth.addEventListener('change',()=>loadIntercompanyLedger());
+  intercompanyLedgerExport.addEventListener('click',exportIntercompanyLedger);
   let shopifyTransferLinks=[], shopifyTransferCapabilities={canShip:false,canReceive:false};
   async function runShopifyLifecycle(link,action,button){
     const intercompany=link.route_type==='cross_store';
@@ -220,7 +271,7 @@
     try{
       const response=await fetch('/api/shopify-transfer-lifecycle',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action,linkId:link.id})});
       const data=await response.json();if(!response.ok)throw new Error(data.error||'Shopify transfer action failed.');
-      show(data.message);await loadShopifyTransfers();
+      show(data.message);await loadShopifyTransfers();await loadIntercompanyLedger();
     }catch(error){show(error.message||'Shopify transfer action failed.',true);}finally{if(button)button.disabled=false;}
   }
   function lifecycleButton(label,link,action){
