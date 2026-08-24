@@ -354,9 +354,24 @@ module.exports = async function shopifyTransferLifecycle(req, res) {
         ? managed.has(Number(link.source_location_id)) || managed.has(Number(link.destination_location_id))
         : managed.has(Number(link.destination_location_id)));
       const names = new Map(locations.map(location => [location.id, location.name]));
+      const destinationIds = [...new Set(visible.map(link => Number(link.destination_location_id)).filter(Number.isFinite))];
+      const bins = destinationIds.length
+        ? await postgrest(url, 'inventory_bin_locations?select=location_id,bin_code,products(sku)&location_id=in.(' + destinationIds.join(',') + ')', 'GET', serviceRoleKey)
+        : [];
+      const destinationBins = new Map((Array.isArray(bins) ? bins : [])
+        .filter(bin => bin.products?.sku && bin.bin_code)
+        .map(bin => [String(bin.location_id) + '|' + String(bin.products.sku).trim().toUpperCase(), bin.bin_code]));
       return res.json({
         ok: true,
-        links: visible.map(link => ({ ...link, source_name: names.get(Number(link.source_location_id)) || '—', destination_name: names.get(Number(link.destination_location_id)) || '—' })),
+        links: visible.map(link => ({
+          ...link,
+          source_name: names.get(Number(link.source_location_id)) || '—',
+          destination_name: names.get(Number(link.destination_location_id)) || '—',
+          shopify_transfer_link_lines: (link.shopify_transfer_link_lines || []).map(line => ({
+            ...line,
+            destination_bin: destinationBins.get(String(link.destination_location_id) + '|' + String(line.sku || '').trim().toUpperCase()) || null
+          }))
+        })),
         capabilities: { canShip: isAdmin, canReceive: managed.size > 0 }
       });
     }
