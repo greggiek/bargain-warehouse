@@ -136,7 +136,6 @@ async function handleLine({ url, key, storeKey, order, line }) {
   }
 }
 
-module.exports.config = { api: { bodyParser: false } };
 module.exports = async function manufacturingOrderWebhook(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method_not_allowed' });
   try {
@@ -163,3 +162,5 @@ module.exports = async function manufacturingOrderWebhook(req, res) {
     return res.status(500).json({ ok: false, error: error.message || 'manufacturing_order_webhook_failed' });
   }
 };
+
+module.exports.config = { api: { bodyParser: false } };
