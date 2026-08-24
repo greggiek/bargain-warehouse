@@ -16,7 +16,7 @@
     },
     {
       "path": "/api/shopify-inventory-sync",
-      "schedule": "*/10 12-22 * * 1-5"
+      "schedule": "*/5 12-22 * * 1-5"
     }
   ]
 }
