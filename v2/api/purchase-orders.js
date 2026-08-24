@@ -24,10 +24,10 @@ async function postReceiptToShopify(url,key,order,lines,idempotencyKey){
   if(!line||Number(input.quantity)<=0||Number(input.quantity)>Number(line.ordered_quantity)-Number(line.received_quantity))throw Error('Invalid receipt quantity.');
   const sku=String(line.products?.sku||'');
   const escapedSku=sku.replace(/["\\]/g,'\\$&');
-  const result=await shopifyGraphql(store,`query($q:String!){productVariants(first:5,query:$q){nodes{id sku inventoryItem{id}}}}`,{q:'sku:"'+escapedSku+'"'});
+  const result=await shopifyGraphql(store,`query($q:String!,$locationId:ID!){productVariants(first:5,query:$q){nodes{id sku inventoryItem{id inventoryLevel(locationId:$locationId){quantities(names:[\"available\"]){quantity}}}}}}`,{q:'sku:"'+escapedSku+'"',locationId:mapping.shopify_location_id});
   const variant=(result.productVariants?.nodes||[]).find(v=>String(v.sku||'').toLowerCase()===sku.toLowerCase());
   if(!variant?.inventoryItem?.id)throw Error('Shopify SKU lookup failed for '+sku+'.');
-  changes.push({inventoryItemId:variant.inventoryItem.id,locationId:mapping.shopify_location_id,delta:Number(input.quantity)});
+  const available=variant.inventoryItem.inventoryLevel?.quantities?.find(item=>item.name==='available')?.quantity;if(!Number.isFinite(available))throw Error('Shopify could not read the current stock for '+sku+'.');changes.push({inventoryItemId:variant.inventoryItem.id,locationId:mapping.shopify_location_id,delta:Number(input.quantity),changeFromQuantity:available});
  }
  const result=await shopifyGraphql(store,`mutation($input:InventoryAdjustQuantitiesInput!,$key:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$key){inventoryAdjustmentGroup{id referenceDocumentUri} userErrors{message}}}`,{input:{reason:'correction',name:'available',referenceDocumentUri:'bmwarehouse://purchase-order/'+encodeURIComponent(order.purchase_order_number),changes},key:idempotencyKey});
  const payload=result.inventoryAdjustQuantities;if(payload?.userErrors?.length)throw Error(payload.userErrors.map(e=>e.message).join('; '));if(!payload?.inventoryAdjustmentGroup?.id)throw Error('Shopify did not confirm the PO receipt.');return payload.inventoryAdjustmentGroup.id;
