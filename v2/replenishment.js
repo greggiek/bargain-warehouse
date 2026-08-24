@@ -191,8 +191,8 @@
       const data = await response.json();
       if (!response.ok) throw Error(data.error || 'Could not create the transfer draft.');
       const created = data.transfers || [];
-      transferSet(created.length + ' draft transfer' + (created.length === 1 ? '' : 's') + ' created. Open Transfers when you are ready to allocate and ship.');
       await load();
+      transferSet(created.length + ' draft transfer' + (created.length === 1 ? '' : 's') + ' created. Open Transfers when you are ready to allocate and ship.');
     } catch (error) {
       transferSet(error.message, true);
     } finally {
