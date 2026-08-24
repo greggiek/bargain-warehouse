@@ -20,7 +20,7 @@ async function postReceiptToShopify(url,key,order,lines,idempotencyKey){
  const details=await detailResponse.json().catch(()=>[]);if(!detailResponse.ok)throw Error('Could not validate PO lines.');
  const changes=[];
  for(const input of lines){const line=details.find(item=>Number(item.id)===Number(input.lineId));if(!line||Number(input.quantity)<=0||Number(input.quantity)>Number(line.ordered_quantity)-Number(line.received_quantity))throw Error('Invalid receipt quantity.');
- const result=await shopifyGraphql(store,`query($q:String!){productVariants(first:5,query:$q){nodes{id sku inventoryItem{id}}}}`,{q:'sku:"'+String(line.products?.sku||'').replace(/["\\]/g,'\\const PROCUREMENT_ROLES = new Set(['admin', 'developer']);')+'"'});const variant=(result.productVariants?.nodes||[]).find(v=>String(v.sku||'').toLowerCase()===String(line.products?.sku||'').toLowerCase());if(!variant?.inventoryItem?.id)throw Error('Shopify SKU lookup failed for '+line.products?.sku+'.');changes.push({inventoryItemId:variant.inventoryItem.id,locationId:mapping.shopify_location_id,delta:Number(input.quantity)});}
+ const result=await shopifyGraphql(store,`query($q:String!){productVariants(first:5,query:$q){nodes{id sku inventoryItem{id}}}}`,{q:'sku:"'+String(line.products?.sku||'').replace(/["\\\\]/g,'\\\\String(line.products?.sku||'').replace(/["\\]/g,'\\const PROCUREMENT_ROLES = new Set(['admin', 'developer']);')')+'"'});const variant=(result.productVariants?.nodes||[]).find(v=>String(v.sku||'').toLowerCase()===String(line.products?.sku||'').toLowerCase());if(!variant?.inventoryItem?.id)throw Error('Shopify SKU lookup failed for '+line.products?.sku+'.');changes.push({inventoryItemId:variant.inventoryItem.id,locationId:mapping.shopify_location_id,delta:Number(input.quantity)});}
  const result=await shopifyGraphql(store,`mutation($input:InventoryAdjustQuantitiesInput!,$key:String!){inventoryAdjustQuantities(input:$input) @idempotent(key:$key){inventoryAdjustmentGroup{id referenceDocumentUri} userErrors{message}}}`,{input:{reason:'correction',name:'available',referenceDocumentUri:'bmwarehouse://purchase-order/'+encodeURIComponent(order.purchase_order_number),changes},key:idempotencyKey});
  const payload=result.inventoryAdjustQuantities;if(payload?.userErrors?.length)throw Error(payload.userErrors.map(e=>e.message).join('; '));if(!payload?.inventoryAdjustmentGroup?.id)throw Error('Shopify did not confirm the PO receipt.');return payload.inventoryAdjustmentGroup.id;
 }
@@ -104,7 +104,7 @@ module.exports = async function purchaseOrders(req, res) {
 
     const purchaseOrderId = integer(body.purchaseOrderId);
     if (!purchaseOrderId) return res.status(400).json({ ok: false, error: 'Choose a purchase order.' });
-    const lookupResponse = await fetch(url + '/rest/v1/purchase_orders?id=eq.' + purchaseOrderId + '&select=id,receiving_location_id,status', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+    const lookupResponse = await fetch(url + '/rest/v1/purchase_orders?id=eq.' + purchaseOrderId + '&select=id,purchase_order_number,receiving_location_id,status', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
     const lookup = await lookupResponse.json().catch(() => []);
     if (!lookupResponse.ok) throw new Error('purchase order lookup failed');
     const order = lookup[0];
@@ -163,7 +163,7 @@ module.exports = async function purchaseOrders(req, res) {
       const lines = (body.lines || []).map(line => ({ lineId: integer(line.lineId), quantity: Number(line.quantity) })).filter(line => line.lineId && Number.isFinite(line.quantity) && line.quantity > 0);
       if (!lines.length) return res.status(400).json({ ok: false, error: 'Scan at least one expected PO item.' });
       const idempotencyKey=String(body.idempotencyKey||'');if(!idempotencyKey) return res.status(400).json({ok:false,error:'Receipt key is required.'});
-      const shopifyAdjustmentId=await postReceiptToShopify(url,serviceRoleKey,{...order,purchase_order_number:(await (async()=>{const r=await fetch(url+'/rest/v1/purchase_orders?id=eq.'+purchaseOrderId+'&select=purchase_order_number',{headers:jsonHeaders(serviceRoleKey)});return (await r.json())[0]?.purchase_order_number;})())},lines,idempotencyKey);
+      const shopifyAdjustmentId=await postReceiptToShopify(url,serviceRoleKey,order,lines,idempotencyKey);
       const purchaseOrder=await rpc(url,serviceRoleKey,'receive_v2_purchase_order_lines',{p_purchase_order_id:purchaseOrderId,p_lines:lines,p_idempotency_key:idempotencyKey,p_user_id:auth.user.id,p_user_name:auth.user.display_name});
       return res.status(200).json({ok:true,purchaseOrder,shopifyAdjustmentId});
     }
