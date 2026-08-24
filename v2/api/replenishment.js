@@ -52,11 +52,16 @@ module.exports = async function replenishment(req, res) {
     const byProductLocation = new Map(rows.map(x => [x.productId + '|' + x.locationId, x]));
     const items = rows.filter(x => x.shortage > 0).map(x => {
       const main = mainLocation ? byProductLocation.get(x.productId + '|' + mainLocation.id) : null;
+      const availableSources = rows
+        .filter(source => source.productId === x.productId && source.locationId !== x.locationId && source.available > 0)
+        .sort((a, b) => b.available - a.available || a.location.localeCompare(b.location))
+        .map(source => ({ locationId: source.locationId, location: source.location, available: source.available }));
       return {
         ...x,
         mainWarehouseName: mainLocation?.name || 'Main warehouse',
         mainWarehouseOnHand: main ? main.onHand : null,
-        mainWarehouseAvailable: main ? main.available : null
+        mainWarehouseAvailable: main ? main.available : null,
+        availableSources
       };
     });
 
