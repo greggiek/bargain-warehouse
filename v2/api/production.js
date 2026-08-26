@@ -70,7 +70,7 @@ module.exports = async (req, res) => {
       const permitted = new Set(access.map(x => Number(x.location_id)));
       const history = allHistory.filter(x => permitted.has(Number(x.metadata?.locationId)));
       const [w, b] = await Promise.all([
-        fetch(supabaseUrl + '/rest/v1/production_jobs?status=eq.allocated&order=started_at.desc&select=id,job_number,reference,destination:locations!production_jobs_destination_location_id_fkey(name),production_job_lines(output_quantity,product_boms(yield_quantity,products!product_boms_finished_product_id_fkey(sku,name),product_bom_components(quantity_per_yield,component_product_id,products(id,sku,name))))', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) }),
+        fetch(supabaseUrl + '/rest/v1/production_jobs?status=eq.allocated&order=started_at.desc&select=id,job_number,machine_code,reference,destination:locations!production_jobs_destination_location_id_fkey(name),production_job_lines(output_quantity,product_boms(yield_quantity,products!product_boms_finished_product_id_fkey(sku,name),product_bom_components(quantity_per_yield,component_product_id,products(id,sku,name))))', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) }),
         fetch(supabaseUrl + '/rest/v1/product_boms?active=eq.true&select=id,yield_quantity,products!product_boms_finished_product_id_fkey(id,sku,name)', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) })
       ]);
       const [activeProductionJobs, activeBoms] = await Promise.all([w.json(), b.json()]);
@@ -126,7 +126,8 @@ module.exports = async (req, res) => {
       const destinationId = Number(body.destinationLocationId);
       const productionLocation = access.find(x => x.locations?.code === '730' || x.locations?.name === '730 Windham Rd');
       if (!productionLocation?.can_manage || !allowed.get(destinationId)) return res.status(403).json({ error: 'location_manage_required' });
-      const data = await rpc(supabaseUrl, serviceRoleKey, 'start_v2_production_job', { p_destination_location_id:destinationId, p_lines:(body.lines || []).map(line => ({ bom_id:Number(line.bomId), quantity:Number(line.quantity) })), p_reference:String(body.reference || ''), p_idempotency_key:String(body.idempotencyKey || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
+      const machineCode = String(body.machineCode || '').trim().toUpperCase();
+      const data = await rpc(supabaseUrl, serviceRoleKey, 'start_v2_stock_production_job', { p_destination_location_id:destinationId, p_lines:(body.lines || []).map(line => ({ bom_id:Number(line.bomId), quantity:Number(line.quantity) })), p_reference:String(body.reference || ''), p_idempotency_key:String(body.idempotencyKey || ''), p_machine_code:machineCode, p_user_id:auth.user.id, p_user_name:auth.user.display_name });
       return res.status(200).json(data);
     }
     if (action === 'completeProductionJob') {
