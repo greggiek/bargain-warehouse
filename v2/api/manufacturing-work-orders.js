@@ -20,8 +20,8 @@ module.exports = async function manufacturingWorkOrders(req, res) {
     const { url, serviceRoleKey } = configuration();
     if (req.method === 'GET') {
       const [triggers, workOrders] = await Promise.all([
-        rest(url, serviceRoleKey, 'manufacturing_shopify_triggers?order=shopify_store_key,shopify_product_id&select=id,shopify_store_key,shopify_product_id,enabled,destination:locations!manufacturing_shopify_triggers_destination_location_id_fkey(id,name)'),
-        rest(url, serviceRoleKey, 'manufacturing_shopify_work_order_events?order=received_at.desc&limit=50&select=id,shopify_store_key,shopify_order_name,shopify_order_id,shopify_line_item_id,sku,quantity,status,error,received_at,processed_at,production_work_order_id,production_work_orders(work_order_number,status,destination:locations!production_work_orders_destination_location_id_fkey(name)),product_boms(products!product_boms_finished_product_id_fkey(name))')
+        rest(url, serviceRoleKey, 'manufacturing_shopify_triggers?order=shopify_store_key,shopify_product_id&select=id,shopify_store_key,shopify_product_id,machine_code,enabled,destination:locations!manufacturing_shopify_triggers_destination_location_id_fkey(id,name)'),
+        rest(url, serviceRoleKey, 'manufacturing_shopify_work_order_events?order=received_at.desc&limit=50&select=id,shopify_store_key,shopify_order_name,shopify_order_id,shopify_line_item_id,sku,quantity,status,error,received_at,processed_at,production_work_order_id,production_work_orders(work_order_number,status,machine_code,destination:locations!production_work_orders_destination_location_id_fkey(name)),product_boms(products!product_boms_finished_product_id_fkey(name))')
       ]);
       const locations = await rest(url, serviceRoleKey, 'user_location_access?user_id=' + eq(auth.user.id) + '&can_manage=eq.true&select=locations(id,name,active)');
       return res.status(200).json({
@@ -47,6 +47,7 @@ module.exports = async function manufacturingWorkOrders(req, res) {
         shopify_store_key: String(body.storeKey || 'store_1'),
         shopify_product_id: productId,
         destination_location_id: destinationLocationId,
+        machine_code: 'EMAG',
         enabled: body.enabled !== false,
         updated_at: new Date().toISOString()
       })
