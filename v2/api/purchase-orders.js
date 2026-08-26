@@ -178,7 +178,10 @@ module.exports = async function purchaseOrders(req, res) {
         p_purchase_order_id:purchaseOrderId,
         p_receiving_location_id:Number(order.receiving_location_id),
         p_lines:lines,
-        p_user_id:auth.user.id,
+        // Receipt-attempt audit stores the Supabase Auth UUID when one exists.
+        // BM OS sessions use the numeric app_users ID, which belongs to the
+        // inventory ledger calls below and must not be sent to this UUID field.
+        p_user_id:auth.authUser?.id || null,
         p_user_name:auth.user.display_name
       });
       let shopifyAdjustmentId=attempt.shopifyAdjustmentId;
