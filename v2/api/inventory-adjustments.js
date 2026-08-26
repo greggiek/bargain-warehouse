@@ -62,7 +62,7 @@ module.exports = async function inventoryAdjustments(req, res) {
     const productId = Number(body.productId), quantity = Number(body.quantity);
     const reason = clean(body.reason, 40), note = clean(body.note, 500);
     if (!Number.isInteger(productId) || !Number.isFinite(quantity) || quantity <= 0) return res.status(400).json({ok:false,error:'Choose an item and enter a quantity greater than zero.'});
-    if (!['damage','missing_stock'].includes(reason)) return res.status(400).json({ok:false,error:'Choose Damaged or Missing stock.'});
+    if (!['damage','missing_stock','added_stock'].includes(reason)) return res.status(400).json({ok:false,error:'Choose Add pieces, Damaged, or Missing stock.'});
     const result = await rpc(url, serviceRoleKey, 'adjust_v2_inventory', {
       p_product_id:productId,p_location_id:locationId,p_quantity:quantity,p_reason:reason,p_note:note,
       p_idempotency_key:clean(body.idempotencyKey,120),p_user_id:auth.user.id,p_user_name:auth.user.display_name
