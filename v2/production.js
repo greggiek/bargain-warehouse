@@ -119,19 +119,19 @@
     }).join('');
     const componentRows = [...components.values()].sort((a,b) => String(a.sku).localeCompare(String(b.sku))).map(row => '<tr><td><b>'+esc(row.sku)+'</b></td><td>'+esc(row.name)+'</td><td>'+Number(row.quantity).toLocaleString('en-US',{maximumFractionDigits:2})+' '+esc(row.uom)+'</td></tr>').join('') || '<tr><td colspan="3">Component detail is unavailable for this work order.</td></tr>';
     const popup = window.open('','_blank'); if (!popup) throw Error('Allow pop-ups to print this work order.');
-    popup.document.write('<!doctype html><html><head><title>'+esc(job.job_number)+' work order</title><style>body{font:14px Arial;color:#172b48;margin:30px}.header{border-bottom:3px solid #123b61;padding-bottom:16px;margin-bottom:22px}.eyebrow{font-size:11px;color:#159765;font-weight:800;letter-spacing:1.5px}.number{font-size:30px;font-weight:800;margin:5px 0}.route{font-size:16px;margin:8px 0}h2{margin:26px 0 8px;font-size:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cfd9e6;padding:10px;text-align:left;vertical-align:top}th{background:#edf3fa;font-size:12px}.notes{margin-top:28px;border:1px solid #cfd9e6;border-radius:8px;min-height:100px;padding:12px;color:#61718a}@media print{body{margin:12mm}tr{break-inside:avoid}}</style></head><body><div class="header"><div class="eyebrow">BARGAIN MOULDING · MANUFACTURING WORK ORDER</div><div class="number">'+esc(job.job_number)+'</div><div class="route"><b>Build at:</b> 730 Windham Rd<br><b>Destination:</b> '+esc(job.destination?.name || '—')+'<br><b>Reference:</b> '+esc(job.reference || '—')+'<br><b>Printed:</b> '+esc(new Date().toLocaleString())+'</div></div><h2>Finished doors to build</h2><table><thead><tr><th>SKU / finished door</th><th>Build qty</th><th>BOM yield</th></tr></thead><tbody>'+finishedRows+'</tbody></table><h2>Components to pull</h2><table><thead><tr><th>SKU</th><th>Component</th><th>Total required</th></tr></thead><tbody>'+componentRows+'</tbody></table><div class="notes"><b>Production notes</b><br><br>____________________________________________________________<br><br>____________________________________________________________</div></body></html>');
+    popup.document.write('<!doctype html><html><head><title>'+esc(job.job_number)+' work order</title><style>body{font:14px Arial;color:#172b48;margin:30px}.header{border-bottom:3px solid #123b61;padding-bottom:16px;margin-bottom:22px}.eyebrow{font-size:11px;color:#159765;font-weight:800;letter-spacing:1.5px}.number{font-size:30px;font-weight:800;margin:5px 0}.route{font-size:16px;margin:8px 0}h2{margin:26px 0 8px;font-size:18px}table{width:100%;border-collapse:collapse}th,td{border:1px solid #cfd9e6;padding:10px;text-align:left;vertical-align:top}th{background:#edf3fa;font-size:12px}.notes{margin-top:28px;border:1px solid #cfd9e6;border-radius:8px;min-height:100px;padding:12px;color:#61718a}@media print{body{margin:12mm}tr{break-inside:avoid}}</style></head><body><div class="header"><div class="eyebrow">BARGAIN MOULDING · MANUFACTURING WORK ORDER</div><div class="number">'+esc(job.job_number)+'</div><div class="route"><b>Build at:</b> 730 Windham Rd<br><b>Machine:</b> '+esc(job.machine_code === 'TERMINATOR' ? '4000B · Terminator' : '4000A · Nighthawk')+'<br><b>Destination:</b> '+esc(job.destination?.name || '—')+'<br><b>Reference:</b> '+esc(job.reference || '—')+'<br><b>Printed:</b> '+esc(new Date().toLocaleString())+'</div></div><h2>Finished doors to build</h2><table><thead><tr><th>SKU / finished door</th><th>Build qty</th><th>BOM yield</th></tr></thead><tbody>'+finishedRows+'</tbody></table><h2>Components to pull</h2><table><thead><tr><th>SKU</th><th>Component</th><th>Total required</th></tr></thead><tbody>'+componentRows+'</tbody></table><div class="notes"><b>Production notes</b><br><br>____________________________________________________________<br><br>____________________________________________________________</div></body></html>');
     popup.document.close(); popup.focus(); setTimeout(() => popup.print(), 250);
   }
   function renderJobs(rows) {
     const h = $('activeWorkOrderRows');
     h.replaceChildren();
     if (!rows.length) {
-      h.innerHTML = '<tr><td colspan="5" class="muted">No released production jobs.</td></tr>';
+      h.innerHTML = '<tr><td colspan="6" class="muted">No released production jobs.</td></tr>';
       return;
     }
     rows.forEach(j => {
       const tr = document.createElement('tr'), l = j.production_job_lines || [];
-      [j.job_number, l.map(x => (x.product_boms?.products?.sku || '—') + ' × ' + x.output_quantity).join(', '), j.destination?.name || '—', j.reference || '—'].forEach(v => {
+      [j.job_number, j.machine_code === 'TERMINATOR' ? '4000B · Terminator' : '4000A · Nighthawk', l.map(x => (x.product_boms?.products?.sku || '—') + ' × ' + x.output_quantity).join(', '), j.destination?.name || '—', j.reference || '—'].forEach(v => {
         const td = document.createElement('td'); td.textContent = v; tr.append(td);
       });
       const td = document.createElement('td'), reservations = new Map();
@@ -151,7 +151,7 @@
       const detail = document.createElement('tr');
       detail.hidden = true;
       const detailCell = document.createElement('td');
-      detailCell.colSpan = 5;
+      detailCell.colSpan = 6;
       const table = document.createElement('table');
       table.className = 'inventory-table reservation-table';
       const head = document.createElement('thead');
@@ -189,14 +189,14 @@
     const h = $('mtoWorkOrderRows');
     h.replaceChildren();
     if (!rows.length) {
-      h.innerHTML = '<tr><td colspan="6" class="muted">No Shopify made-to-order sales have released work orders yet.</td></tr>';
+      h.innerHTML = '<tr><td colspan="7" class="muted">No Shopify made-to-order sales have released work orders yet.</td></tr>';
       return;
     }
     rows.forEach(event => {
       const work = event.production_work_orders || {};
       const finished = event.product_boms?.products?.name || event.sku || '—';
       const tr = document.createElement('tr');
-      [work.work_order_number || '—', event.shopify_order_name || event.shopify_order_id || '—', finished, work.destination?.name || '—', event.status].forEach(value => {
+      [work.work_order_number || '—', work.machine_code === 'EMAG' ? 'EMAG · Custom' : (work.machine_code || 'EMAG'), event.shopify_order_name || event.shopify_order_id || '—', finished, work.destination?.name || '—', event.status].forEach(value => {
         const td = document.createElement('td'); td.textContent = value; tr.append(td);
       });
       const td = document.createElement('td');
@@ -267,7 +267,7 @@
     $('productionBomGroups').hidden = true;
     renderJobs(d.activeProductionJobs || []);
     renderLines(); preview();
-    say('Choose a BOM by SKU, add door lines, then release the job to reserve 730 components.');
+    say('Choose a stock-door BOM by SKU, select Nighthawk or Terminator, then release the job to reserve 730 components.');
   }
 
   window.openProduction = async () => {
@@ -329,11 +329,12 @@
           action: 'startProductionJob',
           destinationLocationId,
           lines: lines.map(x => ({ bomId: x.b.id, quantity: x.q })),
+          machineCode: $('productionMachine').value,
           reference: $('productionReference').value,
           idempotencyKey: crypto.randomUUID()
         });
         lines = []; renderLines();
-        say(d.jobNumber + ' released. Components are reserved at 730.');
+        say(d.jobNumber + ' released to ' + (d.machineCode === 'TERMINATOR' ? '4000B · Terminator' : '4000A · Nighthawk') + '. Components are reserved at 730.');
         await refresh();
       } catch (e) { say(e.message, true); }
     };
