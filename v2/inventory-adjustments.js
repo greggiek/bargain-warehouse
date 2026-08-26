@@ -17,8 +17,8 @@
   function renderLedger(rows) {
     const body=$('adjustmentLedgerRows'); body.replaceChildren();
     if(!rows.length){body.innerHTML='<tr><td colspan="8">No damage or missing-stock adjustments at this warehouse yet.</td></tr>';return;}
-    rows.forEach(row=>{const tr=document.createElement('tr'), reason=row.metadata?.adjustmentReason === 'damage' ? 'Damaged' : 'Missing stock';
-      [new Date(row.created_at).toLocaleString(),row.products?.sku||'—',row.products?.name||'—',reason,String(Math.abs(Number(row.quantity_delta))),String(row.quantity_before)+' → '+String(row.quantity_after),row.performed_by_name||'—',row.metadata?.note||'—'].forEach(value=>{const td=document.createElement('td');td.textContent=value;tr.append(td)});body.append(tr);
+    rows.forEach(row=>{const tr=document.createElement('tr'), adjustmentReason=row.metadata?.adjustmentReason, reason=adjustmentReason === 'damage' ? 'Damaged' : adjustmentReason === 'added_stock' ? 'Added stock' : 'Missing stock';
+      [new Date(row.created_at).toLocaleString(),row.products?.sku||'—',row.products?.name||'—',reason,(Number(row.quantity_delta)>0?'+':'')+String(Number(row.quantity_delta)),String(row.quantity_before)+' → '+String(row.quantity_after),row.performed_by_name||'—',row.metadata?.note||'—'].forEach(value=>{const td=document.createElement('td');td.textContent=value;tr.append(td)});body.append(tr);
     });
   }
   async function load() {
@@ -28,17 +28,17 @@
     const data=await response.json().catch(()=>({}));
     if(!response.ok)throw Error(data.error||'Could not load inventory adjustments.');
     const location=$('adjustmentLocation'); if(!loaded){ location.replaceChildren(); data.locations.forEach(item=>{const option=document.createElement('option');option.value=item.id;option.textContent=item.name;location.append(option)});location.value=data.locationId;loaded=true; }
-    products=data.products||[]; renderLedger(data.ledger||[]); set('Choose an item, record the loss, and it will appear in the ledger below.');
+    products=data.products||[]; renderLedger(data.ledger||[]); set('Choose an item, then add pieces or record a loss. Every change appears in the ledger below.');
   }
   function open(){ $('inventoryAdjustmentDialog').showModal(); load().catch(error=>set(error.message,true)); }
   async function save(){
     const productId=Number($('adjustmentProductId').value), quantity=Number($('adjustmentQuantity').value);
-    if(!productId||!quantity||quantity<=0)throw Error('Choose an item and enter the quantity lost.');
+    if(!productId||!quantity||quantity<=0)throw Error('Choose an item and enter a quantity greater than zero.');
     const response=await fetch('/api/inventory-adjustments',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({locationId:Number($('adjustmentLocation').value),productId,quantity,reason:$('adjustmentReason').value,note:$('adjustmentNote').value,idempotencyKey:key()})});
     const data=await response.json().catch(()=>({}));
     if(!response.ok)throw Error(data.error||'Inventory adjustment failed.');
     $('adjustmentProductId').value='';$('adjustmentProductSearch').value='';$('adjustmentQuantity').value='';$('adjustmentNote').value='';
-    await load(); set('Recorded '+data.adjustment.quantity+' of '+data.adjustment.sku+' as '+(data.adjustment.reason==='damage'?'damaged':'missing stock')+'.');
+    await load(); set((data.adjustment.reason==='added_stock'?'Added ':'Recorded ')+data.adjustment.quantity+' of '+data.adjustment.sku+(data.adjustment.reason==='damage'?' as damaged.':data.adjustment.reason==='missing_stock'?' as missing stock.':' to on-hand inventory.'));
   }
   $('overviewInventoryAdjustment').onclick=open;
   $('adjustmentLocation').onchange=()=>load().catch(error=>set(error.message,true));
