@@ -303,18 +303,12 @@
           <div><div class="eyebrow">Transfers</div><h1>Transfer master</h1><p class="muted">Review every V2 transfer, then open the right workflow for shipping or receiving. Shopify and Qoblex are not changed.</p></div>
           <div class="inventory-actions"><button id="transferNewButton" class="button" type="button">Create transfer</button></div>
         </div>
-        <section id="transferCreatePanel" class="card section" hidden>
-          <div class="transfer-kicker">Outgoing transfer</div>
-          <h2>Create transfer</h2>
-          <div class="inventory-actions">
-            <select id="transferFrom" class="inventory-search" aria-label="From location"></select>
-            <select id="transferTo" class="inventory-search" aria-label="To location"></select>
-            <div class="product-lookup"><label for="transferSku">Item to transfer</label><input id="transferSku" class="inventory-search" autocomplete="off" placeholder="Search SKU, product, barcode, or category"><div id="transferSuggestions" class="product-suggestions" hidden></div></div>
-            <input id="transferQty" class="inventory-search" type="number" min="1" step="1" placeholder="Quantity">
-            <button id="transferCreate" class="button" type="button">Create transfer</button>
-          </div>
-          <p id="transferStatus" class="inventory-status">Open Transfers to load your V2 transfer queue.</p>
-        </section>
+        <dialog id="transferCreatePanel" class="card receiving-dialog">
+          <div class="inventory-head"><div><div class="transfer-kicker">New transfer</div><h2>Create transfer</h2></div><button id="transferCreateClose" class="button secondary" type="button">Close</button></div>
+          <div class="receiving-step"><div class="receiving-step-actions"><select id="transferFrom" class="inventory-search" aria-label="From location"></select><select id="transferTo" class="inventory-search" aria-label="To location"></select></div></div>
+          <div class="receiving-step"><div class="receiving-step-actions"><div class="product-lookup"><label for="transferSku">Add item</label><input id="transferSku" class="inventory-search" autocomplete="off" placeholder="Search SKU or product"><div id="transferSuggestions" class="product-suggestions" hidden></div></div><input id="transferQty" class="inventory-search" type="number" min="1" step="1" placeholder="Qty"><button id="transferAddLine" class="button secondary" type="button">Add line</button></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>SKU</th><th>Product</th><th>Qty</th><th></th></tr></thead><tbody id="transferDraftRows"></tbody></table></div></div>
+          <p id="transferStatus" class="inventory-status">Add one or more SKUs, then create the transfer.</p><button id="transferCreate" class="button" type="button">Create transfer</button>
+        </dialog>
         <dialog id="transferScanPanel" class="card">
           <div class="inventory-head"><div><div class="transfer-kicker">Warehouse receiving</div><h2 id="transferScanTitle">Receive transfer</h2><p id="transferScanHelp" class="muted">Scan or enter each SKU. A quantity box will appear so you can add multiple pieces at once.</p></div><button id="transferScanClose" class="button secondary" type="button">Close</button></div>
           <div class="inventory-actions"><input id="transferScanInput" class="inventory-search" autocomplete="off" placeholder="Scan or enter SKU"><button id="transferCameraScan" class="button secondary" type="button">Use camera</button><button id="transferCancelScan" class="button secondary" type="button">Cancel</button></div>
