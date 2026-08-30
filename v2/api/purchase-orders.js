@@ -70,6 +70,14 @@ module.exports = async function purchaseOrders(req, res) {
     }
     if (req.method === 'GET') {
       if (!readableIds.length) return res.status(200).json({ ok: true, orders: [], locations: [], capabilities: { canManagePurchaseOrders, canReceive: false } });
+      // Receiving only needs open POs; avoid loading the whole master and vendors.
+      if (req.query?.receiver) {
+        const receiveQuery = 'receiving_location_id=in.(' + readableIds.join(',') + ')&status=in.(ordered,partially_received)&order=created_at.desc&limit=50&select=id,purchase_order_number,vendor_name,status,expected_date,receiving_location_id,locations(id,name,code),purchase_order_lines(id,product_id,ordered_quantity,received_quantity,uom,unit_cost,products(sku,name,variant_title,barcode))';
+        const response = await fetch(url + '/rest/v1/purchase_orders?' + receiveQuery, { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
+        const orders = await response.json().catch(() => []);
+        if (!response.ok) throw new Error(orders.message || 'open purchase order lookup failed');
+        return res.status(200).json({ ok: true, orders, locations: access, capabilities: { canManagePurchaseOrders, canReceive: manageable.length > 0 } });
+      }
       const query = 'receiving_location_id=in.(' + readableIds.join(',') + ')&order=created_at.desc&limit=100&select=id,purchase_order_number,vendor_name,supplier_reference_number,status,notes,order_date,expected_date,purchase_type,shipping_cost,created_at,ordered_at,received_at,sent_at,receiving_location_id,locations(id,name,code),purchase_order_lines(id,product_id,ordered_quantity,received_quantity,notes,uom,unit_cost,products(sku,name,variant_title,barcode,purchase_price,moving_average_cost))';
       const [orderResponse, vendorResponse] = await Promise.all([
         fetch(url + '/rest/v1/purchase_orders?' + query, { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(10000) }),
