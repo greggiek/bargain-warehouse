@@ -152,6 +152,13 @@ const createNativeTransferMutation = `mutation CreateNativeTransfer($input: Inve
   }
 }`;
 
+async function nextTransferReference(url, key) {
+  const response = await fetch(url + '/rest/v1/rpc/next_bm_transfer_reference', { method: 'POST', headers: jsonHeaders(key), body: '{}' });
+  const value = await response.json().catch(() => null);
+  if (!response.ok || !value) throw new Error('Could not reserve the next transfer number.');
+  return String(value);
+}
+
 async function postgrest(url, path, method, key, body, prefer) {
   const response = await fetch(url + '/rest/v1/' + path, {
     method,
@@ -176,7 +183,7 @@ async function createNativeTransfer(url, key, auth, body) {
   const source = config.mappings.find(mapping => Number(mapping.location_id) === sourceLocationId);
   const destination = config.mappings.find(mapping => Number(mapping.location_id) === destinationLocationId);
   const store = stores().find(item => item.key === source.store_key);
-  const bmReference = 'BM-TR-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + crypto.randomUUID().slice(0, 8).toUpperCase();
+  const bmReference = await nextTransferReference(url, key);
 
   const linkRows = await postgrest(url, 'shopify_transfer_links', 'POST', key, {
     bm_reference: bmReference,
@@ -251,7 +258,7 @@ async function createIntercompanyDraft(url, key, auth, body) {
   const config = await loadConfig(url, key);
   const source = config.mappings.find(mapping => Number(mapping.location_id) === sourceLocationId);
   const destination = config.mappings.find(mapping => Number(mapping.location_id) === destinationLocationId);
-  const bmReference = 'BM-IC-' + new Date().toISOString().slice(0, 10).replace(/-/g, '') + '-' + crypto.randomUUID().slice(0, 8).toUpperCase();
+  const bmReference = await nextTransferReference(url, key);
 
   const linkRows = await postgrest(url, 'shopify_transfer_links', 'POST', key, {
     bm_reference: bmReference,
