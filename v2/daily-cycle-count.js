@@ -6,5 +6,6 @@
   async function load(){set('Loading today’s count…');const r=await fetch('/api/daily-cycle-count?locationId='+encodeURIComponent($('cycleCountLocation').value),{credentials:'same-origin'}),data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||'Could not load daily cycle count.');render(data);}
   async function save(lineId,value){const r=await fetch('/api/daily-cycle-count',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({locationId:Number($('cycleCountLocation').value),lineId,countedQuantity:Number(value)})}),data=await r.json().catch(()=>({}));if(!r.ok)throw Error(data.error||'Could not save count.');render(data);set(data.result.variance===0?'Count saved — it matches the system record.':'Count saved — variance found. It is now waiting for review.',data.result.variance!==0);}
   function open(){$('dailyCycleCountDialog').showModal();load().catch(e=>set(e.message,true));}
+  window.BMWarehouseQuickDailyCount = open;
   $('overviewDailyCycleCount').onclick=open;$('cycleCountLocation').onchange=()=>load().catch(e=>set(e.message,true));
 })();
