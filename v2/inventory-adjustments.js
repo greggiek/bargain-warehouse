@@ -40,6 +40,7 @@
     $('adjustmentProductId').value='';$('adjustmentProductSearch').value='';$('adjustmentQuantity').value='';$('adjustmentNote').value='';
     await load(); set((data.adjustment.reason==='added_stock'?'Added ':'Recorded ')+data.adjustment.quantity+' of '+data.adjustment.sku+(data.adjustment.reason==='damage'?' as damaged.':data.adjustment.reason==='missing_stock'?' as missing stock.':' to on-hand inventory.'));
   }
+  window.BMWarehouseQuickAdjustment = open;
   $('overviewInventoryAdjustment').onclick=open;
   $('adjustmentLocation').onchange=()=>load().catch(error=>set(error.message,true));
   $('adjustmentLedgerSort').onchange=()=>load().catch(error=>set(error.message,true));
