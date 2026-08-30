@@ -298,13 +298,13 @@
   function renderShopifyTransfers(){
     shopifyLifecycleRows.replaceChildren();
     const term=shopifyTransferListSearch.value.trim().toLowerCase(),wanted=shopifyTransferListStatus.value;
-    const visible=shopifyTransferLinks.filter(link=>{const text=[link.bm_reference,link.source_name,link.destination_name,link.status,...(link.shopify_transfer_link_lines||[]).map(line=>line.sku)].join(' ').toLowerCase();return (!term||text.includes(term))&&(!wanted||link.status===wanted);});
+    const visible=shopifyTransferLinks.filter(link=>{const displayStatus=link.status==='completed'?'received':link.status;const text=[link.bm_reference,link.source_name,link.destination_name,displayStatus,...(link.shopify_transfer_link_lines||[]).map(line=>line.sku)].join(' ').toLowerCase();return (!term||text.includes(term))&&(!wanted||displayStatus===wanted);});
     if(!visible.length)return empty(shopifyLifecycleRows,8,shopifyTransferLinks.length?'No transfers match this view.':'No transfers yet. Create one when material needs to move.');
     visible.forEach(link=>{
       const intercompany=link.route_type==='cross_store',row=document.createElement('tr'),lines=link.shopify_transfer_link_lines||[];
       const refCell=document.createElement('td'),refButton=document.createElement('button');refButton.type='button';refButton.className='po-order-link';refButton.textContent=link.bm_reference;refButton.addEventListener('click',()=>openTransferDetails(link));refCell.append(refButton);row.append(refCell);
       cell(row,link.created_at?new Date(link.created_at).toLocaleDateString():'—');
-      cell(row,(intercompany?'Intercompany · ':'')+formatStatus(link.status));
+      cell(row,(intercompany?'Intercompany · ':'')+formatStatus(link.status==='completed'?'received':link.status));
       cell(row,link.source_name||'—');cell(row,link.destination_name||'—');cell(row,String(lines.length));
       cell(row,link.received_at?new Date(link.received_at).toLocaleDateString():link.shipped_at?new Date(link.shipped_at).toLocaleDateString():link.created_at?new Date(link.created_at).toLocaleDateString():'—');
       const actions=document.createElement('td');
