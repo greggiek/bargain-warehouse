@@ -37,6 +37,26 @@
       set('dashboardLocation', 'Dashboard unavailable');
     }
   }
+  const quickActions = {
+    overviewReceivePo: () => window.BMWarehouseQuickReceivePo?.(),
+    overviewReceiveTransfer: () => window.BMWarehouseQuickReceiveTransfer?.(),
+    overviewWillCallScan: () => window.BMWarehouseQuickWillCall?.(),
+    overviewDeliveryScan: () => window.BMWarehouseQuickDelivery?.(),
+    overviewManufacturing: () => window.openProduction?.(),
+    overviewDailyCycleCount: () => window.BMWarehouseQuickDailyCount?.(),
+    overviewCycleReview: () => window.BMWarehouseQuickCountReview?.(),
+    overviewInventoryAdjustment: () => window.BMWarehouseQuickAdjustment?.(),
+    overviewBinLocations: () => window.BMWarehouseQuickBin?.()
+  };
+  document.addEventListener('click', event => {
+    const button = event.target.closest?.('.dashboard-compact-actions .warehouse-action-card');
+    if (!button || !quickActions[button.id]) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    const action = quickActions[button.id];
+    if (typeof action !== 'function') return;
+    try { Promise.resolve(action()).catch(console.error); } catch (error) { console.error(error); }
+  }, true);
   $('overviewNav')?.addEventListener('click', show);
   $('dashboardRefresh')?.addEventListener('click', load);
   document.querySelectorAll('[data-dashboard-target]').forEach(button => button.addEventListener('click', () => $(button.dataset.dashboardTarget)?.click()));
