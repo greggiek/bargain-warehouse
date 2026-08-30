@@ -5,10 +5,12 @@
   if (!view) return;
   let started = false;
   function show() {
-    window.scrollTo(0, 0);
-    if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
+    const resetScroll = () => { window.scrollTo(0, 0); if (document.scrollingElement) document.scrollingElement.scrollTop = 0; document.querySelector('.page')?.scrollTo?.(0, 0); };
+    resetScroll();
     document.querySelectorAll('main > section, #atGlanceView').forEach(node => { if (node && node !== view) node.hidden = true; });
     view.hidden = false;
+    requestAnimationFrame(resetScroll);
+    setTimeout(resetScroll, 50);
     document.querySelectorAll('.nav-item').forEach(node => node.classList.toggle('active', node.id === 'overviewNav'));
     load();
   }
