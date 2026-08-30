@@ -560,5 +560,16 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
   const syncLocation=()=>{if(mobileLocation&&locationLabel?.textContent.trim())mobileLocation.textContent=locationLabel.textContent.trim();};
   syncLocation(); if(locationLabel)new MutationObserver(syncLocation).observe(locationLabel,{childList:true,subtree:true,characterData:true});
 })();
-</script></body>
+</script><script>
+  // Operational dialogs must not remain inside a hidden workspace view.
+  // Keep them in the document layer so every dashboard tile can open visibly.
+  (() => {
+    const mountOperationalDialogs = () => document.querySelectorAll('dialog').forEach(dialog => {
+      if (dialog.parentElement !== document.body) document.body.append(dialog);
+    });
+    if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', mountOperationalDialogs, { once: true });
+    else mountOperationalDialogs();
+  })();
+</script>
+</body>
 </html>
