@@ -333,6 +333,20 @@ const setTransferItemsMutation = `mutation SetTransferItems($input: InventoryTra
   }
 }`;
 
+const deleteTransferMutation = `mutation DeleteTransfer($id: ID!) {
+  inventoryTransferDelete(id: $id) { deletedId userErrors { field message } }
+}`;
+
+async function deleteDraft(url, key, link) {
+  if (link.status !== 'draft') throw new Error('Only Draft transfers can be deleted.');
+  if (link.route_type === 'same_store' && link.source_shopify_transfer_id) {
+    const data = await graphql(storeFor(link.source_store_key), deleteTransferMutation, { id: link.source_shopify_transfer_id });
+    errorsFor(data.inventoryTransferDelete);
+  }
+  await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'DELETE', key);
+  return { message: 'Draft ' + link.bm_reference + ' was deleted. No inventory moved.' };
+}
+
 async function editDraft(url, key, auth, link, requestedLines) {
   if (link.status !== 'draft') throw new Error('Only Draft transfers can be edited.');
   const existing = link.shopify_transfer_link_lines || [];
@@ -418,6 +432,11 @@ module.exports = async function shopifyTransferLifecycle(req, res) {
     const linkId = String(req.body?.linkId || '');
     if (!linkId) return res.status(400).json({ ok: false, error: 'Shopify transfer link is required.' });
     const link = await loadLink(url, serviceRoleKey, linkId);
+
+    if (action === 'delete_draft') {
+      if (!isAdmin || !managed.has(Number(link.source_location_id))) return res.status(403).json({ ok: false, error: 'Administrator manage access is required at the sending warehouse.' });
+      return res.status(200).json({ ok: true, ...(await deleteDraft(url, serviceRoleKey, link)) });
+    }
 
     if (action === 'edit_draft') {
       if (!isAdmin || !managed.has(Number(link.source_location_id))) return res.status(403).json({ ok: false, error: 'Administrator manage access is required at the sending warehouse.' });
