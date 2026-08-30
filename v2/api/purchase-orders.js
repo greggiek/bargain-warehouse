@@ -57,6 +57,12 @@ module.exports = async function purchaseOrders(req, res) {
     const hub = access.find(location => location.code === '730' || location.name === '730 Windham Rd');
     const readableIds = (canManagePurchaseOrders ? access : manageable).map(location => location.id);
 
+    if (req.method === 'GET' && req.query?.productCategories) {
+      const categoryResponse = await fetch(url + '/rest/v1/products?category=not.is.null&select=category&order=category.asc&limit=1000', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(10000) });
+      const categoryRows = await categoryResponse.json().catch(() => []);
+      if (!categoryResponse.ok) throw new Error('product category lookup failed');
+      return res.status(200).json({ ok: true, categories: [...new Set(categoryRows.map(row => row.category).filter(Boolean))] });
+    }
     if (req.method === 'GET' && req.query?.productSearch) {
       const term = String(req.query.productSearch).trim();
       if (term.length < 2) return res.status(200).json({ ok: true, products: [] });
