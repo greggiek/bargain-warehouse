@@ -183,7 +183,7 @@ async function createNativeTransfer(url, key, auth, body) {
   const source = config.mappings.find(mapping => Number(mapping.location_id) === sourceLocationId);
   const destination = config.mappings.find(mapping => Number(mapping.location_id) === destinationLocationId);
   const store = stores().find(item => item.key === source.store_key);
-  const bmReference = await nextTransferReference(url, key);
+  const bmReference = 'TR-' + await nextTransferReference(url, key);
 
   const linkRows = await postgrest(url, 'shopify_transfer_links', 'POST', key, {
     bm_reference: bmReference,
@@ -258,7 +258,7 @@ async function createIntercompanyDraft(url, key, auth, body) {
   const config = await loadConfig(url, key);
   const source = config.mappings.find(mapping => Number(mapping.location_id) === sourceLocationId);
   const destination = config.mappings.find(mapping => Number(mapping.location_id) === destinationLocationId);
-  const bmReference = await nextTransferReference(url, key);
+  const bmReference = 'IC-' + await nextTransferReference(url, key);
 
   const linkRows = await postgrest(url, 'shopify_transfer_links', 'POST', key, {
     bm_reference: bmReference,
