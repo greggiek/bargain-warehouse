@@ -23,6 +23,13 @@ module.exports = async (req, res) => {
     const canManageTransfers = TRANSFER_ADMIN_ROLES.has(auth.user.role);
     const managedLocationIds = new Set(locations.filter((location) => location.canManage).map((location) => location.id));
     const productSearch = String(req.query?.productSearch || '').trim();
+    if (req.method === 'GET' && req.query?.productCategories) {
+      if (!canManageTransfers) return res.status(403).json({ ok: false, error: 'Administrator access is required to create transfers.' });
+      const categoryResponse = await fetch(url + '/rest/v1/products?category=not.is.null&select=category&order=category.asc&limit=1000', { headers: jsonHeaders(serviceRoleKey) });
+      const categoryRows = await categoryResponse.json().catch(() => []);
+      if (!categoryResponse.ok) return res.status(categoryResponse.status).json({ ok: false, error: 'Product category lookup failed.' });
+      return res.status(200).json({ ok: true, categories: [...new Set(categoryRows.map(row => row.category).filter(Boolean))] });
+    }
     if (req.method === 'GET' && productSearch) {
       if (!canManageTransfers) return res.status(403).json({ ok: false, error: 'Administrator access is required to create transfers.' });
       const term = productSearch.trim();
