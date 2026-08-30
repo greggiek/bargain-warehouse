@@ -38,6 +38,10 @@
     }
   }
   const quickActions = {
+    overviewReceivePo: () => {
+      if (typeof window.BMWarehouseQuickReceivePo !== 'function') throw Error('Receive PO is still loading. Please try again in a moment.');
+      return window.BMWarehouseQuickReceivePo();
+    },
     overviewReceiveTransfer: () => window.BMWarehouseQuickReceiveTransfer?.(),
     overviewWillCallScan: () => window.BMWarehouseQuickWillCall?.(),
     overviewDeliveryScan: () => window.BMWarehouseQuickDelivery?.(),
@@ -54,7 +58,15 @@
     event.stopImmediatePropagation();
     const action = quickActions[button.id];
     if (typeof action !== 'function') return;
-    try { Promise.resolve(action()).catch(console.error); } catch (error) { console.error(error); }
+    try {
+      Promise.resolve(action()).catch(error => {
+        console.error(error);
+        set('dashboardSubtitle', error.message || 'That action could not be opened. Please try again.');
+      });
+    } catch (error) {
+      console.error(error);
+      set('dashboardSubtitle', error.message || 'That action could not be opened. Please try again.');
+    }
   }, true);
   $('overviewNav')?.addEventListener('click', show);
   $('dashboardRefresh')?.addEventListener('click', load);
