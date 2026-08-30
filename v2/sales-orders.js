@@ -17,6 +17,8 @@
     if (order.route !== expectedRoute) { const correct = order.route === 'will_call' ? 'Will Call' : 'Local Delivery'; order = null; render(); throw Error('This receipt belongs in ' + correct + '. Start it from the ' + correct + ' button.'); }
     set((order.route === 'will_call' ? 'Will Call' : 'Local Delivery') + ' order found.'); render();
   }
+  window.BMWarehouseQuickWillCall = () => show('will_call');
+  window.BMWarehouseQuickDelivery = () => show('local_delivery');
   $('overviewWillCallScan').onclick = () => show('will_call');
   $('overviewDeliveryScan').onclick = () => show('local_delivery');
   $('salesOrderFind').onclick = () => lookup().catch(error => set(error.message, true));
