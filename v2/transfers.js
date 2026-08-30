@@ -203,11 +203,12 @@
   // Shopify-native transfers are inventory-authoritative. They appear separately from the
   // legacy V2 ledger so employees cannot accidentally move stock through the wrong workflow.
   const shopifyLifecyclePanel=document.createElement('section');
-  shopifyLifecyclePanel.className='card';
-  shopifyLifecyclePanel.hidden=true;
-  shopifyLifecyclePanel.innerHTML='<p class="eyebrow">SHOPIFY INVENTORY TRANSFERS</p><h2>Shopify transfers in progress</h2><p class="muted">These transfers move stock in Shopify. Ship starts in-transit; Receive puts it into the destination warehouse.</p><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Route</th><th>Shopify status</th><th>Action</th></tr></thead><tbody id="shopifyTransferLifecycleRows"></tbody></table></div>';
+  shopifyLifecyclePanel.className='card section';
+  shopifyLifecyclePanel.hidden=false;
+  shopifyLifecyclePanel.innerHTML='<div class="transfer-kicker">Transfer list</div><div class="transfer-filters"><input id="shopifyTransferListSearch" class="inventory-search" type="search" placeholder="Search transfer, warehouse, SKU, or status"><select id="shopifyTransferListStatus" class="transfer-filter"><option value="">All statuses</option><option value="draft">Draft</option><option value="shipped">In transit</option><option value="partially_received">Partially received</option><option value="completed">Completed</option></select></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Transfer</th><th>Date</th><th>Status</th><th>Source location</th><th>Destination location</th><th>Lines</th><th>Last update</th><th>Action</th></tr></thead><tbody id="shopifyTransferLifecycleRows"></tbody></table></div>';
   transferQueue.parentNode.insertBefore(shopifyLifecyclePanel,transferQueue);
   const shopifyLifecycleRows=shopifyLifecyclePanel.querySelector('#shopifyTransferLifecycleRows');
+  const shopifyTransferListSearch=shopifyLifecyclePanel.querySelector('#shopifyTransferListSearch'),shopifyTransferListStatus=shopifyLifecyclePanel.querySelector('#shopifyTransferListStatus');
   const intercompanyLedgerPanel=document.createElement('section');
   intercompanyLedgerPanel.className='card';
   intercompanyLedgerPanel.hidden=true;
@@ -259,6 +260,7 @@
   intercompanyLedgerMonth.addEventListener('change',()=>loadIntercompanyLedger());
   intercompanyLedgerExport.addEventListener('click',exportIntercompanyLedger);
   let shopifyTransferLinks=[], shopifyTransferCapabilities={canShip:false,canReceive:false};
+  shopifyTransferListSearch.addEventListener('input',renderShopifyTransfers);shopifyTransferListStatus.addEventListener('change',renderShopifyTransfers);
   async function runShopifyLifecycle(link,action,button){
     const intercompany=link.route_type==='cross_store';
     const question=action==='ship'
@@ -283,14 +285,20 @@
   }
   function renderShopifyTransfers(){
     shopifyLifecycleRows.replaceChildren();
-    shopifyLifecyclePanel.hidden=!shopifyTransferLinks.length;
-    shopifyTransferLinks.forEach(link=>{
-      const intercompany=link.route_type==='cross_store';
-      const row=document.createElement('tr');cell(row,link.bm_reference);cell(row,link.source_name+' → '+link.destination_name);cell(row,(intercompany?'Intercompany · ':'')+formatStatus(link.status));
+    const term=shopifyTransferListSearch.value.trim().toLowerCase(),wanted=shopifyTransferListStatus.value;
+    const visible=shopifyTransferLinks.filter(link=>{const text=[link.bm_reference,link.source_name,link.destination_name,link.status,...(link.shopify_transfer_link_lines||[]).map(line=>line.sku)].join(' ').toLowerCase();return (!term||text.includes(term))&&(!wanted||link.status===wanted);});
+    if(!visible.length)return empty(shopifyLifecycleRows,8,shopifyTransferLinks.length?'No transfers match this view.':'No transfers yet. Create one when material needs to move.');
+    visible.forEach(link=>{
+      const intercompany=link.route_type==='cross_store',row=document.createElement('tr'),lines=link.shopify_transfer_link_lines||[];
+      cell(row,link.bm_reference);
+      cell(row,link.created_at?new Date(link.created_at).toLocaleDateString():'—');
+      cell(row,(intercompany?'Intercompany · ':'')+formatStatus(link.status));
+      cell(row,link.source_name||'—');cell(row,link.destination_name||'—');cell(row,String(lines.length));
+      cell(row,link.received_at?new Date(link.received_at).toLocaleDateString():link.shipped_at?new Date(link.shipped_at).toLocaleDateString():link.created_at?new Date(link.created_at).toLocaleDateString():'—');
       const actions=document.createElement('td');
-      if(shopifyTransferCapabilities.canShip){ actions.append(shopifyPrintButton(link)); actions.append(shopifyLabelButton(link)); }
-      if(link.status==='draft'&&shopifyTransferCapabilities.canShip)actions.append(lifecycleButton(intercompany?'Ship intercompany':'Ship in Shopify',link,'ship'));
-      if((link.status==='shipped'||link.status==='partially_received')&&shopifyTransferCapabilities.canReceive)actions.append(lifecycleButton(intercompany?'Receive intercompany':'Receive in Shopify',link,'receive'));
+      if(shopifyTransferCapabilities.canShip){actions.append(shopifyPrintButton(link));actions.append(shopifyLabelButton(link));}
+      if(link.status==='draft'&&shopifyTransferCapabilities.canShip)actions.append(lifecycleButton(intercompany?'Ship':'Ship',link,'ship'));
+      if((link.status==='shipped'||link.status==='partially_received')&&shopifyTransferCapabilities.canReceive)actions.append(lifecycleButton('Receive',link,'receive'));
       if(!actions.childNodes.length)actions.textContent='—';row.append(actions);shopifyLifecycleRows.append(row);
     });
   }
