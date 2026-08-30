@@ -110,7 +110,7 @@
   async function deleteOrder() {
     const order = selectedOrder(); if (!order) throw Error('Choose a purchase order first.');
     if (!confirm('Delete ' + order.purchase_order_number + '? This cannot be undone.')) return;
-    await request({ action: 'delete', purchaseOrderId: order.id });
+    await request('/api/purchase-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', purchaseOrderId: order.id }) });
     selectedOrderId = null; editingOrder = false; await load(); set('Purchase order deleted.');
   }
   async function sendOrder() { const order = selectedOrder(); if (!order || !confirm('Send ' + order.purchase_order_number + ' to the supplier? Warehouse receiving will then be enabled.')) return; const data = await request('/api/purchase-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send', purchaseOrderId: order.id }) }); set(data.purchaseOrder.purchaseOrderNumber + ' sent.'); await load(); const latest = orders.find(item => item.id === order.id); if (latest) openDetail(latest); }
