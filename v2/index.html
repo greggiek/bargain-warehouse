@@ -257,7 +257,7 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
           </section>
           <div class="dashboard-group"><div class="dashboard-group-title"><span>QUICK ACTIONS</span><strong>Start work</strong></div>
             <div class="warehouse-action-grid dashboard-action-grid dashboard-compact-actions">
-              <button id="overviewReceivePo" class="warehouse-action-card" type="button"><span class="warehouse-action-icon po">P</span><span><strong>Receive PO</strong><small>Scan and receive inventory</small></span></button>
+              <button id="overviewReceivePo" class="warehouse-action-card" type="button" onclick="window.BMWarehouseQuickReceivePo?.(); const dialog=document.getElementById('poReceivingDialog'); if(dialog&&!dialog.open) dialog.showModal(); document.getElementById('poReceiveOrderLookup')?.focus();"><span class="warehouse-action-icon po">P</span><span><strong>Receive PO</strong><small>Scan and receive inventory</small></span></button>
               <button id="overviewReceiveTransfer" class="warehouse-action-card" type="button"><span class="warehouse-action-icon transfer">T</span><span><strong>Receive transfer</strong><small>Scan an incoming transfer</small></span></button>
               <button id="overviewWillCallScan" class="warehouse-action-card" type="button"><span class="warehouse-action-icon will-call">W</span><span><strong>Pick Will Call</strong><small>Stage a customer pickup</small></span></button>
               <button id="overviewDeliveryScan" class="warehouse-action-card" type="button"><span class="warehouse-action-icon delivery">D</span><span><strong>Load delivery</strong><small>Load an outbound route</small></span></button>
