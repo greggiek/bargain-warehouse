@@ -11,7 +11,7 @@
   const monthLabel = () => month.toLocaleDateString(undefined, { month: 'long', year: 'numeric' });
   const openOrder = order => document.dispatchEvent(new CustomEvent('bmwarehouse:open-po', { detail: { id: order.id } }));
   function render() {
-    const orders = allOrders.filter(order => dateKey(order.expected_date));
+    const orders = allOrders.filter(order => order.purchase_type === 'container_buy' && dateKey(order.expected_date));
     $('poArrivalsMonth').textContent = monthLabel();
     const first = new Date(month.getFullYear(), month.getMonth(), 1);
     const start = new Date(first); start.setDate(start.getDate() - start.getDay());
@@ -44,12 +44,12 @@
       button.type = 'button'; button.className = 'button secondary'; button.textContent = 'Open PO'; button.onclick = () => openOrder(order);
       action.append(button); row.append(action); rows.append(row);
     });
-    if (!upcoming.length) { const row=document.createElement('tr'), td=document.createElement('td');td.colSpan=6;td.className='muted';td.textContent='No open purchase orders have an expected ship date yet.';row.append(td);rows.append(row); }
+    if (!upcoming.length) { const row=document.createElement('tr'), td=document.createElement('td');td.colSpan=6;td.className='muted';td.textContent='No open container buys have an expected landing date yet.';row.append(td);rows.append(row); }
     const without = allOrders.filter(order => !dateKey(order.expected_date)).length;
     status(allOrders.length + ' open PO' + (allOrders.length === 1 ? '' : 's') + ' · ' + orders.length + ' scheduled' + (without ? ' · ' + without + ' missing an expected ship date' : '.'));
   }
   async function load() {
-    status('Loading incoming purchase orders…');
+    status('Loading container arrivals…');
     const response = await fetch('/api/purchase-orders', { credentials:'same-origin', cache:'no-store' });
     const data = await response.json().catch(() => ({}));
     if (!response.ok) throw Error(data.error || 'Could not load purchase orders.');
