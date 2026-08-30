@@ -361,6 +361,9 @@ module.exports = async function (req, res) {
           shopifyInventoryItemId:
             variant.shopifyInventoryItemId,
 
+          variantTitle:
+            variant.variant || '',
+
           barcode:
             variant.barcode || ''
         });
