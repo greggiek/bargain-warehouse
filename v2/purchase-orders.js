@@ -8,7 +8,7 @@
   const set = (text, error = false) => { $('purchaseOrdersStatus').textContent = text; $('purchaseOrdersStatus').classList.toggle('error', error); };
   const scanSet = (text, error = false) => { $('poScanStatus').textContent = text; $('poScanStatus').classList.toggle('error', error); };
   const cell = (row, value) => { const td = document.createElement('td'); td.textContent = value; row.append(td); };
-  const productCell = (row, name, variantTitle) => { const td = document.createElement('td'), parent = document.createElement('strong'); parent.textContent = name || 'Unnamed product'; td.append(parent); const child = String(variantTitle || '').trim(); if (child && child.toLowerCase() !== 'default title') { const detail = document.createElement('span'); detail.className = 'po-variant-title'; detail.textContent = child; td.append(detail); } row.append(td); };
+  const productCell = (row, name, variantTitle) => { const td = document.createElement('td'), parent = document.createElement('span'); parent.className = 'po-product-title'; parent.textContent = name || 'Unnamed product'; td.append(parent); const child = String(variantTitle || '').trim(); if (child && child.toLowerCase() !== 'default title') { const detail = document.createElement('span'); detail.className = 'po-variant-title'; detail.textContent = child; td.append(detail); } row.append(td); };
   const selectedOrder = () => orders.find(order => String(order.id) === String(selectedOrderId));
   const activeOrder = () => orders.find(order => String(order.id) === $('poReceiveOrder').value);
   const expectedOrders = () => orders.filter(order => ['ordered', 'partially_received'].includes(order.status));
