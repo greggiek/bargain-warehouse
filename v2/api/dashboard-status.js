@@ -27,14 +27,14 @@ module.exports = async (req, res) => {
       rows(url, key, 'purchase_orders?receiving_location_id=eq.' + locationId + '&status=in.(ordered,partially_received)&select=id'),
       rows(url, key, 'transfers?to_location_id=eq.' + locationId + '&status=in.(allocated,in_transit,partially_received)&select=id'),
       rows(url, key, 'inventory_balances?location_id=eq.' + locationId + '&select=product_id'),
-      selected.can_manage ? rows(url, key, 'cycle_count_lines?status=eq.variance&review_status=eq.pending&select=id,cycle_count_runs!inner(location_id)&cycle_count_runs.location_id=eq.' + locationId) : Promise.resolve([])
+      selected.can_manage ? rows(url, key, 'cycle_count_lines?status=eq.variance&review_status=eq.pending&select=id,cycle_count_runs(location_id)') : Promise.resolve([])
     ]);
     return res.json({
       ok: true,
       location: { id: locationId, name: selected.locations.name },
       purchaseOrders: poRows.length,
       transfers: transferRows.length,
-      cycleReviews: cycleRows.length,
+      cycleReviews: cycleRows.filter(row => Number(row.cycle_count_runs?.location_id) === locationId).length,
       inventorySkus: new Set(balanceRows.map(row => row.product_id)).size,
       generatedAt: new Date().toISOString()
     });
