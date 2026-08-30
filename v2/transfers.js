@@ -189,6 +189,7 @@
   newTransferButton.addEventListener('click',()=>{if(!capabilities.canManageTransfers)return show('Only administrators can create Shopify transfers.',true);openShopifyTransferDialog();});
   async function openWorkspace(receiveOnly=false){otherViews.forEach((element)=>{if(element)element.hidden=true;});otherNavs.forEach((element)=>element&&element.classList.remove('active'));nav.classList.add('active');view.hidden=false;await load();applyCapabilities(receiveOnly);if(receiveOnly||!capabilities.canManageTransfers)openDocumentScan();}
   window.BMWarehouseOpenTransfers=openWorkspace;
+  window.BMWarehouseQuickReceiveTransfer=()=>openWorkspace(true);
   if(window.BMWarehousePendingTransfersOpen){window.BMWarehousePendingTransfersOpen=false;openWorkspace(false).catch(error=>show(error.message||'Could not load transfers.',true));}
   nav.addEventListener('click',()=>openWorkspace(false).catch(error=>show(error.message||'Could not load transfers.',true)));
   overviewReceiveTransfer?.addEventListener('click',()=>openWorkspace(true));
