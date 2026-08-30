@@ -48,6 +48,7 @@ module.exports = async function shopifyCatalogSync(req, res) {
     const catalog = preview.candidates.map(candidate => ({
       sku: candidate.sku,
       name: candidate.name,
+      variantTitle: candidate.variantTitle || '',
       barcode: candidate.barcode,
       category: candidate.category || '',
       sources: candidate.sources
