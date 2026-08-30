@@ -326,6 +326,43 @@ async function postIntercompanyLeg(url, key, auth, link, leg) {
   };
 }
 
+const setTransferItemsMutation = `mutation SetTransferItems($input: InventoryTransferSetItemsInput!, $idempotencyKey: String!) {
+  inventoryTransferSetItems(input: $input) @idempotent(key: $idempotencyKey) {
+    inventoryTransfer { id }
+    userErrors { field message }
+  }
+}`;
+
+async function editDraft(url, key, auth, link, requestedLines) {
+  if (link.status !== 'draft') throw new Error('Only Draft transfers can be edited.');
+  const existing = link.shopify_transfer_link_lines || [];
+  if (!Array.isArray(requestedLines) || requestedLines.length !== existing.length) throw new Error('Every transfer line needs a quantity.');
+  const byId = new Map(existing.map(line => [String(line.id), line]));
+  const lines = requestedLines.map(input => {
+    const line = byId.get(String(input.lineId)), quantity = Number(input.quantity);
+    if (!line || !Number.isInteger(quantity) || quantity <= 0) throw new Error('Every line needs a whole-piece quantity above zero.');
+    return { ...line, quantity };
+  });
+  if (new Set(lines.map(line => String(line.id))).size !== lines.length) throw new Error('Duplicate transfer lines are not allowed.');
+
+  if (link.route_type === 'same_store') {
+    const store = storeFor(link.source_store_key);
+    const variants = await graphql(store, variantItemsQuery, { ids: lines.map(line => line.source_shopify_variant_id) });
+    const items = new Map((variants.nodes || []).filter(node => node?.id && node.inventoryItem?.id).map(node => [node.id, node.inventoryItem.id]));
+    const payload = await graphql(store, setTransferItemsMutation, {
+      input: { id: link.source_shopify_transfer_id, lineItems: lines.map(line => {
+        const inventoryItemId = items.get(line.source_shopify_variant_id);
+        if (!inventoryItemId) throw new Error('Could not find Shopify inventory for ' + line.sku + '.');
+        return { inventoryItemId, quantity: line.quantity };
+      }) },
+      idempotencyKey: crypto.randomUUID()
+    });
+    errorsFor(payload.inventoryTransferSetItems);
+  }
+  for (const line of lines) await postgrest(url, 'shopify_transfer_link_lines?id=eq.' + encodeURIComponent(line.id), 'PATCH', key, { quantity: line.quantity });
+  return { message: 'Draft ' + link.bm_reference + ' updated. No inventory moved.', status: 'draft' };
+}
+
 async function ship(url, key, auth, link) {
   if (link.route_type === 'cross_store') return postIntercompanyLeg(url, key, auth, link, 'ship');
   if (link.route_type === 'same_store' && link.source_shopify_transfer_id) return shipNative(url, key, auth, link);
@@ -381,6 +418,11 @@ module.exports = async function shopifyTransferLifecycle(req, res) {
     const linkId = String(req.body?.linkId || '');
     if (!linkId) return res.status(400).json({ ok: false, error: 'Shopify transfer link is required.' });
     const link = await loadLink(url, serviceRoleKey, linkId);
+
+    if (action === 'edit_draft') {
+      if (!isAdmin || !managed.has(Number(link.source_location_id))) return res.status(403).json({ ok: false, error: 'Administrator manage access is required at the sending warehouse.' });
+      return res.status(200).json({ ok: true, ...(await editDraft(url, serviceRoleKey, auth, link, req.body?.lines)) });
+    }
 
     if (action === 'mark_pending' || action === 'return_to_draft') {
       if (!isAdmin || !managed.has(Number(link.source_location_id))) return res.status(403).json({ ok: false, error: 'Administrator manage access is required at the sending warehouse.' });
