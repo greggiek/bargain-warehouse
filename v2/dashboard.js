@@ -5,6 +5,8 @@
   if (!view) return;
   let started = false;
   function show() {
+    window.scrollTo({ top: 0, left: 0, behavior: 'instant' });
+    if (document.scrollingElement) document.scrollingElement.scrollTop = 0;
     document.querySelectorAll('main > section, #atGlanceView').forEach(node => { if (node && node !== view) node.hidden = true; });
     view.hidden = false;
     document.querySelectorAll('.nav-item').forEach(node => node.classList.toggle('active', node.id === 'overviewNav'));
