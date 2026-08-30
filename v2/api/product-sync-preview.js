@@ -104,14 +104,18 @@ module.exports = async function productSyncPreview(req, res) {
         storeLabel: variant.sourceStoreLabel,
         productId: variant.shopifyProductId,
         variantId: variant.shopifyVariantId,
-        inventoryItemId: variant.shopifyInventoryItemId || null
+        inventoryItemId: variant.shopifyInventoryItemId || null,
+        variantTitle: String(variant.variantTitle || '').trim()
       })).filter(source => source.storeKey && source.productId && source.variantId);
+      const variantTitles = Array.from(new Set(sources.map(source => source.variantTitle).filter(title => title && title.toLowerCase() !== 'default title')));
+      const variantTitle = variantTitles.join(' · ');
       sourceVariantCount += sources.length;
 
       candidates.push({
         action,
         sku,
         name,
+        variantTitle,
         barcode,
         category,
         uom: 'EA',
