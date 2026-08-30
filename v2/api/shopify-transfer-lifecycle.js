@@ -99,7 +99,7 @@ const receiveShipmentMutation = `mutation ReceiveShipment($id: ID!, $idempotency
 }`;
 
 async function shipNative(url, key, auth, link) {
-  if (link.status !== 'draft') throw new Error('This Shopify transfer is already ' + link.status + '.');
+  if (link.status !== 'pending') throw new Error('Mark this transfer Pending before shipping it.');
   const store = storeFor(link.source_store_key);
   const lines = link.shopify_transfer_link_lines || [];
   if (!lines.length) throw new Error('This Shopify transfer has no linked SKU lines.');
@@ -123,26 +123,26 @@ async function shipNative(url, key, auth, link) {
   if (!shipment?.id) throw new Error('Shopify did not return an in-transit shipment.');
 
   await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'PATCH', key, {
-    status: 'shipped',
+    status: 'pending',
     shipped_at: new Date().toISOString(),
     metadata: { ...(link.metadata || {}), shopify_shipment_id: shipment.id, shopify_shipment_status: shipment.status, shipped_by: auth.user.display_name }
   });
-  return { message: 'Transfer ' + link.bm_reference + ' is now in transit in Shopify.', status: 'shipped' };
+  return { message: 'Transfer ' + link.bm_reference + ' is now in transit in Shopify.', status: 'pending' };
 }
 
 async function receiveNative(url, key, auth, link) {
-  if (link.status !== 'shipped' && link.status !== 'partially_received') throw new Error('This Shopify transfer is not waiting to be received.');
+  if (link.status !== 'pending' || link.metadata?.outbound_status !== 'shipped') throw new Error('Ship this transfer before receiving it.');
   const shipmentId = link.metadata?.shopify_shipment_id;
   if (!shipmentId) throw new Error('The linked Shopify shipment ID is missing. Receive it in Shopify, then refresh this page.');
   const store = storeFor(link.destination_store_key);
   const data = await graphql(store, receiveShipmentMutation, { id: shipmentId, idempotencyKey: crypto.randomUUID() });
   errorsFor(data.inventoryShipmentReceive);
   await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'PATCH', key, {
-    status: 'completed',
+    status: 'received',
     received_at: new Date().toISOString(),
     metadata: { ...(link.metadata || {}), shopify_receipt_status: data.inventoryShipmentReceive?.inventoryShipment?.status || 'RECEIVED', received_by: auth.user.display_name }
   });
-  return { message: 'Transfer ' + link.bm_reference + ' was received into the destination in Shopify.', status: 'completed' };
+  return { message: 'Transfer ' + link.bm_reference + ' was received into the destination in Shopify.', status: 'received' };
 }
 
 
@@ -217,7 +217,7 @@ async function recordIntercompanyShipmentValue(url, key, link, adjustmentId) {
       transfer_link_id: link.id,
       transfer_line_id: line.id,
       bm_reference: link.bm_reference,
-      status: 'shipped',
+      status: 'pending',
       source_entity: link.metadata?.source_entity || link.source_store_key,
       destination_entity: link.metadata?.destination_entity || link.destination_store_key,
       source_location_id: link.source_location_id,
@@ -237,7 +237,7 @@ async function recordIntercompanyShipmentValue(url, key, link, adjustmentId) {
 
 async function recordIntercompanyReceiptValue(url, key, link, adjustmentId) {
   await postgrest(url, 'intercompany_transfer_ledger_lines?transfer_link_id=eq.' + encodeURIComponent(link.id), 'PATCH', key, {
-    status: 'completed',
+    status: 'received',
     destination_shopify_adjustment_id: adjustmentId,
     received_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -246,8 +246,8 @@ async function recordIntercompanyReceiptValue(url, key, link, adjustmentId) {
 
 async function postIntercompanyLeg(url, key, auth, link, leg) {
   const isShip = leg === 'ship';
-  const expected = isShip ? ['draft', 'prepared'] : ['shipped', 'partially_received'];
-  if (!expected.includes(link.status)) throw new Error(isShip ? 'This intercompany transfer has already been shipped or closed.' : 'Ship the intercompany transfer before receiving it.');
+  const expected = isShip ? ['pending'] : ['pending'];
+  if (!expected.includes(link.status) || (!isShip && link.metadata?.outbound_status !== 'shipped')) throw new Error(isShip ? 'Mark this transfer Pending before shipping it.' : 'Ship the intercompany transfer before receiving it.');
   const lines = link.shopify_transfer_link_lines || [];
   if (!lines.length) throw new Error('This intercompany transfer has no linked SKU lines.');
 
@@ -302,7 +302,7 @@ async function postIntercompanyLeg(url, key, auth, link, leg) {
   if (isShip) await recordIntercompanyShipmentValue(url, key, link, group.id);
   else await recordIntercompanyReceiptValue(url, key, link, group.id);
 
-  const status = isShip ? 'shipped' : 'completed';
+  const status = isShip ? 'pending' : 'received';
   const now = new Date().toISOString();
   const metadata = {
     ...(link.metadata || {}),
@@ -381,6 +381,19 @@ module.exports = async function shopifyTransferLifecycle(req, res) {
     const linkId = String(req.body?.linkId || '');
     if (!linkId) return res.status(400).json({ ok: false, error: 'Shopify transfer link is required.' });
     const link = await loadLink(url, serviceRoleKey, linkId);
+
+    if (action === 'mark_pending' || action === 'return_to_draft') {
+      if (!isAdmin || !managed.has(Number(link.source_location_id))) return res.status(403).json({ ok: false, error: 'Administrator manage access is required at the sending warehouse.' });
+      const shipped = link.metadata?.outbound_status === 'shipped';
+      if (action === 'mark_pending') {
+        if (link.status !== 'draft') return res.status(400).json({ ok: false, error: 'Only Draft transfers can be marked Pending.' });
+        await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'PATCH', serviceRoleKey, { status: 'pending', metadata: { ...(link.metadata || {}), approved_by: auth.user.display_name } });
+        return res.status(200).json({ ok: true, message: 'Transfer ' + link.bm_reference + ' is Pending and locked for shipping.', status: 'pending' });
+      }
+      if (link.status !== 'pending' || shipped) return res.status(400).json({ ok: false, error: 'Only an unshipped Pending transfer can return to Draft.' });
+      await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'PATCH', serviceRoleKey, { status: 'draft', metadata: { ...(link.metadata || {}), returned_to_draft_by: auth.user.display_name } });
+      return res.status(200).json({ ok: true, message: 'Transfer ' + link.bm_reference + ' is Draft and can be edited.', status: 'draft' });
+    }
 
     if (action === 'ship') {
       if (!isAdmin || !managed.has(Number(link.source_location_id))) return res.status(403).json({ ok: false, error: 'Administrator manage access is required at the sending warehouse.' });
