@@ -38,10 +38,6 @@
     }
   }
   const quickActions = {
-    overviewReceivePo: () => {
-      if (typeof window.BMWarehouseQuickReceivePo !== 'function') throw Error('Receive PO is still loading. Please try again in a moment.');
-      return window.BMWarehouseQuickReceivePo();
-    },
     overviewReceiveTransfer: () => window.BMWarehouseQuickReceiveTransfer?.(),
     overviewWillCallScan: () => window.BMWarehouseQuickWillCall?.(),
     overviewDeliveryScan: () => window.BMWarehouseQuickDelivery?.(),
