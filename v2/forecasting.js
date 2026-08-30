@@ -68,11 +68,20 @@
     } catch (error) { set(error.message, true); } finally { $('forecastSync').disabled = false; $('forecastBackfill').disabled = false; $('forecastBackfillWeek').disabled = false; }
   }
 
-  $('forecastNav').addEventListener('click', () => {
-    ['overviewView','inventoryView','snapshotView','transferView','productionView','productSyncView','parLevelsView','bomManagementView','replenishmentView'].forEach(id => { const el = $(id); if (el) el.hidden = true; });
-    view.hidden = false; document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.id === 'forecastNav'));
-    loadCategories().catch(error => { clearMetrics(); emptyTable('Unable to load categories.'); set(error.message, true); });
-  });
+  function showForecast() {
+    // Keep this in sync with the app shell instead of an old hand-maintained list.
+    // A visible PO/arrivals section used to remain above this view and hide Forecasting.
+    document.querySelectorAll('main > section, #atGlanceView').forEach(el => { if (el && el !== view) el.hidden = true; });
+    view.hidden = false;
+    document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.id === 'forecastNav'));
+    loadCategories().catch(error => {
+      clearMetrics();
+      emptyTable('Unable to load categories.');
+      ['forecastCategory','forecastRefresh'].forEach(id => { const control = $(id); if (control) control.disabled = false; });
+      set(error.message || 'Forecasting could not load. Please try again.', true);
+    });
+  }
+  $('forecastNav').addEventListener('click', showForecast);
   ['overviewNav','inventoryNav','productSyncNav','snapshotNav','transfersNav','productionNav','parLevelsNav','bomManagementNav','replenishmentNav'].forEach(id => $(id)?.addEventListener('click', () => view.hidden = true));
   $('forecastRefresh').addEventListener('click', loadCategory);
   $('forecastSync').addEventListener('click', () => sync('daily'));
