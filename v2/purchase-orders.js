@@ -143,6 +143,9 @@
   async function sendOrder() { const order = selectedOrder(); if (!order || !confirm('Send ' + order.purchase_order_number + ' to the supplier? Warehouse receiving will then be enabled.')) return; const data = await request('/api/purchase-orders', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'send', purchaseOrderId: order.id }) }); set(data.purchaseOrder.purchaseOrderNumber + ' sent.'); await load(); const latest = orders.find(item => item.id === order.id); if (latest) openDetail(latest); }
   async function openReceiver(order = null) {
     const dialog = $('poReceivingDialog');
+    // The receiver is declared inside the hidden PO view. Move it to the document
+    // layer before opening so its modal backdrop can never hide the dialog itself.
+    if (dialog.parentElement !== document.body) document.body.append(dialog);
     if (typeof dialog.showModal === 'function' && !dialog.open) dialog.showModal(); else dialog.hidden = false;
     orders = order ? [order] : [];
     renderReceiverOptions();
