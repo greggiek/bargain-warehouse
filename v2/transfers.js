@@ -259,6 +259,13 @@
   }
   intercompanyLedgerMonth.addEventListener('change',()=>loadIntercompanyLedger());
   intercompanyLedgerExport.addEventListener('click',exportIntercompanyLedger);
+  const transferDetailsDialog=document.createElement('dialog');
+  transferDetailsDialog.className='card receiving-dialog';
+  transferDetailsDialog.innerHTML='<form method="dialog" class="inventory-head"><div><div class="transfer-kicker">Transfer</div><h2 id="transferDetailsTitle">Transfer</h2></div><button class="button secondary" type="submit">Close</button></form><div id="transferDetailsBody"></div>';
+  document.body.append(transferDetailsDialog);
+  const transferDetailsTitle=transferDetailsDialog.querySelector('#transferDetailsTitle'),transferDetailsBody=transferDetailsDialog.querySelector('#transferDetailsBody');
+  function openTransferDetails(link){transferDetailsTitle.textContent='Transfer '+link.bm_reference;transferDetailsBody.replaceChildren();const route=document.createElement('p');route.className='muted';route.textContent=(link.source_name||'—')+' → '+(link.destination_name||'—')+' · '+formatStatus(link.status);const wrap=document.createElement('div');wrap.className='inventory-table-wrap';const table=document.createElement('table');table.className='inventory-table';table.innerHTML='<thead><tr><th>SKU</th><th>Quantity</th></tr></thead><tbody></tbody>';(link.shopify_transfer_link_lines||[]).forEach(line=>{const row=document.createElement('tr');cell(row,line.sku||'—');cell(row,String(line.quantity||0));table.querySelector('tbody').append(row);});wrap.append(table);transferDetailsBody.append(route,wrap);showDialog(transferDetailsDialog);}
+  function compactPrintButton(link){const button=document.createElement('button');button.type='button';button.className='button secondary';button.textContent='Print';button.addEventListener('click',()=>{const choice=prompt('Print options:\n1 — Transfer\n2 — Labels');if(choice==='1')shopifyPrintButton(link).click();if(choice==='2')shopifyLabelButton(link).click();});return button;}
   let shopifyTransferLinks=[], shopifyTransferCapabilities={canShip:false,canReceive:false};
   shopifyTransferListSearch.addEventListener('input',renderShopifyTransfers);shopifyTransferListStatus.addEventListener('change',renderShopifyTransfers);
   async function runShopifyLifecycle(link,action,button){
@@ -290,13 +297,13 @@
     if(!visible.length)return empty(shopifyLifecycleRows,8,shopifyTransferLinks.length?'No transfers match this view.':'No transfers yet. Create one when material needs to move.');
     visible.forEach(link=>{
       const intercompany=link.route_type==='cross_store',row=document.createElement('tr'),lines=link.shopify_transfer_link_lines||[];
-      cell(row,link.bm_reference);
+      const refCell=document.createElement('td'),refButton=document.createElement('button');refButton.type='button';refButton.className='po-order-link';refButton.textContent=link.bm_reference;refButton.addEventListener('click',()=>openTransferDetails(link));refCell.append(refButton);row.append(refCell);
       cell(row,link.created_at?new Date(link.created_at).toLocaleDateString():'—');
       cell(row,(intercompany?'Intercompany · ':'')+formatStatus(link.status));
       cell(row,link.source_name||'—');cell(row,link.destination_name||'—');cell(row,String(lines.length));
       cell(row,link.received_at?new Date(link.received_at).toLocaleDateString():link.shipped_at?new Date(link.shipped_at).toLocaleDateString():link.created_at?new Date(link.created_at).toLocaleDateString():'—');
       const actions=document.createElement('td');
-      if(shopifyTransferCapabilities.canShip){actions.append(shopifyPrintButton(link));actions.append(shopifyLabelButton(link));}
+      if(shopifyTransferCapabilities.canShip)actions.append(compactPrintButton(link));
       if(link.status==='draft'&&shopifyTransferCapabilities.canShip)actions.append(lifecycleButton(intercompany?'Ship':'Ship',link,'ship'));
       if((link.status==='shipped'||link.status==='partially_received')&&shopifyTransferCapabilities.canReceive)actions.append(lifecycleButton('Receive',link,'receive'));
       if(!actions.childNodes.length)actions.textContent='—';row.append(actions);shopifyLifecycleRows.append(row);
