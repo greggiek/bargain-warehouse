@@ -205,7 +205,7 @@
   const shopifyLifecyclePanel=document.createElement('section');
   shopifyLifecyclePanel.className='card section';
   shopifyLifecyclePanel.hidden=false;
-  shopifyLifecyclePanel.innerHTML='<div class="transfer-kicker">Transfer list</div><div class="transfer-filters"><input id="shopifyTransferListSearch" class="inventory-search" type="search" placeholder="Search transfer, warehouse, SKU, or status"><select id="shopifyTransferListStatus" class="transfer-filter"><option value="">All statuses</option><option value="draft">Draft</option><option value="shipped">In transit</option><option value="partially_received">Partially received</option><option value="completed">Completed</option></select></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Transfer</th><th>Date</th><th>Status</th><th>Source location</th><th>Destination location</th><th>Lines</th><th>Last update</th><th>Action</th></tr></thead><tbody id="shopifyTransferLifecycleRows"></tbody></table></div>';
+  shopifyLifecyclePanel.innerHTML='<div class="transfer-kicker">Transfer list</div><div class="transfer-filters"><input id="shopifyTransferListSearch" class="inventory-search" type="search" placeholder="Search transfer, warehouse, SKU, or status"><select id="shopifyTransferListStatus" class="transfer-filter"><option value="">All statuses</option><option value="draft">Draft</option><option value="pending">Pending</option><option value="received">Received</option></select></div><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Transfer</th><th>Date</th><th>Status</th><th>Source location</th><th>Destination location</th><th>Lines</th><th>Last update</th><th>Action</th></tr></thead><tbody id="shopifyTransferLifecycleRows"></tbody></table></div>';
   transferQueue.parentNode.insertBefore(shopifyLifecyclePanel,transferQueue);
   const shopifyLifecycleRows=shopifyLifecyclePanel.querySelector('#shopifyTransferLifecycleRows');
   const shopifyTransferListSearch=shopifyLifecyclePanel.querySelector('#shopifyTransferListSearch'),shopifyTransferListStatus=shopifyLifecyclePanel.querySelector('#shopifyTransferListStatus');
@@ -285,6 +285,11 @@
       show(data.message);await loadShopifyTransfers();await loadIntercompanyLedger();
     }catch(error){show(error.message||'Shopify transfer action failed.',true);}finally{if(button)button.disabled=false;}
   }
+  async function changeTransferStatus(link,action,button){
+    if(button)button.disabled=true;show(action==='mark_pending'?'Marking transfer Pending…':'Returning transfer to Draft…');
+    try{const response=await fetch('/api/shopify-transfer-lifecycle',{method:'POST',headers:{'Content-Type':'application/json'},credentials:'same-origin',body:JSON.stringify({action,linkId:link.id})});const data=await response.json();if(!response.ok)throw new Error(data.error||'Transfer status could not be changed.');show(data.message);await loadShopifyTransfers();}catch(error){show(error.message||'Transfer status could not be changed.',true);}finally{if(button)button.disabled=false;}
+  }
+  function statusButton(label,link,action){const button=document.createElement('button');button.type='button';button.className=action==='mark_pending'?'button':'button secondary';button.textContent=label;button.addEventListener('click',()=>changeTransferStatus(link,action,button));return button;}
   function lifecycleButton(label,link,action){
     const button=document.createElement('button');button.type='button';button.className=action==='ship'?'button':'button secondary';button.textContent=label;
     button.addEventListener('click',()=>runShopifyLifecycle(link,action,button));
@@ -304,8 +309,10 @@
       cell(row,link.received_at?new Date(link.received_at).toLocaleDateString():link.shipped_at?new Date(link.shipped_at).toLocaleDateString():link.created_at?new Date(link.created_at).toLocaleDateString():'—');
       const actions=document.createElement('td');
       if(shopifyTransferCapabilities.canShip)actions.append(compactPrintButton(link));
-      if(link.status==='draft'&&shopifyTransferCapabilities.canShip)actions.append(lifecycleButton(intercompany?'Ship':'Ship',link,'ship'));
-      if((link.status==='shipped'||link.status==='partially_received')&&shopifyTransferCapabilities.canReceive)actions.append(lifecycleButton('Receive',link,'receive'));
+      const shipped=link.metadata?.outbound_status==='shipped';
+      if(link.status==='draft'&&shopifyTransferCapabilities.canShip)actions.append(statusButton('Mark pending',link,'mark_pending'));
+      if(link.status==='pending'&&!shipped&&shopifyTransferCapabilities.canShip){actions.append(statusButton('Edit',link,'return_to_draft'));actions.append(lifecycleButton('Ship',link,'ship'));}
+      if(link.status==='pending'&&shipped&&shopifyTransferCapabilities.canReceive)actions.append(lifecycleButton('Receive',link,'receive'));
       if(!actions.childNodes.length)actions.textContent='—';row.append(actions);shopifyLifecycleRows.append(row);
     });
   }
