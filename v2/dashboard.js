@@ -38,7 +38,6 @@
     }
   }
   const quickActions = {
-    overviewReceivePo: () => window.BMWarehouseQuickReceivePo?.(),
     overviewReceiveTransfer: () => window.BMWarehouseQuickReceiveTransfer?.(),
     overviewWillCallScan: () => window.BMWarehouseQuickWillCall?.(),
     overviewDeliveryScan: () => window.BMWarehouseQuickDelivery?.(),
