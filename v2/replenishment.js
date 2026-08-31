@@ -224,7 +224,7 @@
   });
 
   $('replenishmentNav').addEventListener('click', () => {
-    ['overviewView', 'inventoryView', 'snapshotView', 'transferView', 'productionView', 'productSyncView', 'parLevelsView', 'bomManagementView', 'inventoryLedgerView', 'cycleCountReviewView'].forEach(id => { const element = $(id); if (element) element.hidden = true; });
+    document.querySelectorAll('main > section').forEach(element => { if (element !== view) element.hidden = true; });
     view.hidden = false; document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.id === 'replenishmentNav')); load().catch(error => set(error.message, true));
   });
   ['overviewNav', 'inventoryNav', 'productSyncNav', 'snapshotNav', 'transfersNav', 'productionNav', 'parLevelsNav', 'bomManagementNav', 'inventoryLedgerNav', 'cycleCountReviewNav'].forEach(id => $(id)?.addEventListener('click', () => view.hidden = true));
