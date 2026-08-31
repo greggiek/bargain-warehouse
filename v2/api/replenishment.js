@@ -1,13 +1,12 @@
 const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
-const VIEW_ALL_ROLES = new Set(['admin', 'developer']);
 
-async function accessForUser(url, key, userId, viewAll) {
-  const endpoint = viewAll ? '/rest/v1/locations?active=eq.true&select=id,name,active&order=name.asc' : '/rest/v1/user_location_access?user_id=eq.' + encodeURIComponent(userId) + '&select=location_id,can_manage,locations(id,name,active)';
-  const r = await fetch(url + endpoint, { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
+async function accessForUser(url, key, userId) {
+  const r = await fetch(url + '/rest/v1/user_location_access?user_id=eq.' + encodeURIComponent(userId) + '&select=location_id,can_manage,locations(id,name,active)', {
+    headers: jsonHeaders(key), signal: AbortSignal.timeout(8000)
+  });
   if (!r.ok) throw new Error('location access lookup failed');
-  const rows = await r.json();
-  return viewAll ? rows.map(x => ({ location_id: x.id, can_manage: true, locations: x })) : rows.filter(x => x.locations?.active);
+  return (await r.json()).filter(x => x.locations?.active);
 }
 
 module.exports = async function replenishment(req, res) {
@@ -15,7 +14,7 @@ module.exports = async function replenishment(req, res) {
   if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
   try {
     const { url, serviceRoleKey } = configuration();
-    const access = await accessForUser(url, serviceRoleKey, auth.user.id, VIEW_ALL_ROLES.has(auth.user.role));
+    const access = await accessForUser(url, serviceRoleKey, auth.user.id);
     const ids = access.map(x => x.location_id).join(',');
     if (!ids) return res.status(200).json({ ok: true, items: [], recommendations: [], locations: [], board: [], summary: {} });
 
