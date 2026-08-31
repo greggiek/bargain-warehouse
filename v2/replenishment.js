@@ -224,7 +224,7 @@
   });
 
   $('replenishmentNav').addEventListener('click', () => {
-    document.querySelectorAll('main > section').forEach(element => { if (element !== view) element.hidden = true; });
+    ['overviewView','binLocationsView','inventoryLedgerView','cycleCountReviewView','inventoryView','snapshotView','skuFixView','transferView','productionView','bomManagementView','parLevelsView','poArrivalsView','forecastingView','vendorDirectoryView','purchaseOrdersView','shopifyWebhookView','productSyncView'].forEach(id => { const element = $(id); if (element) element.hidden = true; });
     view.hidden = false; document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.id === 'replenishmentNav')); load().catch(error => set(error.message, true));
   });
   ['overviewNav', 'inventoryNav', 'productSyncNav', 'snapshotNav', 'transfersNav', 'productionNav', 'parLevelsNav', 'bomManagementNav', 'inventoryLedgerNav', 'cycleCountReviewNav'].forEach(id => $(id)?.addEventListener('click', () => view.hidden = true));
