@@ -46,7 +46,24 @@
   function editable() { const order = selectedOrder(); return Boolean(capabilities.canManagePurchaseOrders && (!order || order.status === 'draft' || (editingOrder && ['ordered', 'partially_received'].includes(order.status)))); }
   function renderDraft() {
     const host = $('poDraftLineRows'); host.replaceChildren();
-    draftLines.forEach(line => { const row = document.createElement('tr'); cell(row, line.sku || '—'); productCell(row, line.name, line.variantTitle); cell(row, line.uom || 'EA'); const quantity = document.createElement('td'); if (editable()) { const input = document.createElement('input'); input.className = 'line-quantity-input'; input.type = 'number'; input.min = String(Number(line.receivedQuantity || 0)); input.step = '0.01'; input.value = String(line.quantity); input.setAttribute('aria-label', (line.sku || 'Item') + ' ordered quantity'); input.onchange = () => { const value = Number(input.value); if (!Number.isFinite(value) || value <= 0 || value < Number(line.receivedQuantity || 0)) { input.value = String(line.quantity); return set((line.sku || 'This line') + ' cannot be reduced below its received quantity.', true); } line.quantity = value; renderDraft(); }; quantity.append(input); } else quantity.textContent = fmt(line.quantity); row.append(quantity); cell(row, money(line.unitCost)); cell(row, money(line.movingAverageCost || line.purchasePrice || 0)); cell(row, money(line.quantity * line.unitCost)); const action = document.createElement('td'); if (editable() && !Number(line.receivedQuantity || 0)) { const button = document.createElement('button'); button.className = 'button secondary'; button.type = 'button'; button.textContent = 'Remove'; button.onclick = () => { draftLines = draftLines.filter(item => item.productId !== line.productId); renderDraft(); }; action.append(button); } else if (Number(line.receivedQuantity || 0)) action.textContent = 'Received ' + fmt(line.receivedQuantity); else action.textContent = '—'; row.append(action); host.append(row); });
+    draftLines.forEach(line => { const row = document.createElement('tr'); cell(row, line.sku || '—'); productCell(row, line.name, line.variantTitle); cell(row, line.uom || 'EA'); const quantity = document.createElement('td'); if (editable()) { const input = document.createElement('input'); input.className = 'line-quantity-input'; input.type = 'number'; input.min = String(Number(line.receivedQuantity || 0)); input.step = '0.01'; input.value = String(line.quantity); input.setAttribute('aria-label', (line.sku || 'Item') + ' ordered quantity'); input.onchange = () => { const value = Number(input.value); if (!Number.isFinite(value) || value <= 0 || value < Number(line.receivedQuantity || 0)) { input.value = String(line.quantity); return set((line.sku || 'This line') + ' cannot be reduced below its received quantity.', true); } line.quantity = value; renderDraft(); }; quantity.append(input); } else quantity.textContent = fmt(line.quantity); row.append(quantity);
+      const unitCost = document.createElement('td');
+      if (editable()) {
+        const input = document.createElement('input');
+        input.className = 'line-quantity-input';
+        input.type = 'number';
+        input.min = '0';
+        input.step = '0.0001';
+        input.value = String(line.unitCost || 0);
+        input.setAttribute('aria-label', (line.sku || 'Item') + ' unit cost');
+        input.onchange = () => {
+          const value = Number(input.value);
+          if (!Number.isFinite(value) || value < 0) { input.value = String(line.unitCost || 0); return set('Unit cost must be zero or greater.', true); }
+          line.unitCost = value; renderDraft();
+        };
+        unitCost.append(input);
+      } else unitCost.textContent = money(line.unitCost);
+      row.append(unitCost); cell(row, money(line.movingAverageCost || line.purchasePrice || 0)); cell(row, money(line.quantity * line.unitCost)); const action = document.createElement('td'); if (editable() && !Number(line.receivedQuantity || 0)) { const button = document.createElement('button'); button.className = 'button secondary'; button.type = 'button'; button.textContent = 'Remove'; button.onclick = () => { draftLines = draftLines.filter(item => item.productId !== line.productId); renderDraft(); }; action.append(button); } else if (Number(line.receivedQuantity || 0)) action.textContent = 'Received ' + fmt(line.receivedQuantity); else action.textContent = '—'; row.append(action); host.append(row); });
     if (!draftLines.length) { const row = document.createElement('tr'), empty = document.createElement('td'); empty.colSpan = 8; empty.className = 'muted'; empty.textContent = editable() ? 'Add an item above.' : 'This purchase order has no lines.'; row.append(empty); host.append(row); }
     const material = draftLines.reduce((sum, line) => sum + Number(line.quantity || 0) * Number(line.unitCost || 0), 0), shipping = Math.max(0, Number($('poShippingCost')?.value || 0)); $('poDraftMaterial').textContent = money(material); $('poDraftShipping').textContent = money(shipping); $('poDraftTotal').textContent = money(material + shipping);
   }
