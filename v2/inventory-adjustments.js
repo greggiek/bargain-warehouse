@@ -23,12 +23,12 @@
   }
   async function load() {
     const locationId=$('adjustmentLocation').value;
-    set('Loading adjustment inventory and ledger…');
-    const response=await fetch('/api/inventory-adjustments?locationId='+encodeURIComponent(locationId)+'&search='+encodeURIComponent($('adjustmentProductSearch').value)+'&sort='+encodeURIComponent($('adjustmentLedgerSort').value),{credentials:'same-origin'});
+    set('Loading items…');
+    const response=await fetch('/api/inventory-adjustments?locationId='+encodeURIComponent(locationId)+'&search='+encodeURIComponent($('adjustmentProductSearch').value),{credentials:'same-origin'});
     const data=await response.json().catch(()=>({}));
     if(!response.ok)throw Error(data.error||'Could not load inventory adjustments.');
     const location=$('adjustmentLocation'); if(!loaded){ location.replaceChildren(); data.locations.forEach(item=>{const option=document.createElement('option');option.value=item.id;option.textContent=item.name;location.append(option)});location.value=data.locationId;loaded=true; }
-    products=data.products||[]; renderLedger(data.ledger||[]); set('Choose an item, then add pieces or record a loss. Every change appears in the ledger below.');
+    products=data.products||[]; set('Choose an item and enter the quantity.');
   }
   function open(){ $('inventoryAdjustmentDialog').showModal(); load().catch(error=>set(error.message,true)); }
   async function save(){
@@ -43,7 +43,6 @@
   window.BMWarehouseQuickAdjustment = open;
   $('overviewInventoryAdjustment').onclick=open;
   $('adjustmentLocation').onchange=()=>load().catch(error=>set(error.message,true));
-  $('adjustmentLedgerSort').onchange=()=>load().catch(error=>set(error.message,true));
   $('adjustmentProductSearch').oninput=renderProducts;
   $('adjustmentProductSearch').onfocus=renderProducts;
   $('adjustmentSave').onclick=()=>save().catch(error=>set(error.message,true));
