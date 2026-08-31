@@ -187,7 +187,31 @@
   }
   queueSearch.addEventListener('input',renderQueue);statusFilter.addEventListener('change',renderQueue);
   newTransferButton.addEventListener('click',()=>{if(!capabilities.canManageTransfers)return show('Only administrators can create Shopify transfers.',true);openShopifyTransferDialog();});
-  async function openWorkspace(receiveOnly=false){otherViews.forEach((element)=>{if(element)element.hidden=true;});otherNavs.forEach((element)=>element&&element.classList.remove('active'));nav.classList.add('active');view.hidden=false;await load();applyCapabilities(receiveOnly);if(receiveOnly||!capabilities.canManageTransfers)openDocumentScan();}
+  async function openWorkspace(receiveOnly=false){
+    otherViews.forEach((element)=>{if(element)element.hidden=true;});
+    otherNavs.forEach((element)=>element&&element.classList.remove('active'));
+    nav.classList.add('active');view.hidden=false;
+    if(receiveOnly){
+      // Match PO receiving: show the scan-first popup immediately, then prepare its data.
+      applyCapabilities(true);openDocumentScan();
+      documentScanInput.disabled=true;
+      documentScanStatus.textContent='Loading incoming transfers…';
+      documentScanStatus.classList.remove('error');
+      try{
+        await load();applyCapabilities(true);
+        documentScanInput.disabled=false;
+        documentScanStatus.textContent='Scan barcode';
+        documentScanInput.focus();
+      }catch(error){
+        documentScanInput.disabled=false;
+        documentScanStatus.textContent=error.message||'Could not load incoming transfers.';
+        documentScanStatus.classList.add('error');
+      }
+      return;
+    }
+    await load();applyCapabilities(false);
+    if(!capabilities.canManageTransfers)openDocumentScan();
+  }
   window.BMWarehouseOpenTransfers=openWorkspace;
   window.BMWarehouseQuickReceiveTransfer=()=>openWorkspace(true);
   if(window.BMWarehousePendingTransfersOpen){window.BMWarehousePendingTransfersOpen=false;openWorkspace(false).catch(error=>show(error.message||'Could not load transfers.',true));}
