@@ -3,6 +3,16 @@
   const view = $('inventoryView'); if (!view) return;
   let loaded = false, searchTimer, request, lastData;
   const number = value => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
+  const shortLocation = name => {
+    const value = String(name || '');
+    if (/amityville/i.test(value)) return 'Amityville';
+    if (/bohemia/i.test(value)) return 'Bohemia';
+    if (/outpost|ronkonkoma/i.test(value)) return 'Outpost';
+    if (/windham/i.test(value)) return 'Windham';
+    if (/annex/i.test(value)) return 'Annex';
+    if (/riverhead/i.test(value)) return 'Riverhead';
+    return value;
+  };
   const setStatus = (message, error = false) => { $('inventoryStatus').textContent = message; $('inventoryStatus').classList.toggle('error', error); };
   function setLocations(locations, selectedId) {
     const select = $('inventoryLocation');
@@ -17,7 +27,7 @@
   function renderMatrix(rows, locations, detail) {
     const head = $('inventoryLookupHead'); head.replaceChildren();
     const header = document.createElement('tr');
-    ['Item description', 'SKU', ...locations.map(x => x.name)].forEach(label => { const th = document.createElement('th'); th.textContent = label; header.append(th); });
+    ['Item description', 'SKU', ...locations.map(x => shortLocation(x.name))].forEach(label => { const th = document.createElement('th'); th.textContent = label; header.append(th); });
     head.append(header);
     const body = $('inventoryRows'); body.replaceChildren();
     rows.forEach(row => {
