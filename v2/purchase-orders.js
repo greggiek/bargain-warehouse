@@ -39,6 +39,18 @@
     popup.document.write('<!doctype html><html><head><title>'+printEscape(order.purchase_order_number)+' labels</title><style>@page{size:3in 5in;margin:0}*{box-sizing:border-box}body{margin:0;font-family:Arial;color:#000}.zebra-label{width:3in;height:5in;padding:.22in;page-break-after:always;display:flex;flex-direction:column;border:1px dashed #ddd}.zebra-label:last-child{page-break-after:auto}.eyebrow{font-size:9pt;font-weight:800;letter-spacing:1px}.doc{font-size:15pt;font-weight:800;margin:7px 0}.name{font-size:14pt;font-weight:800;line-height:1.12;min-height:.62in}.sku{font-size:13pt;margin:6px 0}.barcode{width:100%;height:.78in;fill:#000;display:block;margin-top:auto}.code{font:12pt monospace;font-weight:bold;text-align:center;margin-top:4px}.bottom{border-top:1px solid #000;margin-top:8px;padding-top:7px;font-size:10pt;font-weight:700}.barcode-fallback{font:14pt monospace;font-weight:700;text-align:center;margin-top:auto}</style></head><body>'+labels+'</body></html>');
     popup.document.close();popup.focus();setTimeout(()=>popup.print(),250);
   }
+  function printInternalReceivingSheet(order) {
+    if (!order) throw Error('Choose a purchase order first.');
+    const lines = order.purchase_order_lines || [];
+    if (!lines.length) throw Error('This purchase order has no line items.');
+    const lineRows = lines.map(line => {
+      const code = line.products?.barcode || line.products?.sku || '';
+      return '<tr><td><b>'+printEscape(line.products?.sku || '—')+'</b><br>'+printEscape(line.products?.name || 'Unnamed item')+'</td><td>'+fmt(line.ordered_quantity)+' '+printEscape(line.uom || 'EA')+'</td><td>'+barcodeSvg(code)+'<div class="barcode-value">'+printEscape(code)+'</div></td></tr>';
+    }).join('');
+    const popup = window.open('', '_blank'); if (!popup) throw Error('Allow pop-ups to print the receiving sheet.');
+    const page = '<!doctype html><html><head><title>'+printEscape(order.purchase_order_number)+' · Receiving sheet</title><style>@page{size:letter;margin:12mm}*{box-sizing:border-box}body{font:14px Arial;color:#182b48;margin:0}.head{display:flex;justify-content:space-between;border-bottom:3px solid #14385d;padding-bottom:16px;margin-bottom:20px}.eyebrow{color:#189d68;font-weight:700;letter-spacing:1.5px;font-size:11px}.number{font-size:28px;font-weight:800;margin:5px 0}.po-code{width:290px}.barcode{width:100%;height:54px;display:block;fill:#000}.barcode-value{font:700 12px monospace;text-align:center;margin-top:3px;color:#000}table{width:100%;border-collapse:collapse}th{background:#edf3fa;text-align:left;padding:10px}td{padding:12px 10px;border-bottom:1px solid #dce5ef;vertical-align:middle}td:nth-child(1){width:46%}td:nth-child(2){width:14%}td:nth-child(3){width:40%}@media print{tr{break-inside:avoid}}</style></head><body><div class="head"><div><div class="eyebrow">BARGAIN MOULDING · WAREHOUSE RECEIVING</div><div class="number">'+printEscape(order.purchase_order_number)+'</div><div><b>Supplier:</b> '+printEscape(order.vendor_name || '—')+'<br><b>Receive at:</b> '+printEscape(order.locations?.name || '—')+'<br><b>Expected:</b> '+printEscape(order.expected_date || '—')+'</div></div><div class="po-code">'+barcodeSvg(order.purchase_order_number)+'<div class="barcode-value">SCAN PO: '+printEscape(order.purchase_order_number)+'</div></div></div><table><thead><tr><th>Item</th><th>Ordered</th><th>Scan item barcode</th></tr></thead><tbody>'+lineRows+'</tbody></table></body></html>';
+    popup.document.write(page); popup.document.close(); popup.focus(); setTimeout(() => popup.print(), 250);
+  }
   function printPurchaseOrder() {
     const order = selectedOrder(); if (!order) throw Error('Choose a purchase order first.');
     const lines = order.purchase_order_lines || [];
@@ -81,11 +93,12 @@
   function printMenu(order) {
     if (!order) throw Error('Choose a purchase order first.');
     selectedOrderId = order.id;
-    const choice = window.prompt('Print 1 for the purchase order or 2 for Zebra labels.', '1');
+    const choice = window.prompt('Print: 1 = Supplier PO, 2 = Warehouse receiving sheet, 3 = Zebra labels.', '1');
     if (choice === null) return;
-    if (String(choice).trim() === '2') return printZebraLabels(order);
     if (String(choice).trim() === '1') return printPurchaseOrder();
-    throw Error('Choose 1 for the purchase order or 2 for Zebra labels.');
+    if (String(choice).trim() === '2') return printInternalReceivingSheet(order);
+    if (String(choice).trim() === '3') return printZebraLabels(order);
+    throw Error('Choose 1 for Supplier PO, 2 for Warehouse receiving sheet, or 3 for Zebra labels.');
   }
   function renderMaster() {
     const host = $('purchaseOrderMasterRows'), term = $('poMasterSearch').value.trim().toLowerCase(), supplier = $('poSupplierFilter').value, statusFilter = $('poStatusFilter').value, sort = $('poSort').value;
