@@ -223,10 +223,14 @@
     } catch (error) { poSet(error.message, true); }
   });
 
-  $('replenishmentNav').addEventListener('click', () => {
+  $('replenishmentNav').addEventListener('click', event => {
+    // This view has a dedicated navigation path. Prevent older workspace listeners
+    // from hiding it again after it has been opened.
+    event.preventDefault();
+    event.stopImmediatePropagation();
     ['overviewView','binLocationsView','inventoryLedgerView','cycleCountReviewView','inventoryView','snapshotView','skuFixView','transferView','productionView','bomManagementView','parLevelsView','poArrivalsView','forecastingView','vendorDirectoryView','purchaseOrdersView','shopifyWebhookView','productSyncView'].forEach(id => { const element = $(id); if (element) element.hidden = true; });
     view.hidden = false; document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.id === 'replenishmentNav')); load().catch(error => set(error.message, true));
-  });
+  }, true);
   ['overviewNav', 'inventoryNav', 'productSyncNav', 'snapshotNav', 'transfersNav', 'productionNav', 'parLevelsNav', 'bomManagementNav', 'inventoryLedgerNav', 'cycleCountReviewNav'].forEach(id => $(id)?.addEventListener('click', () => view.hidden = true));
   $('replenishmentRefresh').addEventListener('click', () => load().catch(error => set(error.message, true)));
   $('purchaseQueueToggle').addEventListener('click', () => { showAllPurchaseQueue = !showAllPurchaseQueue; render(); });
