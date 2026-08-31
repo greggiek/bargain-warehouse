@@ -5,12 +5,12 @@
   const number = value => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   const shortLocation = name => {
     const value = String(name || '');
-    if (/amityville/i.test(value)) return 'Amityville';
+    if (/amityville/i.test(value)) return 'Amity';
     if (/bohemia/i.test(value)) return 'Bohemia';
     if (/outpost|ronkonkoma/i.test(value)) return 'Outpost';
     if (/windham/i.test(value)) return 'Windham';
     if (/annex/i.test(value)) return 'Annex';
-    if (/riverhead/i.test(value)) return 'Riverhead';
+    if (/riverhead/i.test(value)) return 'River.';
     return value;
   };
   const setStatus = (message, error = false) => { $('inventoryStatus').textContent = message; $('inventoryStatus').classList.toggle('error', error); };
