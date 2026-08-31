@@ -1,7 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id);
   const view = $('inventoryView'); if (!view) return;
-  let loaded = false, searchTimer, request, lastData;
+  let loaded = false, searchTimer, request, lastData, sortLocationId = null, sortDirection = 'desc';
   const number = value => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   const shortLocation = name => {
     const value = String(name || '');
@@ -27,10 +27,28 @@
   function renderMatrix(rows, locations, detail) {
     const head = $('inventoryLookupHead'); head.replaceChildren();
     const header = document.createElement('tr');
-    ['Item description', 'SKU', ...locations.map(x => shortLocation(x.name))].forEach(label => { const th = document.createElement('th'); th.textContent = label; header.append(th); });
+    ['Item description', 'SKU'].forEach(label => { const th = document.createElement('th'); th.textContent = label; header.append(th); });
+    locations.forEach(location => {
+      const th = document.createElement('th'), button = document.createElement('button');
+      button.type = 'button'; button.className = 'inventory-sort-button';
+      const active = Number(sortLocationId) === Number(location.id);
+      button.textContent = shortLocation(location.name) + (active ? (sortDirection === 'desc' ? ' ↓' : ' ↑') : '');
+      button.title = 'Sort ' + location.name + (active && sortDirection === 'desc' ? ' lowest to highest' : ' highest to lowest');
+      button.onclick = () => {
+        if (Number(sortLocationId) === Number(location.id)) sortDirection = sortDirection === 'desc' ? 'asc' : 'desc';
+        else { sortLocationId = location.id; sortDirection = 'desc'; }
+        renderMatrix(lastData?.rows || [], lastData?.locations || [], lastData?.category ? ((lastData.locations?.[0]?.name || 'Warehouse') + ' · ' + lastData.category) : '');
+      };
+      th.append(button); header.append(th);
+    });
     head.append(header);
     const body = $('inventoryRows'); body.replaceChildren();
-    rows.forEach(row => {
+    const orderedRows = [...rows].sort((a, b) => {
+      if (!sortLocationId) return a.name.localeCompare(b.name) || a.sku.localeCompare(b.sku);
+      const delta = Number(a.quantities?.[sortLocationId] || 0) - Number(b.quantities?.[sortLocationId] || 0);
+      return sortDirection === 'desc' ? -delta : delta;
+    });
+    orderedRows.forEach(row => {
       const tr = document.createElement('tr');
       [row.name, row.sku, ...locations.map(x => number(row.quantities?.[x.id] || 0))].forEach((value,index) => { const td=document.createElement('td'); td.textContent=value; if(index===1)td.className='sku'; tr.append(td); });
       body.append(tr);
