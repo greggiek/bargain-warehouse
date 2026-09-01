@@ -13,6 +13,6 @@
       available: available === undefined || available === null ? rawOnHand - rawCommitted : number(available)
     };
   };
-  const forecastUsable = (onHand, committed) => Math.max(number(onHand) - number(committed), 0);
-  return { number, signedInventory, forecastUsable };
+  const forecastUsable = (onHand, committed) => Math.max(number(onHand) - number(committed), 0);\n  const csvCell = value => { const text=String(value ?? ''); return /[\",\\n]/.test(text) ? '\"'+text.replaceAll('\"','\"\"')+'\"' : text; };
+  return { number, signedInventory, forecastUsable, csvCell };
 });
