@@ -420,7 +420,7 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
     <label>Growth %<input id="forecastGrowth" type="number" step="0.1" value="10"></label>
     <label>Coverage days<input id="forecastCoverage" type="number" min="0" value="90"></label>
     <label>Safety-stock days<input id="forecastSafety" type="number" min="0" value="14"></label>
-    <label>Search<input id="forecastSearch" type="search" placeholder="SKU or product"></label>
+    <label>Search<input id="forecastSearch" type="search" placeholder="SKU or product"></label>\n    <label>Sort<select id="forecastSort"><option value="suggested_desc">Suggested requirement: high to low</option><option value="suggested_asc">Suggested requirement: low to high</option><option value="demand_desc">Gross demand: high to low</option><option value="projected_desc">Projected shortage: high to low</option><option value="sku_asc">SKU: A to Z</option></select></label>
     <button id="forecastRecalculate" class="primary">Recalculate</button><button id="forecastExport">Export CSV</button>
   </div>
   <div id="forecastDataStatus" class="status-card">Open Forecasting to load data status.</div>
