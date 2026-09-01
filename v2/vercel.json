@@ -34,10 +34,6 @@
     {
       "path": "/api/sales-cache-sync?storeKey=store_2&jobType=sales_backfill",
       "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/full-catalog-dry-run",
-      "schedule": "* * * * *"
     }
   ]
 }
