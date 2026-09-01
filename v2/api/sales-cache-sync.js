@@ -95,7 +95,7 @@ function fulfillmentRows(orders, windowStart, windowEnd) {
   const rows = [];
   for (const order of orders || []) {
     if (order.cancelledAt) continue;
-    for (const fulfillment of order.fulfillments?.nodes || []) {
+    for (const fulfillment of order.fulfillments || []) {
       if (fulfillment.status !== 'SUCCESS' || !fulfillment.createdAt) continue;
       const salesDate = dateInZone(fulfillment.createdAt);
       if (salesDate < windowStart || salesDate >= windowEnd) continue;
@@ -227,11 +227,9 @@ module.exports = async function salesCacheSync(req, res) {
         nodes {
           id updatedAt cancelledAt
           fulfillments(first: 100) {
-            nodes {
-              id status createdAt updatedAt
-              fulfillmentLineItems(first: 250) {
-                nodes { id quantity lineItem { id sku } }
-              }
+            id status createdAt updatedAt
+            fulfillmentLineItems(first: 250) {
+              nodes { id quantity lineItem { id sku } }
             }
           }
         }
