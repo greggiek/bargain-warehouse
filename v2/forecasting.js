@@ -394,9 +394,11 @@
 
   function show() {
     const clickStarted = performance.now();
-    document.querySelectorAll('main > section,#atGlanceView').forEach(element => {
-      if (element !== view) element.hidden = true;
+    ['overviewView','inventoryView','snapshotView','transferView','productionView','productSyncView','parLevelsView','bomManagementView','inventoryLedgerView','cycleCountReviewView','replenishmentView','binLocationsView','purchaseOrdersView','poArrivalsView','vendorDirectoryView','shopifyWebhookView','skuFixView'].forEach(id => {
+      const element = $(id);
+      if (element) element.hidden = true;
     });
+    document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.id === 'forecastNav'));
     $('appView')?.classList.add('forecast-active');
     view.hidden = false;
     setStatus('loading', 'Forecast ready to load', 'Preparing the purchasing worksheet…');
