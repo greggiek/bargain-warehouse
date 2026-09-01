@@ -10,7 +10,7 @@ async function accessForUser(url, key, userId) {
 async function balancesForLocation(url, key, location) {
   const balances = [];
   for (let offset = 0; offset < 20000; offset += 1000) {
-    const response = await fetch(url + '/rest/v1/inventory_balances?location_id=eq.' + location.id + '&select=product_id,quantity,products(sku,name,category)&order=product_id.asc&limit=1000&offset=' + offset, { headers: jsonHeaders(key), signal: AbortSignal.timeout(10000) });
+    const response = await fetch(url + '/rest/v1/inventory_balances?location_id=eq.' + location.id + '&select=product_id,quantity,allocated_quantity,products(sku,name,category)&order=product_id.asc&limit=1000&offset=' + offset, { headers: jsonHeaders(key), signal: AbortSignal.timeout(10000) });
     const page = await response.json();
     if (!response.ok) throw new Error(page.message || 'V2 inventory lookup failed');
     balances.push(...page.map(x => ({ ...x, locationId: location.id })));
@@ -33,18 +33,18 @@ module.exports = async function inventory(req, res) {
     const balancePages = await Promise.all(selectedLocations.map(location => balancesForLocation(url, serviceRoleKey, location)));
     const normalized = balancePages.flat().map(balance => {
       const product = Array.isArray(balance.products) ? balance.products[0] : balance.products || {};
-      return { productId: Number(balance.product_id), locationId: balance.locationId, sku: String(product.sku || '').trim() || '—', name: String(product.name || '').trim() || 'Unnamed product', category: String(product.category || 'Uncategorized'), onHand: number(balance.quantity) };
+      return { productId: Number(balance.product_id), locationId: balance.locationId, sku: String(product.sku || '').trim() || '—', name: String(product.name || '').trim() || 'Unnamed product', category: String(product.category || 'Uncategorized'), onHand: number(balance.quantity), committed: number(balance.allocated_quantity), available: number(balance.quantity) - number(balance.allocated_quantity) };
     });
     const allCategoryRows = new Map();
     normalized.forEach(row => {
       const key = row.locationId + '|' + row.category;
-      const entry = allCategoryRows.get(key) || { locationId: row.locationId, category: row.category, itemCount: 0, onHand: 0 };
-      entry.itemCount += 1; entry.onHand += row.onHand; allCategoryRows.set(key, entry);
+      const entry = allCategoryRows.get(key) || { locationId: row.locationId, category: row.category, itemCount: 0, onHand: 0, committed: 0, available: 0 };
+      entry.itemCount += 1; entry.onHand += row.onHand; entry.committed += row.committed; entry.available += row.available; allCategoryRows.set(key, entry);
     });
     const grouped = new Map();
     normalized.filter(row => (!category || row.category === category) && (!search || [row.sku,row.name,row.category].join(' ').toLowerCase().includes(search))).forEach(row => {
-      const entry = grouped.get(row.productId) || { productId: row.productId, name: row.name, sku: row.sku, category: row.category, quantities: {} };
-      entry.quantities[row.locationId] = (entry.quantities[row.locationId] || 0) + row.onHand;
+      const entry = grouped.get(row.productId) || { productId: row.productId, name: row.name, sku: row.sku, category: row.category, quantities: {}, inventory: {} };
+      entry.quantities[row.locationId] = (entry.quantities[row.locationId] || 0) + row.onHand;\n      const detail = entry.inventory[row.locationId] || { onHand: 0, committed: 0, available: 0 };\n      detail.onHand += row.onHand; detail.committed += row.committed; detail.available += row.available; entry.inventory[row.locationId] = detail;
       grouped.set(row.productId, entry);
     });
     const rows = [...grouped.values()].sort((a,b) => a.name.localeCompare(b.name) || a.sku.localeCompare(b.sku)).slice(0, 2500);
