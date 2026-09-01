@@ -152,6 +152,7 @@ module.exports = async function salesCacheSync(req, res) {
 
   const telemetry = { throttleEvents: 0, retryEvents: 0 };
   let job;
+  let leaseToken = null;
   try {
     const { url, serviceRoleKey } = configuration();
     const active = await rest(url, serviceRoleKey,
@@ -193,6 +194,11 @@ module.exports = async function salesCacheSync(req, res) {
         job: { id: job.id, windowStart: job.window_start, windowEnd: job.window_end }
       });
     }
+
+    leaseToken = await rest(url, serviceRoleKey, 'rpc/claim_shopify_sync_job', {
+      method: 'POST',
+      body: JSON.stringify({ p_job_id: job.id, p_lease_seconds: 300 })
+    });
 
     const { shop, token } = await accessToken(store);
     const query = `query BMFulfilledSales($cursor: String, $query: String!) {
@@ -254,6 +260,12 @@ module.exports = async function salesCacheSync(req, res) {
       });
     }
 
+    await rest(url, serviceRoleKey, 'rpc/release_shopify_sync_job', {
+      method: 'POST',
+      body: JSON.stringify({ p_job_id: job.id, p_lease_token: leaseToken })
+    });
+    leaseToken = null;
+
     return res.status(200).json({
       ok: true,
       store: store.label,
@@ -282,6 +294,13 @@ module.exports = async function salesCacheSync(req, res) {
           throttle_events: Number(job.throttle_events || 0) + telemetry.throttleEvents,
           retry_events: Number(job.retry_events || 0) + telemetry.retryEvents
         });
+        if (leaseToken) {
+          await rest(url, serviceRoleKey, 'rpc/release_shopify_sync_job', {
+            method: 'POST',
+            body: JSON.stringify({ p_job_id: job.id, p_lease_token: leaseToken })
+          });
+          leaseToken = null;
+        }
       }
     } catch (patchError) {
       console.error('Could not save Shopify sales job error', patchError);
