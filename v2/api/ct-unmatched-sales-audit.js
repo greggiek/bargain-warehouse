@@ -2,7 +2,7 @@ const { configuration, jsonHeaders } = require('./_lib/auth');
 
 const API_VERSION = '2026-07';
 const STORE_KEY = 'store_2';
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 50;
 const clean = value => String(value || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
 const wait = ms => new Promise(resolve => setTimeout(resolve, ms));
 
