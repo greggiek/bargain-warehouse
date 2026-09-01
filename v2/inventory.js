@@ -1,6 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id);
-  const view = $('inventoryView'); if (!view) return;\n  const values = globalThis.InventoryValues || { signedInventory: (onHand, committed, available) => ({ onHand:Number(onHand||0), committed:Number(committed||0), available:available == null ? Number(onHand||0)-Number(committed||0) : Number(available||0) }) };
+  const view = $('inventoryView'); if (!view) return;
+  const values = globalThis.InventoryValues || { signedInventory: (onHand, committed, available) => ({ onHand:Number(onHand||0), committed:Number(committed||0), available:available == null ? Number(onHand||0)-Number(committed||0) : Number(available||0) }) };
   let loaded = false, searchTimer, request, lastData, sortLocationId = null, sortDirection = 'desc';
   const number = value => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   const shortLocation = name => {
@@ -107,7 +108,8 @@
   }
   $('overviewNav').addEventListener('click',()=>show('overview'));
   $('inventoryNav').addEventListener('click',()=>show('inventory'));
-  $('inventoryRefresh').addEventListener('click',load);\n  const exportButton = document.createElement('button'); exportButton.id='inventoryExport'; exportButton.type='button'; exportButton.className='button secondary'; exportButton.textContent='Export CSV'; exportButton.addEventListener('click',exportCsv); $('inventoryRefresh').after(exportButton);
+  $('inventoryRefresh').addEventListener('click',load);
+  const exportButton = document.createElement('button'); exportButton.id='inventoryExport'; exportButton.type='button'; exportButton.className='button secondary'; exportButton.textContent='Export CSV'; exportButton.addEventListener('click',exportCsv); $('inventoryRefresh').after(exportButton);
   $('inventoryLocation').addEventListener('change',()=>{ $('inventoryCategory').value=''; load(); });
   $('inventoryCategory').addEventListener('change',load);
   $('inventoryBack').addEventListener('click',()=>{ $('inventoryCategory').value=''; load(); });
