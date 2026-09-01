@@ -7,6 +7,9 @@
     },
     "api/shopify-inventory-sync.js": {
       "maxDuration": 60
+    },
+    "api/sales-cache-sync.js": {
+      "maxDuration": 300
     }
   },
   "crons": [
