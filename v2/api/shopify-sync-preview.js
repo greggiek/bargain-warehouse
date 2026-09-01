@@ -11,7 +11,7 @@ module.exports=async function(req,res){
   for(const r of results)for(const p of r.products)for(const v of p.variants){
    const sku=complete.norm(v.sku);if(!sku)continue;
    if(!map.has(sku))map.set(sku,{sku,product:p.title,category:p.category||'',vendor:p.vendor||'',totalOnHand:0,totalAvailable:0,totalCommitted:0,variants:[],locations:[]});
-   map.get(sku).variants.push({sourceStore:r.s.key,sourceStoreLabel:r.s.label,shopifyProductId:p.id,shopifyVariantId:v.id,shopifyInventoryItemId:v.inventoryItem?.id||null,variantTitle:v.title||'',barcode:v.barcode||'',productStatus:p.status,sourceSku:v.sku,category:p.category||'',vendor:p.vendor||'',inventoryTracked:v.inventoryItem?.tracked??null,requiresShipping:v.requiresShipping??null});
+   map.get(sku).variants.push({sourceStore:r.s.key,sourceStoreLabel:r.s.label,shopifyProductId:p.id,shopifyVariantId:v.id,shopifyInventoryItemId:v.inventoryItem?.id||null,variantTitle:v.title||'',barcode:v.barcode||'',productStatus:p.status,sourceSku:v.sku,category:p.category||'',vendor:p.vendor||'',inventoryTracked:v.inventoryItem?.tracked??null,requiresShipping:v.inventoryItem?.requiresShipping??null});
   }
   const normalized=[...map.values()].sort((x,y)=>x.sku.localeCompare(y.sku));
   return res.status(200).json({ok:true,mode:'READ_ONLY_PREVIEW',writesEnabled:false,stores:results.map(r=>({key:r.s.key,label:r.s.label,productCount:r.products.length,variantCount:r.products.reduce((n,p)=>n+p.variants.length,0),pagesRetrieved:r.pages,firstCursor:r.first,finalCursor:r.final,reachedCatalogEnd:r.end})),normalizedCount:normalized.length,normalized,telemetry,generatedAt:new Date().toISOString()});
