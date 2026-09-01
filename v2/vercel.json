@@ -40,10 +40,6 @@
     {
       "path": "/api/sales-cache-sync?storeKey=store_2&jobType=sales_backfill",
       "schedule": "* * * * *"
-    },
-    {
-      "path": "/api/barcode-quality-audit",
-      "schedule": "* * * * *"
     }
   ]
 }
