@@ -214,14 +214,137 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
 </style><style id="transfer-receive-cleanup">
 .transfer-receive-dialog .inventory-head{margin-top:0}.transfer-receive-dialog .receiving-step{padding:18px}.transfer-receive-dialog .receiving-step h3{margin:0 0 12px;font-size:18px}.transfer-receive-dialog .receiving-next-step{margin-top:12px}.transfer-receive-dialog .inventory-status{margin:0 0 12px}
 </style><style>
-#forecastingView .forecast-controls{display:grid;grid-template-columns:repeat(auto-fit,minmax(135px,1fr));gap:12px;align-items:end;margin:16px 0}
-#forecastingView label{display:grid;gap:5px;font-size:12px;font-weight:700}
-#forecastingView input,#forecastingView select{min-height:40px}
-#forecastingView .status-card{padding:12px 14px;border:1px solid #d8dee8;border-radius:10px;background:#f7f9fc;margin-bottom:14px}
-#forecastingView .forecast-main{cursor:pointer}.forecast-detail td{background:#f7f9fc;white-space:normal;padding:14px}
-#forecastingView td.surplus{color:#177245;font-weight:700}#forecastingView td.shortage{color:#b42318;font-weight:700}
-#forecastingView .table-wrap{max-width:100%;overflow:auto;border:1px solid #dce4ef;border-radius:12px;background:#fff;-webkit-overflow-scrolling:touch}\n#forecastingView .forecast-table{min-width:1450px}\n#forecastingView .forecast-pager{display:flex;align-items:center;justify-content:flex-end;gap:12px;margin-top:12px}
-@media(max-width:700px){#forecastingView .forecast-controls{grid-template-columns:1fr 1fr}#forecastingView .forecast-controls button{width:100%}}
+#appView.forecast-active .topbar>div:first-child{display:none}
+#forecastingView{color:#213047}
+#forecastingView .forecast-page-head{display:flex;align-items:flex-start;justify-content:space-between;gap:24px;margin-bottom:22px}
+#forecastingView .forecast-page-head h1{margin:0;color:#17324f;font-size:32px;line-height:1.12;letter-spacing:-.025em}
+#forecastingView .forecast-page-head p{margin:7px 0 0;color:#73829a;font-size:15px}
+#forecastingView .forecast-freshness{min-width:225px;padding:12px 14px;border:1px solid #b9e1ca;border-radius:10px;background:#f2fbf6;text-align:right}
+#forecastingView .forecast-freshness strong{display:block;color:#23794d;font-size:14px}
+#forecastingView .forecast-freshness span{display:block;margin-top:4px;color:#5c7189;font-size:12px}
+#forecastingView .forecast-card{border:1px solid #dce4ef;border-radius:12px;background:#fff;box-shadow:0 4px 18px rgba(25,57,90,.06)}
+#forecastingView .forecast-settings{padding:20px;margin-bottom:16px}
+#forecastingView .forecast-card-title{display:flex;align-items:center;justify-content:space-between;gap:16px;margin-bottom:16px}
+#forecastingView .forecast-card-title h2{margin:0;color:#213752;font-size:18px}
+#forecastingView .forecast-reset{padding:4px;border:0;background:transparent;color:#2563d9;font-size:13px;font-weight:750;text-decoration:underline;text-underline-offset:3px}
+#forecastingView .forecast-settings-primary{display:grid;grid-template-columns:minmax(180px,.8fr) minmax(280px,1.5fr) minmax(220px,1fr);gap:14px}
+#forecastingView .forecast-settings-secondary{display:grid;grid-template-columns:repeat(4,minmax(120px,.65fr)) minmax(150px,.9fr) minmax(130px,.75fr);gap:14px;align-items:end;margin-top:14px}
+#forecastingView .forecast-field{display:grid;gap:7px;min-width:0;color:#526a87;font-size:12px;font-weight:800}
+#forecastingView .forecast-field>span:first-child{letter-spacing:.015em}
+#forecastingView .forecast-control,#forecastingView .forecast-input-shell{width:100%;min-width:0;min-height:44px;border:1px solid #cfd9e7;border-radius:9px;background:#fff;color:#213047;font:inherit;transition:border-color .15s,box-shadow .15s}
+#forecastingView .forecast-control{padding:0 12px}
+#forecastingView .forecast-input-shell{display:flex;align-items:center}
+#forecastingView .forecast-input-shell input{width:100%;min-width:0;height:42px;padding:0 4px 0 12px;border:0;outline:0;background:transparent;color:#213047;font:inherit}
+#forecastingView .forecast-input-shell span{padding:0 11px 0 5px;color:#8190a5;font-size:12px;font-weight:700;white-space:nowrap}
+#forecastingView .forecast-control:focus,#forecastingView .forecast-input-shell:focus-within{border-color:#4f84e8;box-shadow:0 0 0 3px rgba(37,99,217,.14);outline:0}
+#forecastingView .forecast-button{min-height:44px;border-radius:9px;font-weight:800}
+#forecastingView .forecast-apply{background:#16885b;border-color:#16885b;color:#fff}
+#forecastingView .forecast-apply:hover{background:#12734c}
+#forecastingView .forecast-export{background:#fff;border:1px solid #bfcce0;color:#315578}
+#forecastingView .forecast-status-wrap{margin-bottom:18px}
+#forecastingView .forecast-status-strip{display:flex;align-items:center;justify-content:space-between;gap:18px;padding:13px 16px;border:1px solid #cfe2d7;border-radius:10px;background:#f6fbf8}
+#forecastingView .forecast-status-copy{display:flex;align-items:center;gap:12px;min-width:0}
+#forecastingView .forecast-ready-icon{display:grid;place-items:center;flex:0 0 24px;width:24px;height:24px;border-radius:999px;background:#2f9f68;color:#fff;font-size:14px;font-weight:900}
+#forecastingView .forecast-status-copy strong{display:block;color:#23794d;font-size:14px}
+#forecastingView .forecast-status-copy span{display:block;margin-top:2px;color:#60718a;font-size:12px}
+#forecastingView .forecast-status-action{flex:0 0 auto;border:0;background:transparent;color:#2563d9;font-size:13px;font-weight:800}
+#forecastingView .forecast-data-details{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:8px 22px;margin-top:8px;padding:15px 17px;border:1px solid #dce4ef;border-radius:10px;background:#fff;color:#60718a;font-size:13px}
+#forecastingView .forecast-data-details p{margin:0}
+#forecastingView .forecast-summary-grid{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:12px;margin-bottom:18px}
+#forecastingView .forecast-summary{min-height:108px;padding:18px}
+#forecastingView .forecast-summary span{display:block;color:#73829a;font-size:12px;font-weight:750}
+#forecastingView .forecast-summary strong{display:block;margin-top:10px;color:#213752;font-size:28px;font-variant-numeric:tabular-nums;letter-spacing:-.025em}
+#forecastingView .forecast-summary.requirement.positive{border-color:#f0c7c2;background:#fffafa}
+#forecastingView .forecast-summary.requirement.positive strong{color:#b42318}
+#forecastingView .forecast-summary.requirement.zero strong{color:#60718a}
+#forecastingView .forecast-table-card{padding:0;overflow:hidden}
+#forecastingView .forecast-table-head{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:18px 20px;border-bottom:1px solid #e4eaf2}
+#forecastingView .forecast-table-head h2{margin:0;color:#213752;font-size:19px}
+#forecastingView .forecast-table-head p{margin:4px 0 0;color:#73829a;font-size:12px}
+#forecastingView .forecast-page-size{display:flex;align-items:center;gap:8px;color:#60718a;font-size:12px;font-weight:750}
+#forecastingView .forecast-page-size select{height:36px;padding:0 28px 0 10px;border:1px solid #cfd9e7;border-radius:8px;background:#fff;color:#213047}
+#forecastingView .forecast-table-scroll{max-width:100%;overflow:auto;-webkit-overflow-scrolling:touch}
+#forecastingView .forecast-table{width:100%;min-width:1120px;border-collapse:separate;border-spacing:0;font-size:13px}
+#forecastingView .forecast-table th{position:sticky;top:0;z-index:2;padding:12px 13px;border-bottom:1px solid #dce4ef;background:#f7f9fc;color:#60718a;font-size:11px;font-weight:850;letter-spacing:.025em;text-align:left;white-space:nowrap}
+#forecastingView .forecast-table th.numeric,#forecastingView .forecast-table td.numeric{text-align:right}
+#forecastingView .forecast-table td{height:62px;padding:10px 13px;border-bottom:1px solid #e9edf3;color:#344861;vertical-align:middle;font-variant-numeric:tabular-nums}
+#forecastingView .forecast-main:hover td{background:#f8fbff}
+#forecastingView .forecast-product-cell{min-width:265px;max-width:360px}
+#forecastingView .forecast-product-sku{display:block;color:#1b3653;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:12px;font-weight:900}
+#forecastingView .forecast-product-name{display:block;margin-top:3px;color:#526a87;line-height:1.32;white-space:normal}
+#forecastingView .forecast-bulk-badge{display:inline-flex;margin-top:6px;padding:3px 7px;border-radius:999px;background:#fff0d2;color:#9a6500;font-size:10px;font-weight:850}
+#forecastingView td.forecast-shortage{color:#b42318;font-weight:800}
+#forecastingView td.forecast-surplus{color:#23794d;font-weight:800}
+#forecastingView td.forecast-neutral{color:#8290a2}
+#forecastingView .forecast-requirement{font-size:15px;font-weight:900}
+#forecastingView .forecast-requirement.positive{color:#b42318}
+#forecastingView .forecast-requirement.zero{color:#8b98a8}
+#forecastingView .forecast-expand{display:grid;place-items:center;width:34px;height:34px;margin-left:auto;border:1px solid #ccd7e5;border-radius:8px;background:#fff;color:#315578;font-size:17px;transition:transform .15s,background .15s}
+#forecastingView .forecast-expand:hover{background:#edf4ff}
+#forecastingView .forecast-expand[aria-expanded=true]{transform:rotate(180deg)}
+#forecastingView .forecast-detail td{height:auto;padding:0;border-bottom:1px solid #dce4ef;background:#f7f9fc}
+#forecastingView .forecast-detail-panel{display:grid;grid-template-columns:1.3fr 1fr .8fr;gap:18px;padding:20px}
+#forecastingView .forecast-detail-group{padding:16px;border:1px solid #dce4ef;border-radius:10px;background:#fff}
+#forecastingView .forecast-detail-group h3{margin:0 0 12px;color:#213752;font-size:14px}
+#forecastingView .forecast-detail-list{display:grid;grid-template-columns:1fr auto;gap:8px 16px;margin:0}
+#forecastingView .forecast-detail-list dt{color:#73829a}
+#forecastingView .forecast-detail-list dd{margin:0;color:#213752;font-weight:750;text-align:right;font-variant-numeric:tabular-nums}
+#forecastingView .forecast-detail-note{margin:0;color:#8b5c00;line-height:1.5}
+#forecastingView .forecast-loading-detail{padding:18px;color:#60718a}
+#forecastingView .forecast-pager{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:14px 20px}
+#forecastingView .forecast-pager-copy{color:#60718a;font-size:12px}
+#forecastingView .forecast-page-buttons{display:flex;align-items:center;gap:6px}
+#forecastingView .forecast-page-buttons button{min-width:36px;height:36px;padding:0 10px;border:1px solid #ccd7e5;border-radius:8px;background:#fff;color:#315578;font-weight:800}
+#forecastingView .forecast-page-buttons button:hover:not(:disabled){background:#edf4ff}
+#forecastingView .forecast-page-buttons button.current{border-color:#2563d9;background:#2563d9;color:#fff}
+#forecastingView .forecast-page-buttons button:disabled{cursor:not-allowed;opacity:.45}
+#forecastingView button:focus-visible,#forecastingView select:focus-visible,#forecastingView input:focus-visible{outline:3px solid rgba(37,99,217,.28);outline-offset:2px}
+@media(max-width:1180px){
+ #forecastingView .forecast-summary-grid{grid-template-columns:repeat(3,minmax(0,1fr))}
+ #forecastingView .forecast-settings-secondary{grid-template-columns:repeat(4,minmax(120px,1fr))}
+ #forecastingView .forecast-apply,#forecastingView .forecast-export{grid-column:span 2}
+ #forecastingView .forecast-detail-panel{grid-template-columns:1fr 1fr}
+}
+@media(max-width:800px){
+ #forecastingView .forecast-page-head{align-items:stretch;flex-direction:column}
+ #forecastingView .forecast-freshness{text-align:left}
+ #forecastingView .forecast-settings-primary,#forecastingView .forecast-settings-secondary{grid-template-columns:1fr 1fr}
+ #forecastingView .forecast-apply,#forecastingView .forecast-export{grid-column:auto}
+ #forecastingView .forecast-summary-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
+ #forecastingView .forecast-data-details,#forecastingView .forecast-detail-panel{grid-template-columns:1fr}
+}
+@media(max-width:700px){
+ #forecastingView .forecast-page-head h1{font-size:27px}
+ #forecastingView .forecast-settings{padding:16px}
+ #forecastingView .forecast-settings-primary,#forecastingView .forecast-settings-secondary{grid-template-columns:1fr}
+ #forecastingView .forecast-status-strip{align-items:flex-start;flex-direction:column}
+ #forecastingView .forecast-summary{min-height:96px;padding:15px}
+ #forecastingView .forecast-summary strong{font-size:23px}
+ #forecastingView .forecast-table-head{align-items:flex-start;flex-direction:column}
+ #forecastingView .forecast-table-scroll{overflow:visible}
+ #forecastingView .forecast-table{display:block;min-width:0}
+ #forecastingView .forecast-table thead{display:none}
+ #forecastingView .forecast-table tbody{display:grid;gap:12px;padding:12px;background:#eff3f9}
+ #forecastingView .forecast-table tr.forecast-main{display:grid;grid-template-columns:1fr 1fr;border:1px solid #dce4ef;border-radius:11px;background:#fff;box-shadow:0 3px 12px rgba(25,57,90,.05);overflow:hidden}
+ #forecastingView .forecast-table td{display:block;height:auto;min-width:0;padding:10px 12px;border-bottom:1px solid #edf1f5;text-align:left!important}
+ #forecastingView .forecast-table td::before{display:block;margin-bottom:4px;color:#8a98aa;font-size:10px;font-weight:800;content:attr(data-label)}
+ #forecastingView .forecast-table td:nth-child(1){grid-column:1/-1;order:1;padding:14px}
+ #forecastingView .forecast-table td:nth-child(7){order:2}
+ #forecastingView .forecast-table td:nth-child(8){order:3}
+ #forecastingView .forecast-table td:nth-child(2){order:4}
+ #forecastingView .forecast-table td:nth-child(3){order:5}
+ #forecastingView .forecast-table td:nth-child(4){order:6}
+ #forecastingView .forecast-table td:nth-child(5){order:7}
+ #forecastingView .forecast-table td:nth-child(6){order:8}
+ #forecastingView .forecast-table td:nth-child(9){grid-column:1/-1;order:9;border-bottom:0}
+ #forecastingView .forecast-expand{width:100%;margin:0}
+ #forecastingView .forecast-detail{display:block}
+ #forecastingView .forecast-detail td{padding:0}
+ #forecastingView .forecast-detail td::before{display:none}
+ #forecastingView .forecast-detail-panel{padding:12px}
+ #forecastingView .forecast-pager{align-items:stretch;flex-direction:column}
+ #forecastingView .forecast-page-buttons{justify-content:space-between}
+}
 </style></head>
 <body>
   <div id="loginView" class="login-wrap" hidden>
@@ -412,26 +535,67 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
         <section class="card section"><div class="inventory-head po-calendar-heading"><button id="poArrivalsPrevious" class="button secondary" type="button">← Previous</button><h2 id="poArrivalsMonth"></h2><button id="poArrivalsNext" class="button secondary" type="button">Next →</button></div><div class="po-calendar-weekdays"><span>Sun</span><span>Mon</span><span>Tue</span><span>Wed</span><span>Thu</span><span>Fri</span><span>Sat</span></div><div id="poCalendarDays" class="po-calendar-grid"></div></section>
         <section class="card section"><div class="transfer-kicker">Upcoming containers</div><h2>What is landing next</h2><div class="inventory-table-wrap"><table class="inventory-table"><thead><tr><th>Expected landing date</th><th>PO</th><th>Supplier</th><th>Receiving location</th><th>Lines</th><th></th></tr></thead><tbody id="poArrivalsRows"></tbody></table></div></section>
       </section>
-      <section id="forecastingView" hidden>
-  <div class="section-head"><div><h2>Forecasting</h2><p class="muted">Daily fulfilled demand and current 730 inventory. Read-only; no Shopify calls or automatic PO creation.</p></div></div>
-  <div class="forecast-controls">
-    <label>Category<select id="forecastCategory"><option value="">All categories</option></select></label>
-    <label>History days<input id="forecastHistory" type="number" min="1" max="120" value="90"></label>
-    <label>Growth %<input id="forecastGrowth" type="number" step="0.1" value="10"></label>
-    <label>Coverage days<input id="forecastCoverage" type="number" min="0" value="90"></label>
-    <label>Safety-stock days<input id="forecastSafety" type="number" min="0" value="14"></label>
-    <label>Search<input id="forecastSearch" type="search" placeholder="SKU or product"></label>\n    <label>Sort<select id="forecastSort"><option value="suggested_desc">Suggested requirement: high to low</option><option value="suggested_asc">Suggested requirement: low to high</option><option value="demand_desc">Gross demand: high to low</option><option value="projected_desc">Projected shortage: high to low</option><option value="sku_asc">SKU: A to Z</option></select></label>
-    <button id="forecastRecalculate" class="primary">Recalculate</button><button id="forecastExport">Export CSV</button>
+      <section id="forecastingView" class="forecast-page" hidden>
+  <header class="forecast-page-head">
+    <div>
+      <h1>Purchasing Forecast</h1>
+      <p>Plan inventory requirements for the 730 Windham fulfillment hub.</p>
+    </div>
+    <div class="forecast-freshness" aria-live="polite">
+      <strong id="forecastFreshDate">Checking data freshness…</strong>
+      <span id="forecastCoverageStatus">—</span>
+    </div>
+  </header>
+
+  <section class="forecast-card forecast-settings" aria-labelledby="forecastSettingsTitle">
+    <div class="forecast-card-title">
+      <h2 id="forecastSettingsTitle">Forecast settings</h2>
+      <button id="forecastReset" class="forecast-reset" type="button">Reset defaults</button>
+    </div>
+    <div class="forecast-settings-primary">
+      <label class="forecast-field"><span>Category</span><select id="forecastCategory" class="forecast-control"><option value="">All categories</option></select></label>
+      <label class="forecast-field"><span>Search</span><input id="forecastSearch" class="forecast-control" type="search" placeholder="Search SKU or product"></label>
+      <label class="forecast-field"><span>Sort</span><select id="forecastSort" class="forecast-control"><option value="suggested_desc">Suggested requirement: high to low</option><option value="suggested_asc">Suggested requirement: low to high</option><option value="demand_desc">Gross demand: high to low</option><option value="projected_desc">Projected shortage: high to low</option><option value="sku_asc">SKU: A to Z</option></select></label>
+    </div>
+    <div class="forecast-settings-secondary">
+      <label class="forecast-field"><span>History</span><span class="forecast-input-shell"><input id="forecastHistory" type="number" min="1" max="120" value="90"><span>days</span></span></label>
+      <label class="forecast-field"><span>Growth</span><span class="forecast-input-shell"><input id="forecastGrowth" type="number" step="0.1" value="10"><span>%</span></span></label>
+      <label class="forecast-field"><span>Coverage</span><span class="forecast-input-shell"><input id="forecastCoverage" type="number" min="0" value="90"><span>days</span></span></label>
+      <label class="forecast-field"><span>Safety stock</span><span class="forecast-input-shell"><input id="forecastSafety" type="number" min="0" value="14"><span>days</span></span></label>
+      <button id="forecastRecalculate" class="button forecast-button forecast-apply" type="button">Apply forecast</button>
+      <button id="forecastExport" class="button forecast-button forecast-export" type="button">Export CSV</button>
+    </div>
+  </section>
+
+  <div class="forecast-status-wrap">
+    <div id="forecastDataStatus" class="forecast-status-strip" aria-live="polite">
+      <div class="forecast-status-copy"><span class="forecast-ready-icon">✓</span><div><strong>Forecast ready</strong><span>Open Forecasting to load current status.</span></div></div>
+      <button id="forecastStatusToggle" class="forecast-status-action" type="button" aria-expanded="false">View data status</button>
+    </div>
+    <div id="forecastDataDetails" class="forecast-data-details" hidden></div>
   </div>
-  <div id="forecastDataStatus" class="status-card">Open Forecasting to load data status.</div>
-  <div class="metric-grid forecast-metrics">
-    <article><span>Gross units sold</span><strong id="forecastGross">—</strong></article>
-    <article><span>Target at 730</span><strong id="forecastTarget">—</strong></article>
-    <article><span>Usable at 730</span><strong id="forecastUsable">—</strong></article>
-    <article><span>Valid inbound</span><strong id="forecastInbound">—</strong></article>
-    <article><span>Suggested requirement</span><strong id="forecastSuggested">—</strong></article>
+
+  <div class="forecast-summary-grid" aria-label="Purchasing summary">
+    <article class="forecast-card forecast-summary"><span>Gross units sold</span><strong id="forecastGross">—</strong></article>
+    <article class="forecast-card forecast-summary"><span>Target at 730</span><strong id="forecastTarget">—</strong></article>
+    <article class="forecast-card forecast-summary"><span>Available at 730</span><strong id="forecastUsable">—</strong></article>
+    <article class="forecast-card forecast-summary"><span>Incoming on POs</span><strong id="forecastInbound">—</strong></article>
+    <article id="forecastRequirementCard" class="forecast-card forecast-summary requirement"><span>Suggested requirement</span><strong id="forecastSuggested">—</strong></article>
   </div>
-  <div class="table-wrap"><table class="forecast-table"><thead><tr><th>SKU</th><th>Product</th><th>Gross units sold</th><th>History days</th><th>Avg daily</th><th>Growth daily</th><th>Target 730</th><th>Usable 730</th><th>Inbound PO</th><th>Shortage / surplus</th><th>Suggested requirement</th><th>Data status</th></tr></thead><tbody id="forecastRows"><tr><td colspan="12">Open Forecasting to calculate.</td></tr></tbody></table></div>
+
+  <section class="forecast-card forecast-table-card" aria-labelledby="forecastTableTitle">
+    <header class="forecast-table-head">
+      <div><h2 id="forecastTableTitle">Product requirements</h2><p id="forecastResultCount">No products loaded</p></div>
+      <label class="forecast-page-size">Rows per page<select id="forecastPageSize"><option value="25" selected>25</option><option value="50">50</option><option value="100">100</option></select></label>
+    </header>
+    <div class="forecast-table-scroll">
+      <table class="forecast-table">
+        <thead><tr><th>Product</th><th class="numeric">Gross sold</th><th class="numeric">Average/day</th><th class="numeric">Target at 730</th><th class="numeric">Available at 730</th><th class="numeric">Incoming</th><th class="numeric">Shortage/surplus</th><th class="numeric">Suggested requirement</th><th><span class="sr-only">Expand</span></th></tr></thead>
+        <tbody id="forecastRows"><tr><td colspan="9">Open Forecasting to calculate.</td></tr></tbody>
+      </table>
+    </div>
+    <div id="forecastPager" class="forecast-pager"></div>
+  </section>
 </section>
       <section id="vendorDirectoryView" hidden>
   <div class="inventory-head"><div><div class="eyebrow">System</div><h1>Suppliers</h1><p class="muted">Your purchasing supplier directory. Add a supplier manually or import the same columns from a CSV.</p></div><button id="supplierRefresh" class="button secondary" type="button">Refresh</button></div>
