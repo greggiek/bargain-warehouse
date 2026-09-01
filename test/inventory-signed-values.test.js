@@ -1,6 +1,6 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
-const { signedInventory, forecastUsable } = require('../v2/inventory-values');
+const { signedInventory, forecastUsable, csvCell } = require('../v2/inventory-values');
 
 test('negative on-hand remains negative', () => assert.deepEqual(signedInventory(-4, 0), { onHand: -4, committed: 0, available: -4 }));
 test('committed above on-hand produces negative available', () => assert.deepEqual(signedInventory(3, 8), { onHand: 3, committed: 8, available: -5 }));
@@ -12,3 +12,10 @@ test('forecast clamp does not mutate signed inventory', () => {
   assert.deepEqual(inventory, { onHand: -4, committed: 0, available: -4 });
 });
 test('explicit signed Shopify available value is preserved', () => assert.deepEqual(signedInventory(3, 8, -5), { onHand: 3, committed: 8, available: -5 }));
+
+test('inventory CSV retains negative quantities', () => assert.equal(csvCell(-14), '-14'));
+test('forecast refresh logic cannot mutate signed values', () => {
+  const before = signedInventory(3, 8);
+  forecastUsable(before.onHand, before.committed);
+  assert.deepEqual(before, { onHand: 3, committed: 8, available: -5 });
+});
