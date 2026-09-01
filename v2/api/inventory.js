@@ -44,7 +44,8 @@ module.exports = async function inventory(req, res) {
     const grouped = new Map();
     normalized.filter(row => (!category || row.category === category) && (!search || [row.sku,row.name,row.category].join(' ').toLowerCase().includes(search))).forEach(row => {
       const entry = grouped.get(row.productId) || { productId: row.productId, name: row.name, sku: row.sku, category: row.category, quantities: {}, inventory: {} };
-      entry.quantities[row.locationId] = (entry.quantities[row.locationId] || 0) + row.onHand;\n      const detail = entry.inventory[row.locationId] || { onHand: 0, committed: 0, available: 0 };\n      detail.onHand += row.onHand; detail.committed += row.committed; detail.available += row.available; entry.inventory[row.locationId] = detail;
+      entry.quantities[row.locationId] = (entry.quantities[row.locationId] || 0) + row.onHand;
+      const detail = entry.inventory[row.locationId] || { onHand: 0, committed: 0, available: 0 };\n      detail.onHand += row.onHand; detail.committed += row.committed; detail.available += row.available; entry.inventory[row.locationId] = detail;
       grouped.set(row.productId, entry);
     });
     const rows = [...grouped.values()].sort((a,b) => a.name.localeCompare(b.name) || a.sku.localeCompare(b.sku)).slice(0, 2500);
