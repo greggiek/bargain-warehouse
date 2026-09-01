@@ -19,15 +19,15 @@
     },
     {
       "path": "/api/shopify-inventory-sync",
-      "schedule": "*/5 12-22 * * 1-5"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/sales-cache-sync?storeKey=store_1&jobType=sales_backfill",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     },
     {
       "path": "/api/sales-cache-sync?storeKey=store_2&jobType=sales_backfill",
-      "schedule": "*/5 * * * *"
+      "schedule": "* * * * *"
     }
   ]
 }
