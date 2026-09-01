@@ -1,0 +1,8 @@
+-- Manual rollback companion for 20260901110000_safe_catalog_repair.sql.
+-- Use the run UUID recorded in shopify_catalog_repair_runs.
+-- 1. Verify created products have acquired no operational references.
+-- 2. Delete only mapping IDs recorded in created_mapping_ids that did not exist in mappings_before.
+-- 3. Delete only product IDs recorded in created_product_ids after checking foreign-key references.
+-- 4. Restore any preexisting product/mapping snapshots from products_before/mappings_before.
+-- The repair never deletes or rewrites BOMs, balances, pars, PO lines, or manufacturing records.
+-- Do not drop the additive audit/source columns until all repair runs have been rolled back or retained.
