@@ -19,6 +19,9 @@
     },
     "api/safe-catalog-repair.js": {
       "maxDuration": 300
+    },
+    "api/barcode-quality-audit.js": {
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -36,6 +39,10 @@
     },
     {
       "path": "/api/sales-cache-sync?storeKey=store_2&jobType=sales_backfill",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/barcode-quality-audit",
       "schedule": "* * * * *"
     }
   ]
