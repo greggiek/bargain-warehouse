@@ -222,7 +222,7 @@ module.exports = async function salesCacheSync(req, res) {
 
     const { shop, token } = await accessToken(store);
     const query = `query BMFulfilledSales($cursor: String, $query: String!) {
-      orders(first: 100, after: $cursor, query: $query, sortKey: UPDATED_AT) {
+      orders(first: 250, after: $cursor, query: $query, sortKey: UPDATED_AT) {
         pageInfo { hasNextPage endCursor }
         nodes {
           id updatedAt cancelledAt
