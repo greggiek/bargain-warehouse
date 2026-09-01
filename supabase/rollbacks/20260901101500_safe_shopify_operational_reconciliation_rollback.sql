@@ -1,0 +1,4 @@
+-- Rollback guidance for 20260901101500_safe_shopify_operational_reconciliation.sql
+-- Restore apply_v2_shopify_inventory_sync_page from the preceding migration only if the
+-- inventory_balances constraints are also changed to accept negative/on-hand-exceeding allocations.
+-- The previous function is intentionally not auto-restored because it violates the live table constraints.
