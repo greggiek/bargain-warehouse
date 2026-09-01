@@ -10,6 +10,9 @@
     },
     "api/sales-cache-sync.js": {
       "maxDuration": 300
+    },
+    "api/ct-unmatched-sales-audit.js": {
+      "maxDuration": 300
     }
   },
   "crons": [
@@ -27,6 +30,10 @@
     },
     {
       "path": "/api/sales-cache-sync?storeKey=store_2&jobType=sales_backfill",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/api/ct-unmatched-sales-audit",
       "schedule": "* * * * *"
     }
   ]
