@@ -160,6 +160,26 @@ module.exports = async function salesCacheSync(req, res) {
       '&status=in.(queued,running)&select=*&order=created_at.desc&limit=1');
     job = active[0];
 
+    if (!job && jobType === 'sales_backfill') {
+      const completedCoverage = await rest(url, serviceRoleKey,
+        'shopify_sales_coverage?store_key=eq.' + storeKey +
+        '&sales_date=gte.' + windowStart + '&sales_date=lt.' + windowEnd +
+        '&status=in.(completed_with_sales,completed_zero_sales)&select=sales_date');
+      const requiredDays = Math.round((new Date(windowEnd + 'T00:00:00Z') - new Date(windowStart + 'T00:00:00Z')) / 86400000);
+      if (completedCoverage.length >= requiredDays) {
+        return res.status(200).json({
+          ok: true,
+          store: store.label,
+          storeKey,
+          windowStart,
+          windowEnd,
+          completed: true,
+          alreadyComplete: true,
+          completedDays: completedCoverage.length
+        });
+      }
+    }
+
     if (!job) {
       const created = await rest(url, serviceRoleKey, 'rpc/begin_shopify_sync_job', {
         method: 'POST',
