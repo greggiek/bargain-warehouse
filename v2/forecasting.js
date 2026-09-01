@@ -1,95 +1,20 @@
 (() => {
-  const $ = id => document.getElementById(id), view = $('forecastingView');
-  if (!view) return;
-  const fmt = n => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Number(n || 0));
-  const set = (text, error = false) => { $('forecastStatus').textContent = text; $('forecastStatus').classList.toggle('error', error); };
-  const clearMetrics = () => ['forecastSales30','forecastSales60','forecastSales90','forecastHubTarget','forecastHubAvailable','forecastBuyTotal'].forEach(id => { $(id).textContent = '—'; });
-  const emptyTable = message => { $('forecastRows').innerHTML = '<tr><td colspan="10" class="muted">' + message + '</td></tr>'; };
-  function cell(row, value) { const td = document.createElement('td'); td.textContent = value; row.append(td); }
-  let forecastData = null;
-
-  function render(data) {
-    forecastData = data;
-    $('forecastSales30').textContent = fmt(data.summary.sales30);
-    $('forecastSales60').textContent = fmt(data.summary.sales60);
-    $('forecastSales90').textContent = fmt(data.summary.sales90);
-    $('forecastHubTarget').textContent = fmt(data.summary.hubBackstockTarget);
-    $('forecastHubAvailable').textContent = fmt(data.summary.hubAvailable);
-    $('forecastBuyTotal').textContent = fmt(data.summary.purchasePieces);
-    const tbody = $('forecastRows'); tbody.replaceChildren();
-    const sort = $('forecastSort').value;
-    const items = [...(data.items || [])].sort((a, b) => sort === 'sales' ? b.sales30 - a.sales30 || b.purchaseRecommendation - a.purchaseRecommendation : b.purchaseRecommendation - a.purchaseRecommendation || b.sales30 - a.sales30);
-    items.forEach(item => {
-      const row = document.createElement('tr');
-      [item.category || 'Uncategorized', item.sku, item.product, fmt(item.sales30), fmt(item.sales60), fmt(item.sales90), fmt(item.hubAvailable), fmt(item.retailShortage), fmt(item.hubBackstockTarget), fmt(item.purchaseRecommendation)].forEach(value => cell(row, value));
-      tbody.append(row);
-    });
-    if (!items.length) emptyTable('No sales-backed purchase recommendations in this category yet.');
-    $('forecastMeta').textContent = data.lastSyncedAt ? 'Showing ' + data.category + '. Sales mirror last refreshed ' + new Date(data.lastSyncedAt).toLocaleString() + '.' : 'Showing ' + data.category + '. No Shopify sales have been mirrored yet—use the separate 90-day sync when ready.';
-    set(data.summary.purchaseSkus + ' SKUs in ' + data.category + ' need purchase coverage at 730 after retail needs and hub back stock are accounted for.');
-  }
-
-  async function loadCategories() {
-    const select = $('forecastCategory');
-    select.disabled = true; $('forecastRefresh').disabled = true; set('Loading product categories…');
-    const response = await fetch('/api/forecast?mode=categories', { credentials: 'same-origin', cache: 'no-store' });
-    const data = await response.json();
-    if (!response.ok) throw Error(data.error || 'Unable to load product categories');
-    select.replaceChildren(new Option('Choose a category', ''));
-    (data.categories || []).forEach(category => select.add(new Option(category, category)));
-    select.disabled = false; $('forecastRefresh').disabled = false;
-    clearMetrics(); forecastData = null; $('forecastMeta').textContent = 'Choose a category, then load just that category’s forecast. This does not call Shopify.';
-    emptyTable('Choose a category, then select Load category forecast.'); set('Ready. Select a category to load a small, focused forecast.');
-  }
-
-  async function loadCategory() {
-    const category = $('forecastCategory').value;
-    if (!category) { set('Choose a category first.', true); return; }
-    try {
-      $('forecastRefresh').disabled = true; set('Loading ' + category + ' forecast…');
-      const response = await fetch('/api/forecast?category=' + encodeURIComponent(category), { credentials: 'same-origin', cache: 'no-store' });
-      const data = await response.json();
-      if (!response.ok) throw Error(data.error || 'Unable to load forecast');
-      render(data);
-    } catch (error) { set(error.message, true); } finally { $('forecastRefresh').disabled = false; }
-  }
-
-  async function sync(mode = 'daily', days = 1) {
-    const isBackfill = mode === 'next';
-    try {
-      $('forecastSync').disabled = true; $('forecastBackfill').disabled = true; $('forecastBackfillWeek').disabled = true;
-      set(isBackfill ? 'Backfilling ' + days + ' prior day' + (days === 1 ? '' : 's') + ' of Shopify sales…' : 'Syncing yesterday’s Shopify sales…');
-      const response = await fetch('/api/sales-history-sync', { method: 'POST', credentials: 'same-origin', headers: { 'Content-Type':'application/json' }, body: JSON.stringify({ mode, days }) });
-      const data = await response.json();
-      if (!response.ok) throw Error(data.error || 'Sales sync failed');
-      const windowLabel = data.startDate + ' through ' + data.endDate;
-      if ($('forecastCategory').value) { set('Sales saved for ' + windowLabel + '. Loading the selected category…'); await loadCategory(); }
-      else set('Sales saved for ' + windowLabel + ': ' + fmt(data.orders) + ' orders and ' + fmt(data.lines) + ' sales lines.');
-    } catch (error) { set(error.message, true); } finally { $('forecastSync').disabled = false; $('forecastBackfill').disabled = false; $('forecastBackfillWeek').disabled = false; }
-  }
-
-  function showForecast() {
-    // Keep this in sync with the app shell instead of an old hand-maintained list.
-    // A visible PO/arrivals section used to remain above this view and hide Forecasting.
-    document.querySelectorAll('main > section, #atGlanceView').forEach(el => { if (el && el !== view) el.hidden = true; });
-    view.hidden = false;
-    document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.id === 'forecastNav'));
-    loadCategories().catch(error => {
-      clearMetrics();
-      emptyTable('Unable to load categories.');
-      ['forecastCategory','forecastRefresh'].forEach(id => { const control = $(id); if (control) control.disabled = false; });
-      set(error.message || 'Forecasting could not load. Please try again.', true);
-    });
-  }
-  $('forecastNav').addEventListener('click', showForecast);
-  ['overviewNav','inventoryNav','productSyncNav','snapshotNav','transfersNav','productionNav','parLevelsNav','bomManagementNav','replenishmentNav'].forEach(id => $(id)?.addEventListener('click', () => view.hidden = true));
-  $('forecastRefresh').addEventListener('click', loadCategory);
-  $('forecastSync').addEventListener('click', () => sync('daily'));
-  $('forecastBackfill').addEventListener('click', () => sync('next', 1));
-  $('forecastBackfillWeek').addEventListener('click', () => sync('next', 7));
-  $('forecastCategory').addEventListener('change', () => {
-    forecastData = null; clearMetrics(); $('forecastMeta').textContent = 'Category selected. Load its forecast when you are ready.';
-    emptyTable('Select Load category forecast to view this category.'); set('Ready to load ' + ($('forecastCategory').value || 'a category') + '.');
-  });
-  $('forecastSort').addEventListener('change', () => forecastData && render(forecastData));
+const $=id=>document.getElementById(id),view=$('forecastingView'); if(!view)return;
+const n=(v,d=0)=>new Intl.NumberFormat('en-US',{maximumFractionDigits:d}).format(Number(v||0));
+let data=null;
+function td(tr,v,cls=''){const x=document.createElement('td');x.textContent=v;if(cls)x.className=cls;tr.append(x)}
+function render(d){data=d; const s=d.summary||{},st=d.status||{};
+$('forecastDataStatus').innerHTML='<strong>'+String(st.confidence||'').toUpperCase()+'</strong> · '+st.completedHistoryDays+' synchronized days · '+st.manualExclusions+' manually excluded non-stock SKUs'+(st.staleInventoryRows?' · '+st.staleInventoryRows+' stale inventory rows':'')+'<br>'+st.manualExclusionLabel+' '+st.returnsNotice;
+$('forecastGross').textContent=n(s.grossUnits);$('forecastTarget').textContent=n(s.target);$('forecastUsable').textContent=n(s.usable730);$('forecastInbound').textContent=n(s.validInbound);$('forecastSuggested').textContent=st.recommendationsEnabled?n(s.suggestedRequirement):'Disabled';
+const body=$('forecastRows');body.replaceChildren();
+let items=[...(d.items||[])]; const term=$('forecastSearch').value.trim().toUpperCase();if(term)items=items.filter(x=>(x.sku+' '+x.product).toUpperCase().includes(term));
+items.sort((a,b)=>Number(b.suggestedRequirement||0)-Number(a.suggestedRequirement||0));
+items.forEach(x=>{const tr=document.createElement('tr');tr.className='forecast-main';td(tr,x.sku);td(tr,x.product+(x.bulkOrderInfluenced?'  Bulk-order influenced':''));td(tr,n(x.grossUnitsSold));td(tr,x.completedHistoryDays);td(tr,n(x.averageDailyDemand,2));td(tr,n(x.growthAdjustedDailyDemand,2));td(tr,n(x.target730));td(tr,n(x.usable730));td(tr,n(x.validInboundPoQuantity));td(tr,n(x.projectedShortageSurplus),Number(x.projectedShortageSurplus)<0?'surplus':'shortage');td(tr,x.suggestedRequirement==null?'Disabled':n(x.suggestedRequirement));td(tr,x.confidence);body.append(tr);
+const detail=document.createElement('tr');detail.className='forecast-detail';detail.hidden=true;const c=document.createElement('td');c.colSpan=12;const b=x.bulk||{};c.textContent='Orders '+n(b.orders)+' · Avg/order '+n(b.averageUnitsPerOrder,2)+' · Largest '+n(b.largestOrder)+' · Top five '+n(b.fiveLargestOrderUnits)+' ('+n(Number(b.topFiveShare||0)*100,1)+'%) · Median '+n(b.medianLineQuantity,2)+' · Unusually large lines '+n(b.unusuallyLargeLines)+' / '+n(b.unitsFromUnusuallyLargeLines)+' units · Pending Shopify confirmation '+n(x.pendingShopifyConfirmation)+' · Supplier ordering multiple not configured.';detail.append(c);body.append(detail);tr.addEventListener('click',()=>detail.hidden=!detail.hidden)});
+if(!items.length)body.innerHTML='<tr><td colspan="12">No eligible SKUs match these filters.</td></tr>';
+}
+async function load(){try{$('forecastRecalculate').disabled=true;$('forecastDataStatus').textContent='Calculating from the local forecasting cache…';const p=new URLSearchParams({historyDays:$('forecastHistory').value,growth:$('forecastGrowth').value,coverageDays:$('forecastCoverage').value,safetyStockDays:$('forecastSafety').value,category:$('forecastCategory').value});const r=await fetch('/api/forecast?'+p,{credentials:'same-origin',cache:'no-store'});const d=await r.json();if(!r.ok)throw Error(d.error||'Forecast failed');render(d);const sel=$('forecastCategory');if(sel.options.length===1)(d.categories||[]).forEach(c=>sel.add(new Option(c,c)));}catch(e){$('forecastDataStatus').textContent=e.message}else{$('forecastRecalculate').disabled=false}}
+function csv(){if(!data)return;const h=['SKU','Product','Gross units sold','Completed history days','Average daily demand','Growth-adjusted daily demand','Target at 730','Usable inventory at 730','Valid inbound PO quantity','Projected shortage or surplus','Suggested requirement','Confidence'];const rows=(data.items||[]).map(x=>[x.sku,x.product,x.grossUnitsSold,x.completedHistoryDays,x.averageDailyDemand,x.growthAdjustedDailyDemand,x.target730,x.usable730,x.validInboundPoQuantity,x.projectedShortageSurplus,x.suggestedRequirement,x.confidence]);const out=[h,...rows].map(r=>r.map(v=>'"'+String(v??'').replaceAll('"','""')+'"').join(',')).join('\n');const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([out],{type:'text/csv'}));a.download='forecast.csv';a.click();URL.revokeObjectURL(a.href)}
+function show(){document.querySelectorAll('main > section,#atGlanceView').forEach(x=>{if(x!==view)x.hidden=true});view.hidden=false;load()}
+$('forecastNav')?.addEventListener('click',show);$('forecastRecalculate').addEventListener('click',load);$('forecastExport').addEventListener('click',csv);$('forecastSearch').addEventListener('input',()=>data&&render(data));
 })();
