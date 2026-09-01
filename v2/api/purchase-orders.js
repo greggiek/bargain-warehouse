@@ -210,11 +210,27 @@ module.exports = async function purchaseOrders(req, res) {
       });
       let shopifyAdjustmentId=attempt.shopifyAdjustmentId;
       if(!shopifyAdjustmentId){
-        shopifyAdjustmentId=await postReceiptToShopify(url,serviceRoleKey,order,lines,attempt.idempotencyKey);
-        await rpc(url,serviceRoleKey,'confirm_v2_purchase_order_receipt_shopify',{
-          p_attempt_id:attempt.attemptId,
-          p_shopify_adjustment_id:shopifyAdjustmentId
-        });
+        try {
+          shopifyAdjustmentId=await postReceiptToShopify(url,serviceRoleKey,order,lines,attempt.idempotencyKey);
+          await rpc(url,serviceRoleKey,'confirm_v2_purchase_order_receipt_shopify',{
+            p_attempt_id:attempt.attemptId,
+            p_shopify_adjustment_id:shopifyAdjustmentId
+          });
+          await fetch(url+'/rest/v1/purchase_order_receipt_attempts?id=eq.'+attempt.attemptId,{
+            method:'PATCH',
+            headers:{...jsonHeaders(serviceRoleKey),Prefer:'return=minimal'},
+            body:JSON.stringify({last_error:null,failed_at:null,updated_at:new Date().toISOString()}),
+            signal:AbortSignal.timeout(8000)
+          });
+        } catch (shopifyError) {
+          await fetch(url+'/rest/v1/purchase_order_receipt_attempts?id=eq.'+attempt.attemptId,{
+            method:'PATCH',
+            headers:{...jsonHeaders(serviceRoleKey),Prefer:'return=minimal'},
+            body:JSON.stringify({last_error:shopifyError.message||'Shopify inventory push failed',failed_at:new Date().toISOString(),updated_at:new Date().toISOString()}),
+            signal:AbortSignal.timeout(8000)
+          });
+          throw shopifyError;
+        }
       }
       const purchaseOrder=await rpc(url,serviceRoleKey,'receive_v2_purchase_order_lines',{
         p_purchase_order_id:purchaseOrderId,
