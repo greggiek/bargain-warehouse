@@ -123,8 +123,11 @@ module.exports = async function shopifyInventorySync(req, res) {
       inventoryItems(first:25, after:$after) {
         pageInfo { hasNextPage endCursor }
         nodes {
-          id sku updatedAt
-          variant { id }
+          id sku tracked updatedAt
+          variant {
+            id
+            product { id title productType status }
+          }
           inventoryLevels(first:20) {
             nodes {
               location { id }
@@ -141,7 +144,13 @@ module.exports = async function shopifyInventorySync(req, res) {
     const items = (connection.nodes || []).map(item => ({
       inventoryItemId: item.id,
       variantId: item.variant?.id || null,
+      productId: item.variant?.product?.id || null,
       sku: item.sku || '',
+      normalizedSku: String(item.sku || '').normalize('NFC').replace(/^[\\s\\u00a0]+|[\\s\\u00a0]+$/g, '').toUpperCase(),
+      productTitle: item.variant?.product?.title || null,
+      productType: item.variant?.product?.productType || null,
+      productStatus: item.variant?.product?.status || null,
+      tracksInventory: typeof item.tracked === 'boolean' ? item.tracked : null,
       sourceUpdatedAt: item.updatedAt || null,
       levels: (item.inventoryLevels?.nodes || []).map(level => {
         const quantities = Object.fromEntries((level.quantities || []).map(value => [value.name, Number(value.quantity || 0)]));
