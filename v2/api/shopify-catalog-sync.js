@@ -36,6 +36,8 @@ module.exports = async function shopifyCatalogSync(req, res) {
     if (!['admin', 'developer'].includes(authorization.user.role)) {
       return res.status(403).json({ ok: false, error: 'administrator_role_required' });
     }
+    return res.status(409).json({ ok: false, error: 'catalog_sync_write_temporarily_gated', message: 'Full preview is available, but general catalog writes require the status-aware safe writer.' });
+
     if (req.body?.confirmation !== 'SYNC_SHOPIFY_CATALOG') {
       return res.status(400).json({ ok: false, error: 'catalog_sync_confirmation_required' });
     }
