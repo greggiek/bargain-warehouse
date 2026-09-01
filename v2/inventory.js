@@ -1,6 +1,6 @@
 (() => {
   const $ = id => document.getElementById(id);
-  const view = $('inventoryView'); if (!view) return;
+  const view = $('inventoryView'); if (!view) return;\n  const values = globalThis.InventoryValues || { signedInventory: (onHand, committed, available) => ({ onHand:Number(onHand||0), committed:Number(committed||0), available:available == null ? Number(onHand||0)-Number(committed||0) : Number(available||0) }) };
   let loaded = false, searchTimer, request, lastData, sortLocationId = null, sortDirection = 'desc';
   const number = value => Number(value || 0).toLocaleString('en-US', { maximumFractionDigits: 2 });
   const shortLocation = name => {
@@ -50,7 +50,19 @@
     });
     orderedRows.forEach(row => {
       const tr = document.createElement('tr');
-      [row.name, row.sku, ...locations.map(x => number(row.quantities?.[x.id] || 0))].forEach((value,index) => { const td=document.createElement('td'); td.textContent=value; if(index===1)td.className='sku'; tr.append(td); });
+      const name = document.createElement('td'); name.textContent = row.name; tr.append(name);
+      const sku = document.createElement('td'); sku.textContent = row.sku; sku.className = 'sku'; tr.append(sku);
+      locations.forEach(location => {
+        const detail = values.signedInventory(row.inventory?.[location.id]?.onHand ?? row.quantities?.[location.id] ?? 0,row.inventory?.[location.id]?.committed ?? 0,row.inventory?.[location.id]?.available);
+        const td = document.createElement('td'); td.className = 'inventory-quantity-detail';
+        [['On hand',detail.onHand],['Committed',detail.committed],['Available',detail.available]].forEach(([label,value]) => {
+          const line = document.createElement('span'); line.className = value < 0 ? 'negative' : value === 0 ? 'zero' : '';
+          const caption = document.createElement('small'); caption.textContent = label;
+          const amount = document.createElement('strong'); amount.textContent = number(value);
+          line.append(caption,amount); td.append(line);
+        });
+        tr.append(td);
+      });
       body.append(tr);
     });
     if (!rows.length) body.innerHTML = '<tr><td colspan="' + (locations.length + 2) + '" class="muted">No items match this view.</td></tr>';
@@ -58,6 +70,19 @@
     $('inventoryDetailTitle').textContent = detail ? detail : 'All inventory';
     $('inventoryBack').hidden = !detail;
   }
+  function csvCell(value) { const text = String(value ?? ''); return /[",\n]/.test(text) ? '"' + text.replaceAll('"','""') + '"' : text; }
+  function exportCsv() {
+    if (!lastData) return setStatus('Load inventory before exporting.', true);
+    const locations = lastData.locations || [];
+    const headers = ['Product','SKU',...locations.flatMap(location => [location.name + ' On hand',location.name + ' Committed',location.name + ' Available'])];
+    const lines = [headers,...(lastData.rows || []).map(row => [row.name,row.sku,...locations.flatMap(location => {
+      const detail = values.signedInventory(row.inventory?.[location.id]?.onHand ?? row.quantities?.[location.id] ?? 0,row.inventory?.[location.id]?.committed ?? 0,row.inventory?.[location.id]?.available);
+      return [detail.onHand,detail.committed,detail.available];
+    })])].map(row => row.map(csvCell).join(','));
+    const link = document.createElement('a'); link.href = URL.createObjectURL(new Blob([lines.join('\n')],{type:'text/csv;charset=utf-8'}));
+    link.download = 'bm-inventory-signed-' + new Date().toISOString().slice(0,10) + '.csv'; link.click(); URL.revokeObjectURL(link.href);
+  }
+
   async function load() {
     request?.abort(); request = new AbortController();
     const refresh = $('inventoryRefresh'); refresh.disabled = true;
@@ -82,7 +107,7 @@
   }
   $('overviewNav').addEventListener('click',()=>show('overview'));
   $('inventoryNav').addEventListener('click',()=>show('inventory'));
-  $('inventoryRefresh').addEventListener('click',load);
+  $('inventoryRefresh').addEventListener('click',load);\n  const exportButton = document.createElement('button'); exportButton.id='inventoryExport'; exportButton.type='button'; exportButton.className='button secondary'; exportButton.textContent='Export CSV'; exportButton.addEventListener('click',exportCsv); $('inventoryRefresh').after(exportButton);
   $('inventoryLocation').addEventListener('change',()=>{ $('inventoryCategory').value=''; load(); });
   $('inventoryCategory').addEventListener('change',load);
   $('inventoryBack').addEventListener('click',()=>{ $('inventoryCategory').value=''; load(); });
