@@ -48,7 +48,7 @@ module.exports = async function manufacturingV2(req, res) {
     const actorId = Number(auth.user.id);
     let result;
     if (body.action === 'createDraft') {
-      await requirePermission(url, serviceRoleKey, actorId, 'draft_create');
+      await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_create_draft');
       result = await rpc(url, serviceRoleKey, 'create_mfg_work_order_draft', {
         p_actor_user_id: actorId,
         p_destination_location_id: Number(body.destinationLocationId),
@@ -60,17 +60,64 @@ module.exports = async function manufacturingV2(req, res) {
         p_idempotency_key: String(body.idempotencyKey || '')
       });
     } else if (body.action === 'release') {
-      await requirePermission(url, serviceRoleKey, actorId, 'release');
+      await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_release');
       const overrideReason = String(body.shortageOverrideReason || '').trim();
-      if (overrideReason) await requirePermission(url, serviceRoleKey, actorId, 'shortage_override');
+      if (overrideReason) await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_shortage_override');
       result = await rpc(url, serviceRoleKey, 'release_mfg_work_order', {
         p_actor_user_id: actorId,
         p_work_order_id: Number(body.workOrderId),
         p_idempotency_key: String(body.idempotencyKey || ''),
         p_shortage_override_reason: overrideReason || null
       });
+    } else if (body.action === 'assignMachine') {
+      await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_assign_machine');
+      result = await rpc(url, serviceRoleKey, 'assign_mfg_machine', {
+        p_actor_user_id: actorId,
+        p_work_order_id: Number(body.workOrderId),
+        p_machine_code: String(body.machineCode || ''),
+        p_idempotency_key: String(body.idempotencyKey || '')
+      });
+    } else if (['start', 'pause', 'resume'].includes(body.action)) {
+      await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_start_pause');
+      result = await rpc(url, serviceRoleKey, 'transition_mfg_work_order', {
+        p_actor_user_id: actorId,
+        p_work_order_id: Number(body.workOrderId),
+        p_action: body.action,
+        p_idempotency_key: String(body.idempotencyKey || '')
+      });
+    } else if (body.action === 'recordProgress') {
+      await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_record_progress');
+      await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_partial_complete');
+      result = await rpc(url, serviceRoleKey, 'record_mfg_progress', {
+        p_actor_user_id: actorId,
+        p_work_order_id: Number(body.workOrderId),
+        p_work_order_line_id: Number(body.workOrderLineId),
+        p_disposition: String(body.disposition || ''),
+        p_source_bucket: String(body.sourceBucket || 'unstarted'),
+        p_quantity: Number(body.quantity),
+        p_components: (body.components || []).map(component => ({
+          component_product_id: Number(component.productId),
+          quantity: Number(component.quantity)
+        })),
+        p_reason: String(body.reason || ''),
+        p_idempotency_key: String(body.idempotencyKey || '')
+      });
+    } else if (body.action === 'complete') {
+      await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_complete');
+      result = await rpc(url, serviceRoleKey, 'complete_mfg_work_order', {
+        p_actor_user_id: actorId,
+        p_work_order_id: Number(body.workOrderId),
+        p_idempotency_key: String(body.idempotencyKey || '')
+      });
+    } else if (body.action === 'close') {
+      await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_close');
+      result = await rpc(url, serviceRoleKey, 'close_mfg_work_order', {
+        p_actor_user_id: actorId,
+        p_work_order_id: Number(body.workOrderId),
+        p_idempotency_key: String(body.idempotencyKey || '')
+      });
     } else if (body.action === 'cancel') {
-      await requirePermission(url, serviceRoleKey, actorId, 'cancel');
+      await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_cancel');
       result = await rpc(url, serviceRoleKey, 'cancel_mfg_work_order', {
         p_actor_user_id: actorId,
         p_work_order_id: Number(body.workOrderId),
