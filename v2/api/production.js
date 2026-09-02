@@ -100,6 +100,11 @@ module.exports = async (req, res) => {
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
     const body = req.body || {}; const action = body.action;
+    // Manufacturing is fail-closed. The only real mutation path is the dedicated
+    // BM-MFG-PILOT-001 endpoint, whose restrictions are rechecked in Postgres.
+    if (['startWorkOrder','startProductionJob','completeProductionJob','completeWorkOrder','complete'].includes(action)) {
+      return res.status(403).json({ error: 'manufacturing_restricted_pilot_only' });
+    }
     if (action === 'saveBom') {
       if (auth.user.role !== 'admin') return res.status(403).json({ error: 'admin_required_for_bom_changes' });
       const data = await rpc(supabaseUrl, serviceRoleKey, 'save_v2_product_bom', { p_finished_product_id:Number(body.finishedProductId), p_yield_quantity:Number(body.yieldQuantity), p_components:(body.components || []).map(x => ({ productId: x.component_product_id, quantity: x.quantity_per_yield })), p_notes:String(body.notes || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
