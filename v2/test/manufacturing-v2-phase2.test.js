@@ -128,6 +128,11 @@ test('stable completion idempotency returns the original result', () => {
   assert.doesNotMatch(migration, /return v_result\|\|jsonb_build_object\('alreadyApplied',true/);
 });
 
+test('work-order completion stores and returns the identical idempotent result', () => {
+  assert.match(migration, /'alreadyCompleted',false,'shopifyCall',false/);
+  assert.match(migration, /'completed_and_transfer_promoted'[\s\S]*p_idempotency_key\|\|':audit',v_result\)/);
+});
+
 test('failure injection points are inside the atomic progress transaction', () => {
   for (const point of ['after_component_calculation','after_component_consumption','before_transfer_update']) {
     assert.match(migration, new RegExp(`current_setting\\('mfg.test_failpoint',true\\)='${point}'`));
