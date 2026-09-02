@@ -5,17 +5,19 @@ const path = require('node:path');
 
 const api = fs.readFileSync(path.join(__dirname, '..', 'api', 'manufacturing-v2.js'), 'utf8');
 const migration = fs.readFileSync(path.join(__dirname, '..', '..', 'supabase', 'migrations', '20260901193000_manufacturing_v2_phase1_foundation.sql'), 'utf8');
+const shadowMigration = fs.readFileSync(path.join(__dirname, '..', '..', 'supabase', 'migrations', '20260902170000_manufacturing_shadow_mode.sql'), 'utf8');
 
-test('Manufacturing V2 authenticates before its disabled feature gate', () => {
-  assert.ok(api.indexOf('await requireUser(req)') < api.indexOf("MANUFACTURING_V2_ENABLED !== 'true'"));
+test('Manufacturing V2 authenticates before its user-specific Shadow Mode gate', () => {
+  assert.ok(api.indexOf('await requireUser(req)') < api.indexOf("manufacturing_draft_enabled"));
   assert.match(api, /const actorId = Number\(auth\.user\.id\)/);
   assert.doesNotMatch(api, /body\.(userId|user_id|role|userName)/);
 });
 
-test('Manufacturing V2 is disabled by both deployment and database flags', () => {
-  assert.match(api, /MANUFACTURING_V2_ENABLED/);
-  assert.match(api, /mfg_feature_flags/);
-  assert.match(migration, /'manufacturing_v2',false/);
+test('Manufacturing mutations are disabled by separate database controls', () => {
+  assert.match(api, /manufacturing_release_enabled/);
+  assert.match(api, /manufacturing_completion_enabled/);
+  assert.match(shadowMigration, /'manufacturing_release_enabled',false/);
+  assert.match(shadowMigration, /'manufacturing_completion_enabled',false/);
 });
 
 test('every command is permission checked server-side', () => {
