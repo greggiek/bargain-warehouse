@@ -387,9 +387,9 @@ begin
   insert into public.mfg_status_history(work_order_id,from_status,to_status,changed_by,idempotency_key)
   values(v_wo.id,v_wo.status,'Completed',p_actor_user_id,p_idempotency_key||':status');
   v_result:=jsonb_build_object('workOrderId',v_wo.id,'status','Completed','transferId',v_transfer_id,
-    'transferNumber',v_transfer_number,'transferStatus','draft','alreadyCompleted',false);
+    'transferNumber',v_transfer_number,'transferStatus','draft','alreadyCompleted',false,'shopifyCall',false);
   insert into public.mfg_audit_events(work_order_id,event_type,actor_user_id,idempotency_key,details)
-  values(v_wo.id,'completed_and_transfer_promoted',p_actor_user_id,p_idempotency_key||':audit',v_result||jsonb_build_object('shopifyCall',false));
+  values(v_wo.id,'completed_and_transfer_promoted',p_actor_user_id,p_idempotency_key||':audit',v_result);
   return v_result;
 end $$;
 
