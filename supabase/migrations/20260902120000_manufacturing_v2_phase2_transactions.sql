@@ -133,7 +133,7 @@ begin
      or not exists(select 1 from public.user_location_access where user_id=p_actor_user_id and location_id=v_wo.destination_location_id and can_manage)
   then raise exception 'manufacturing_location_permission_denied'; end if;
   select details into v_existing from public.mfg_audit_events where work_order_id=v_wo.id and idempotency_key=p_idempotency_key||':audit';
-  if found then return v_existing||jsonb_build_object('alreadyApplied',true); end if;
+  if found then return v_existing; end if;
   v_from:=v_wo.status;
   if p_action='start' and v_from='Released' then v_to:='In Production';
   elsif p_action='pause' and v_from in ('In Production','Partially Completed') then v_to:='Paused';
@@ -164,7 +164,7 @@ begin
      or not exists(select 1 from public.user_location_access where user_id=p_actor_user_id and location_id=v_wo.destination_location_id and can_manage)
   then raise exception 'manufacturing_location_permission_denied'; end if;
   select details into v_result from public.mfg_audit_events where work_order_id=v_wo.id and idempotency_key=p_idempotency_key||':audit';
-  if found then return v_result||jsonb_build_object('alreadyApplied',true); end if;
+  if found then return v_result; end if;
   if v_wo.status not in ('Draft','Released','Paused') then raise exception 'machine_assignment_not_allowed:%',v_wo.status; end if;
   update public.mfg_work_orders set machine_code=v_machine,updated_at=now() where id=v_wo.id;
   v_result:=jsonb_build_object('workOrderId',v_wo.id,'machine',v_machine,'previousMachine',v_wo.machine_code,'alreadyApplied',false);
@@ -212,7 +212,7 @@ begin
   if not found then raise exception 'work_order_line_not_found'; end if;
   select id,result_payload into v_event_id,v_result from public.mfg_completion_events
     where work_order_id=v_wo.id and work_order_line_id=v_line.id and idempotency_key=p_idempotency_key;
-  if found then return v_result||jsonb_build_object('alreadyApplied',true,'completionEventId',v_event_id); end if;
+  if found then return v_result; end if;
   if p_source_bucket='unstarted' and p_quantity>v_line.remaining_quantity then raise exception 'progress_would_overcomplete_line'; end if;
   if p_source_bucket='rejected_pending' and p_quantity>v_line.rejected_quantity then raise exception 'rejected_resolution_exceeds_pending'; end if;
   if p_source_bucket='rework' and p_quantity>v_line.rework_quantity then raise exception 'rework_resolution_exceeds_pending'; end if;
@@ -361,7 +361,7 @@ begin
      or not exists(select 1 from public.user_location_access where user_id=p_actor_user_id and location_id=v_wo.destination_location_id and can_manage)
   then raise exception 'manufacturing_location_permission_denied'; end if;
   select details into v_result from public.mfg_audit_events where work_order_id=v_wo.id and idempotency_key=p_idempotency_key||':audit';
-  if found then return v_result||jsonb_build_object('alreadyCompleted',true); end if;
+  if found then return v_result; end if;
   if v_wo.status not in ('In Production','Partially Completed') then raise exception 'work_order_not_ready_to_complete:%',v_wo.status; end if;
   if exists(select 1 from public.mfg_work_order_lines where work_order_id=v_wo.id and (remaining_quantity<>0 or rejected_quantity<>0 or rework_quantity<>0))
   then raise exception 'all_units_and_dispositions_must_be_resolved'; end if;
@@ -405,7 +405,7 @@ begin
      or not exists(select 1 from public.user_location_access where user_id=p_actor_user_id and location_id=v_wo.destination_location_id and can_manage)
   then raise exception 'manufacturing_location_permission_denied'; end if;
   select details into v_result from public.mfg_audit_events where work_order_id=v_wo.id and idempotency_key=p_idempotency_key||':audit';
-  if found then return v_result||jsonb_build_object('alreadyClosed',true); end if;
+  if found then return v_result; end if;
   if v_wo.status<>'Completed' then raise exception 'only_completed_work_order_can_close'; end if;
   if exists(select 1 from public.mfg_work_order_lines where work_order_id=v_wo.id and (remaining_quantity<>0 or rejected_quantity<>0 or rework_quantity<>0))
     or not exists(select 1 from public.mfg_planned_transfers where work_order_id=v_wo.id and status='promoted' and physical_transfer_id is not null)
@@ -433,7 +433,7 @@ begin
      or not exists(select 1 from public.user_location_access where user_id=p_actor_user_id and location_id=v_wo.destination_location_id and can_manage)
   then raise exception 'manufacturing_location_permission_denied'; end if;
   select details into v_result from public.mfg_audit_events where work_order_id=v_wo.id and idempotency_key=p_idempotency_key||':audit';
-  if found then return v_result||jsonb_build_object('alreadyCancelled',true); end if;
+  if found then return v_result; end if;
   if v_wo.status in ('In Production','Paused','Partially Completed') then raise exception 'started_work_requires_controlled_correction_or_early_close'; end if;
   if v_wo.status in ('Completed','Closed') then raise exception 'completed_production_cannot_be_cancelled'; end if;
   if v_wo.status not in ('Draft','Released') then raise exception 'work_order_cannot_be_cancelled'; end if;
