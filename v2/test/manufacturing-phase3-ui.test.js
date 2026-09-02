@@ -1,0 +1,13 @@
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs'),path=require('node:path');
+const root=path.join(__dirname,'..','..'),html=fs.readFileSync(path.join(root,'v2/index.html'),'utf8'),ui=fs.readFileSync(path.join(root,'v2/manufacturing-v3.js'),'utf8'),css=fs.readFileSync(path.join(root,'v2/manufacturing-v3.css'),'utf8'),api=fs.readFileSync(path.join(root,'v2/api/manufacturing-ui.js'),'utf8');
+test('four bounded subviews replace the giant stock-production page',()=>{for(const x of ['Production Planner','Production Board','Work Orders','BOM & Costing'])assert.match(ui,new RegExp(x));assert.match(api,/pageSize=Math\.min\(100/)});
+test('special-order Manufacturing remains isolated and unchanged',()=>{assert.match(html,/id="legacyProductionView"/);assert.match(html,/id="specialOrderProductionNav"/)});
+test('planner preserves signed availability and calculates suggested build server-side fixture',()=>{assert.match(api,/available:-5/);assert.match(api,/suggested:17/);assert.doesNotMatch(ui,/Math\.max\([^\n]*available/)});
+test('one destination is enforced for each production batch',()=>assert.match(ui,/Select products for one destination per work order/));
+test('machine queues remain separate',()=>{assert.match(ui,/NIGHTHAWK/);assert.match(ui,/TERMINATOR/)});
+test('progress is output-focused and component scrap explicit',()=>{assert.match(ui,/Finished output only/);assert.match(ui,/Record explicit component scrap/)});
+test('cost is unavailable rather than zero',()=>{assert.match(ui,/Cost unavailable — component cost source not configured/);assert.doesNotMatch(ui,/\$0\.00/)});
+test('stale requests abort and command buttons prevent double submit',()=>{assert.match(ui,/state\.controller\?\.abort/);assert.match(ui,/if\(button\?\.disabled\)return/)});
+test('UI reads locally and commands use the Phase 2 API',()=>{assert.match(ui,/\/api\/manufacturing-ui/);assert.match(ui,/\/api\/manufacturing-v2/);assert.doesNotMatch(ui,/fetch\([^\n]*shopify/i)});
+test('feature remains disabled unless both gates explicitly enable it',()=>{assert.match(api,/MANUFACTURING_V2_ENABLED!=='true'/);assert.match(api,/mfg_feature_flags/)});
+test('responsive layouts include mobile cards and machine stacking',()=>{assert.match(css,/@media\(max-width:800px\)/);assert.match(css,/\.mfg-board\{grid-template-columns:1fr\}/)});
