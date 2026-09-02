@@ -19,7 +19,7 @@ test('Manufacturing V2 is disabled by both deployment and database flags', () =>
 });
 
 test('every command is permission checked server-side', () => {
-  for (const permission of ['draft_create', 'release', 'shortage_override', 'cancel']) {
+  for (const permission of ['manufacturing_create_draft', 'manufacturing_release', 'manufacturing_shortage_override', 'manufacturing_cancel']) {
     assert.match(api, new RegExp(`requirePermission\\(url, serviceRoleKey, actorId, '${permission}'\\)`));
   }
   assert.match(migration, /mfg_actor_can/);
