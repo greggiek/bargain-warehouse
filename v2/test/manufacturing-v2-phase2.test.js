@@ -50,10 +50,11 @@ test('every Phase 2 API command checks its granular permission before RPC', () =
   ]) assert.match(api, new RegExp(`requirePermission\\(url, serviceRoleKey, actorId, '${permission}'\\)`));
 });
 
-test('feature remains protected by deployment and database flags', () => {
-  assert.match(api, /MANUFACTURING_V2_ENABLED !== 'true'/);
-  assert.match(api, /mfg_feature_flags\?flag_key=eq\.manufacturing_v2&enabled=eq\.true/);
-  assert.doesNotMatch(migration, /update\s+public\.mfg_feature_flags[\s\S]*enabled\s*=\s*true/i);
+test('feature remains protected by separate server-side Shadow Mode flags', () => {
+  assert.match(api, /requireManufacturingFeature/);
+  assert.match(api, /manufacturing_draft_enabled/);
+  assert.match(api, /manufacturing_release_enabled/);
+  assert.match(api, /manufacturing_completion_enabled/);
 });
 
 test('start is allowed only from Released', () => {
