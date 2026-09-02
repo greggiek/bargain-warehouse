@@ -124,7 +124,8 @@ test('rejected pending and rework block work-order completion', () => {
 
 test('stable completion idempotency returns the original result', () => {
   assert.match(migration, /where idempotency_key=p_idempotency_key/);
-  assert.match(migration, /return v_result\|\|jsonb_build_object\('alreadyApplied',true/);
+  assert.match(migration, /if found then return v_result; end if;/);
+  assert.doesNotMatch(migration, /return v_result\|\|jsonb_build_object\('alreadyApplied',true/);
 });
 
 test('failure injection points are inside the atomic progress transaction', () => {
