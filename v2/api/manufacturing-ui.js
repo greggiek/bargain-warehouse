@@ -1,5 +1,6 @@
 const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
+const { requireManufacturingFeature } = require('./_lib/manufacturing-feature-gates');
 
 async function rest(url,key,path){const r=await fetch(url+'/rest/v1/'+path,{headers:jsonHeaders(key),signal:AbortSignal.timeout(10000)});const d=await r.json().catch(()=>[]);if(!r.ok)throw Error(d.message||'Manufacturing read failed');return d;}
 const fixtures={
@@ -20,14 +21,13 @@ const fixtures={
 module.exports=async(req,res)=>{const isolatedPreview=process.env.VERCEL_ENV==='preview'&&process.env.MANUFACTURING_UI_FIXTURES==='true'&&process.env.PREVIEW_TEST_SESSION==='enabled';if(process.env.VERCEL_ENV==='preview'&&!isolatedPreview)return res.status(503).json({ok:false,error:'preview_fixture_configuration_required'});const auth=isolatedPreview?{ok:true,user:{id:999999,role:'admin'}}:await requireUser(req);if(!auth.ok)return res.status(auth.status).json({ok:false,error:auth.error});if(req.method!=='GET')return res.status(405).json({ok:false,error:'method_not_allowed'});const view=String(req.query?.view||'planner');const pageSize=Math.min(100,Math.max(1,Number(req.query?.pageSize)||25));
  try{
   if(isolatedPreview)return res.status(200).json({ok:true,fixture:true,testEnvironment:true,permissions:['manufacturing_view_planner','manufacturing_view_work_orders','manufacturing_print_packet','manufacturing_create_draft','manufacturing_release','manufacturing_record_progress'],...(fixtures[view]||fixtures.planner)});
-  if(process.env.MANUFACTURING_V2_ENABLED!=='true')return res.status(404).json({ok:false,error:'manufacturing_v2_disabled'});
-  const {url,serviceRoleKey}=configuration();const flags=await rest(url,serviceRoleKey,'mfg_feature_flags?flag_key=eq.manufacturing_v2&enabled=eq.true&select=flag_key&limit=1');if(!flags.length)return res.status(404).json({ok:false,error:'manufacturing_v2_disabled'});
+  const {url,serviceRoleKey}=configuration();await requireManufacturingFeature(url,serviceRoleKey,Number(auth.user.id),'manufacturing_view_enabled');
   const permissionNames=['manufacturing_view_planner','manufacturing_view_work_orders','manufacturing_print_packet','manufacturing_create_draft','manufacturing_release','manufacturing_record_progress','manufacturing_bom_admin','manufacturing_cost_admin'];
   const permissions=[];for(const permission of permissionNames){const r=await fetch(url+'/rest/v1/rpc/mfg_actor_can',{method:'POST',headers:jsonHeaders(serviceRoleKey),body:JSON.stringify({p_actor_user_id:Number(auth.user.id),p_permission:permission})});if(r.ok&&await r.json()===true)permissions.push(permission)}
   if(!permissions.some(x=>x.startsWith('manufacturing_view_')))return res.status(403).json({ok:false,error:'manufacturing_view_permission_denied'});
   const orders=await rest(url,serviceRoleKey,'mfg_work_orders?select=id,work_order_number,status,machine_code,priority,requested_completion_date,created_at,destination:locations!mfg_work_orders_destination_location_id_fkey(name),mfg_work_order_lines(planned_quantity,good_quantity,remaining_quantity)&order=created_at.desc&limit='+pageSize);
   const rows=orders.map(w=>({id:w.id,number:w.work_order_number,created:String(w.created_at).slice(0,10),destination:w.destination?.name||'—',machine:w.machine_code,status:w.status,planned:(w.mfg_work_order_lines||[]).reduce((s,x)=>s+Number(x.planned_quantity),0),good:(w.mfg_work_order_lines||[]).reduce((s,x)=>s+Number(x.good_quantity),0),remaining:(w.mfg_work_order_lines||[]).reduce((s,x)=>s+Number(x.remaining_quantity),0),transferStatus:'Transfer pending',requested:w.requested_completion_date||'—'}));
-  if(view==='board')return res.json({ok:true,permissions,NIGHTHAWK:rows.filter(x=>x.machine==='NIGHTHAWK'),TERMINATOR:rows.filter(x=>x.machine==='TERMINATOR')});
-  if(view==='orders')return res.json({ok:true,permissions,total:rows.length,rows});
-  return res.json({ok:true,permissions,total:0,rows:[],kpis:[],destinations:[]});
- }catch(error){return res.status(400).json({ok:false,error:error.message||'manufacturing_ui_failed'})}}
+  if(view==='board')return res.json({ok:true,shadowMode:true,operatingAuthority:'Qoblex',permissions,NIGHTHAWK:rows.filter(x=>x.machine==='NIGHTHAWK'),TERMINATOR:rows.filter(x=>x.machine==='TERMINATOR')});
+  if(view==='orders')return res.json({ok:true,shadowMode:true,operatingAuthority:'Qoblex',permissions,total:rows.length,rows});
+  return res.json({ok:true,shadowMode:true,operatingAuthority:'Qoblex',permissions,total:0,rows:[],kpis:[],destinations:[]});
+ }catch(error){return res.status(error.status||400).json({ok:false,error:error.message||'manufacturing_ui_failed'})}}
