@@ -21,6 +21,11 @@ test('pilot enforces one active, one-unit work order and the two resolved operat
   assert.match(migration, /greg@bargainmoulding\.com/);
   assert.match(migration, /edwin@bargainmoulding\.com/);
   assert.match(migration, /p\.sku='CD2680PHLHSN80'/);
+  assert.match(migration, /destination\.id=2 and destination\.name='Amityville Main'/);
+  assert.match(migration, /gid:\/\/shopify\/InventoryItem\/47884539166932/);
+  assert.match(migration, /shopifySourceSku',approved_shopify_source_sku/);
+  assert.match(migration, /Manually authorized one-door production test; destination par shortage is 0/);
+  assert.match(migration, /manufacturing_pilot_audit_events/);
   assert.match(migration, /Only Greg or Edwin may operate this pilot/);
 });
 

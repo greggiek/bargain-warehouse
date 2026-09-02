@@ -5,6 +5,7 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..', '..');
 const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20260902150000_manufacturing_shopify_handoff.sql'), 'utf8');
+const grantHardening = fs.readFileSync(path.join(root, 'supabase/migrations/20260902185000_manufacturing_trigger_grant_hardening.sql'), 'utf8');
 const worker = fs.readFileSync(path.join(root, 'v2/api/manufacturing-inventory-sync.js'), 'utf8');
 
 test('Manufacturing movements enqueue exactly once inside their local transaction', () => {
@@ -12,6 +13,11 @@ test('Manufacturing movements enqueue exactly once inside their local transactio
   assert.match(migration, /after insert on public\.inventory_movements/);
   assert.match(migration, /new\.reference_type<>'manufacturing'/);
   assert.match(migration, /new\.idempotency_key\|\|':shopify'/);
+});
+
+test('Manufacturing Shopify enqueue trigger is explicitly service-role-only', () => {
+  assert.match(grantHardening, /revoke all on function public\.enqueue_mfg_shopify_inventory_adjustment\(\) from public,anon,authenticated/);
+  assert.match(grantHardening, /grant execute on function public\.enqueue_mfg_shopify_inventory_adjustment\(\) to service_role/);
 });
 
 test('route and Shopify identity must be unique and backed by a current cache row', () => {
