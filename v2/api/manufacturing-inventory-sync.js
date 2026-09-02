@@ -1,5 +1,6 @@
 const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
+const { manufacturingFeatureEnabled } = require('./_lib/manufacturing-feature-gates');
 
 const API_VERSION = '2026-07';
 const clean = value => String(value || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
@@ -75,6 +76,9 @@ async function allowed(req) {
 module.exports = async function manufacturingInventorySync(req, res) {
   if (!(await allowed(req))) return res.status(req.method === 'GET' || req.method === 'POST' ? 403 : 405).json({ ok: false, error: 'manufacturing_inventory_sync_not_authorized' });
   const { url, serviceRoleKey } = configuration();
+  if (!(await manufacturingFeatureEnabled(url, serviceRoleKey, 'manufacturing_shopify_outbound_enabled'))) {
+    return res.status(200).json({ ok:true, processed:false, shadowMode:true, reason:'manufacturing_shopify_outbound_disabled' });
+  }
   const claim = await rpc(url, serviceRoleKey, 'claim_mfg_shopify_inventory_adjustment', { p_lease_seconds: 120 });
   if (!claim) return res.status(200).json({ ok: true, processed: false });
   try {
