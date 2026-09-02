@@ -1,6 +1,7 @@
 const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
 const { createShopifyNativeDraftTransfer } = require('./_lib/shopify-native-transfer');
+const { manufacturingFeatureEnabled } = require('./_lib/manufacturing-feature-gates');
 const stores = () => [
   { key:'store_1',label:'Shopify NY',domain:process.env.SHOPIFY_STORE_1_DOMAIN,clientId:process.env.SHOPIFY_STORE_1_CLIENT_ID,clientSecret:process.env.SHOPIFY_STORE_1_CLIENT_SECRET },
   { key:'store_2',label:'Shopify CT',domain:process.env.SHOPIFY_STORE_2_DOMAIN,clientId:process.env.SHOPIFY_STORE_2_CLIENT_ID,clientSecret:process.env.SHOPIFY_STORE_2_CLIENT_SECRET }
@@ -24,6 +25,8 @@ async function authorized(req){
 module.exports=async function manufacturingTransferHandoff(req,res){
   if(!(await authorized(req))) return res.status(['GET','POST'].includes(req.method)?403:405).json({ok:false,error:'manufacturing_transfer_handoff_not_authorized'});
   const {url,serviceRoleKey}=configuration();
+  if(!(await manufacturingFeatureEnabled(url,serviceRoleKey,'manufacturing_transfer_handoff_enabled'))||!(await manufacturingFeatureEnabled(url,serviceRoleKey,'manufacturing_shopify_outbound_enabled')))
+    return res.status(200).json({ok:true,processed:false,shadowMode:true,reason:'manufacturing_transfer_handoff_disabled'});
   const claim=await rpc(url,serviceRoleKey,'claim_mfg_transfer_handoff',{p_lease_seconds:120});
   if(!claim) return res.status(200).json({ok:true,processed:false});
   try{
