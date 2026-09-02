@@ -2,6 +2,11 @@ const { accessToken, bmOsSession, configuration, hasBmOsSessionCookie, jsonHeade
 
 module.exports = async function me(req, res) {
   if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return res.status(405).json({ ok: false, error: 'method_not_allowed' }); }
+  const isolatedManufacturingPreview = process.env.VERCEL_ENV === 'preview' && process.env.MANUFACTURING_UI_FIXTURES === 'true' && process.env.PREVIEW_TEST_SESSION === 'enabled';
+  if (isolatedManufacturingPreview) {
+    return res.status(200).json({ ok:true, preview:true, user:{ id:999999, displayName:'Phase 3 Test Manager', email:'preview-test@invalid.local', role:'admin' }, locations:[{ location_id:5, can_manage:true, locations:{ id:5, code:'730', name:'730 Windham TEST' } }], qoblexConnected:false });
+  }
+  if (process.env.VERCEL_ENV === 'preview') return res.status(503).json({ ok:false, error:'preview_fixture_configuration_required' });
   const token = accessToken(req);
   if (!token && !hasBmOsSessionCookie(req)) return res.status(401).json({ ok: false, error: 'not_authenticated' });
   const { url, publishableKey, serviceRoleKey } = configuration();
