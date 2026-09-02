@@ -1,5 +1,6 @@
 const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
+const { requireManufacturingFeature } = require('./_lib/manufacturing-feature-gates');
 
 async function dbRequest(url, key, path, options = {}) {
   const response = await fetch(`${url}/rest/v1/${path}`, {
@@ -41,19 +42,14 @@ module.exports = async function manufacturingV2(req, res) {
     }
     const auth = await requireUser(req);
     if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
-    if (process.env.MANUFACTURING_V2_ENABLED !== 'true') {
-      return res.status(404).json({ ok: false, error: 'manufacturing_v2_disabled' });
-    }
     const { url, serviceRoleKey } = configuration();
-    const flags = await dbRequest(url, serviceRoleKey,
-      'mfg_feature_flags?flag_key=eq.manufacturing_v2&enabled=eq.true&select=flag_key&limit=1');
-    if (!flags.length) return res.status(404).json({ ok: false, error: 'manufacturing_v2_disabled' });
     if (req.method !== 'POST') return res.status(405).json({ ok: false, error: 'method_not_allowed' });
 
     const body = req.body || {};
     const actorId = Number(auth.user.id);
     let result;
     if (body.action === 'createDraft') {
+      await requireManufacturingFeature(url, serviceRoleKey, actorId, 'manufacturing_draft_enabled');
       await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_create_draft');
       result = await rpc(url, serviceRoleKey, 'create_mfg_work_order_draft', {
         p_actor_user_id: actorId,
@@ -66,6 +62,7 @@ module.exports = async function manufacturingV2(req, res) {
         p_idempotency_key: String(body.idempotencyKey || '')
       });
     } else if (body.action === 'release') {
+      await requireManufacturingFeature(url, serviceRoleKey, actorId, 'manufacturing_release_enabled');
       await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_release');
       const overrideReason = String(body.shortageOverrideReason || '').trim();
       if (overrideReason) await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_shortage_override');
@@ -76,6 +73,7 @@ module.exports = async function manufacturingV2(req, res) {
         p_shortage_override_reason: overrideReason || null
       });
     } else if (body.action === 'assignMachine') {
+      await requireManufacturingFeature(url, serviceRoleKey, actorId, 'manufacturing_draft_enabled');
       await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_assign_machine');
       result = await rpc(url, serviceRoleKey, 'assign_mfg_machine', {
         p_actor_user_id: actorId,
@@ -84,6 +82,7 @@ module.exports = async function manufacturingV2(req, res) {
         p_idempotency_key: String(body.idempotencyKey || '')
       });
     } else if (['start', 'pause', 'resume'].includes(body.action)) {
+      await requireManufacturingFeature(url, serviceRoleKey, actorId, 'manufacturing_completion_enabled');
       await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_start_pause');
       result = await rpc(url, serviceRoleKey, 'transition_mfg_work_order', {
         p_actor_user_id: actorId,
@@ -92,6 +91,7 @@ module.exports = async function manufacturingV2(req, res) {
         p_idempotency_key: String(body.idempotencyKey || '')
       });
     } else if (body.action === 'recordProgress') {
+      await requireManufacturingFeature(url, serviceRoleKey, actorId, 'manufacturing_completion_enabled');
       await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_record_progress');
       await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_partial_complete');
       result = await rpc(url, serviceRoleKey, 'record_mfg_progress', {
@@ -109,6 +109,7 @@ module.exports = async function manufacturingV2(req, res) {
         p_idempotency_key: String(body.idempotencyKey || '')
       });
     } else if (body.action === 'complete') {
+      await requireManufacturingFeature(url, serviceRoleKey, actorId, 'manufacturing_completion_enabled');
       await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_complete');
       result = await rpc(url, serviceRoleKey, 'complete_mfg_work_order', {
         p_actor_user_id: actorId,
@@ -116,6 +117,7 @@ module.exports = async function manufacturingV2(req, res) {
         p_idempotency_key: String(body.idempotencyKey || '')
       });
     } else if (body.action === 'close') {
+      await requireManufacturingFeature(url, serviceRoleKey, actorId, 'manufacturing_completion_enabled');
       await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_close');
       result = await rpc(url, serviceRoleKey, 'close_mfg_work_order', {
         p_actor_user_id: actorId,
@@ -123,6 +125,7 @@ module.exports = async function manufacturingV2(req, res) {
         p_idempotency_key: String(body.idempotencyKey || '')
       });
     } else if (body.action === 'cancel') {
+      await requireManufacturingFeature(url, serviceRoleKey, actorId, 'manufacturing_completion_enabled');
       await requirePermission(url, serviceRoleKey, actorId, 'manufacturing_cancel');
       result = await rpc(url, serviceRoleKey, 'cancel_mfg_work_order', {
         p_actor_user_id: actorId,
