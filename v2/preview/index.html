@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width,initial-scale=1">
+  <title>BM Warehouse · Manufacturing Preview</title>
+  <link rel="stylesheet" href="/preview.css">
+  <link rel="stylesheet" href="/manufacturing-v3.css">
+  <script src="/manufacturing-v3.js" defer></script>
+</head>
+<body>
+  <aside class="preview-sidebar" aria-label="BM Warehouse preview navigation">
+    <div class="preview-brand">BM<br>WAREHOUSE</div>
+    <button id="productionNav" class="nav-item active" type="button">Manufacturing</button>
+    <span class="preview-user">Phase 3 Test Manager<br><small>Authenticated preview</small></span>
+  </aside>
+  <div class="page">
+    <section id="productionView" class="mfg-workspace" aria-label="TEST ENVIRONMENT — NO PRODUCTION DATA" hidden></section>
+  </div>
+  <script>addEventListener('DOMContentLoaded',()=>document.getElementById('productionNav').click(),{once:true})</script>
+</body>
+</html>
