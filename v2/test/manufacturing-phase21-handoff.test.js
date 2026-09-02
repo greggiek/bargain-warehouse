@@ -7,6 +7,8 @@ const sql=fs.readFileSync(path.join(root,'supabase/migrations/20260902160000_man
 const rollback=fs.readFileSync(path.join(root,'supabase/rollbacks/20260902160000_manufacturing_native_transfer_handoff_rollback.sql'),'utf8');
 const worker=fs.readFileSync(path.join(root,'v2/api/manufacturing-transfer-handoff.js'),'utf8');
 const lifecycle=fs.readFileSync(path.join(root,'v2/api/shopify-transfer-lifecycle.js'),'utf8');
+const normalTransfer=fs.readFileSync(path.join(root,'v2/api/shopify-transfer-preview.js'),'utf8');
+const nativeTransfer=fs.readFileSync(path.join(root,'v2/api/_lib/shopify-native-transfer.js'),'utf8');
 
 test('completion creates one durable handoff and makes no Shopify call',()=>{
  assert.match(sql,/work_order_id bigint not null unique/);
@@ -30,10 +32,21 @@ test('worker leases one handoff with skip locked',()=>{
  assert.match(sql,/lease_expires_at<now\(\)/);
 });
 test('worker uses existing native transfer mutation and stable key',()=>{
- assert.match(worker,/inventoryTransferCreate/);
- assert.match(worker,/@idempotent\(key: \$idempotencyKey\)/);
+ assert.match(worker,/createShopifyNativeDraftTransfer/);
+ assert.match(nativeTransfer,/inventoryTransferCreate/);
+ assert.match(nativeTransfer,/@idempotent\(key: \$idempotencyKey\)/);
  assert.match(worker,/idempotencyKey:claim\.idempotencyKey/);
  assert.doesNotMatch(worker,/randomUUID/);
+});
+test('normal and Manufacturing creation converge on one shared helper',()=>{
+ assert.match(normalTransfer,/require\('\.\/_lib\/shopify-native-transfer'\)/);
+ assert.match(worker,/require\('\.\/_lib\/shopify-native-transfer'\)/);
+ assert.equal((normalTransfer.match(/createShopifyNativeDraftTransfer\(/g)||[]).length,1);
+ assert.equal((worker.match(/createShopifyNativeDraftTransfer\(/g)||[]).length,1);
+ assert.equal((nativeTransfer.match(/inventoryTransferCreate\(input:/g)||[]).length,1);
+ assert.doesNotMatch(normalTransfer,/inventoryTransferCreate\(input:/);
+ assert.doesNotMatch(worker,/inventoryTransferCreate\(input:/);
+ assert.match(nativeTransfer,/const API_VERSION = '2026-07'/);
 });
 test('native link relationship is unique and contains every line',()=>{
  assert.match(sql,/manufacturing_handoff_id bigint unique/);
