@@ -33,6 +33,12 @@ async function requirePermission(url, key, userId, permission) {
 
 module.exports = async function manufacturingV2(req, res) {
   try {
+    const isolatedPreview = process.env.VERCEL_ENV === 'preview' && process.env.MANUFACTURING_UI_FIXTURES === 'true' && process.env.PREVIEW_TEST_SESSION === 'enabled';
+    if (process.env.VERCEL_ENV === 'preview' && !isolatedPreview) return res.status(503).json({ ok:false,error:'preview_fixture_configuration_required' });
+    if (isolatedPreview) {
+      if (req.method !== 'POST') return res.status(405).json({ ok:false,error:'method_not_allowed' });
+      return res.status(200).json({ ok:true, previewSimulation:true, result:{ action:String(req.body?.action||''), simulated:true, inventoryEffect:false, externalEffect:false } });
+    }
     const auth = await requireUser(req);
     if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
     if (process.env.MANUFACTURING_V2_ENABLED !== 'true') {
