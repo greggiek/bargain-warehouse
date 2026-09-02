@@ -18,7 +18,9 @@ test('restricted pilot is fail-closed until explicitly configured', () => {
 test('pilot enforces one active, one-unit work order and the two resolved operators', () => {
   assert.match(migration, /quantity integer not null check \(quantity=1\)/);
   assert.match(migration, /manufacturing_pilot_one_active/);
-  assert.match(migration, /array\[3::bigint,18::bigint\]/);
+  assert.match(migration, /greg@bargainmoulding\.com/);
+  assert.match(migration, /edwin@bargainmoulding\.com/);
+  assert.match(migration, /p\.sku='CD2680PHLHSN80'/);
   assert.match(migration, /Only Greg or Edwin may operate this pilot/);
 });
 

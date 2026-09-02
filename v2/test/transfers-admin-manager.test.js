@@ -19,7 +19,7 @@ test('transfer master keeps creating and shipping behind administrator capabilit
   assert.match(client, /capabilities\.canManageTransfers/);
   assert.match(api, /TRANSFER_ADMIN_ROLES/);
   assert.match(api, /Administrator access is required to create transfers/);
-  assert.match(api, /Administrator access is required to ship transfers/);
+  assert.match(api, /Administrator access is required to allocate or ship transfers/);
 });
 
 test('manager transfer reads are limited to inbound managed locations', () => {

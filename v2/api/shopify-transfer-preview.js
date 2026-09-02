@@ -1,40 +1,12 @@
 const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
-
-const API_VERSION = '2026-07';
-const clean = value => String(value || '').replace(/^https?:\/\//, '').replace(/\/+$/, '');
+const { graphql, createShopifyNativeDraftTransfer } = require('./_lib/shopify-native-transfer');
 const stores = () => [
   { key: 'store_1', label: 'Shopify NY', domain: process.env.SHOPIFY_STORE_1_DOMAIN, clientId: process.env.SHOPIFY_STORE_1_CLIENT_ID, clientSecret: process.env.SHOPIFY_STORE_1_CLIENT_SECRET },
   { key: 'store_2', label: 'Shopify CT', domain: process.env.SHOPIFY_STORE_2_DOMAIN, clientId: process.env.SHOPIFY_STORE_2_CLIENT_ID, clientSecret: process.env.SHOPIFY_STORE_2_CLIENT_SECRET }
 ];
 const adminOnly = auth => ['admin', 'developer'].includes(auth.user.role);
 
-async function tokenFor(store) {
-  const shop = clean(store.domain);
-  if (!shop || !store.clientId || !store.clientSecret) throw new Error(store.label + ': Shopify connection is not configured');
-  const response = await fetch('https://' + shop + '/admin/oauth/access_token', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-    body: new URLSearchParams({ grant_type: 'client_credentials', client_id: store.clientId, client_secret: store.clientSecret }),
-    signal: AbortSignal.timeout(20000)
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || !body.access_token) throw new Error(store.label + ': Shopify token request failed');
-  return { shop, token: body.access_token };
-}
-
-async function graphql(store, query, variables) {
-  const { shop, token } = await tokenFor(store);
-  const response = await fetch('https://' + shop + '/admin/api/' + API_VERSION + '/graphql.json', {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json', 'X-Shopify-Access-Token': token },
-    body: JSON.stringify({ query, variables }),
-    signal: AbortSignal.timeout(25000)
-  });
-  const body = await response.json().catch(() => ({}));
-  if (!response.ok || body.errors?.length) throw new Error(body.errors?.map(item => item.message).join('; ') || store.label + ': Shopify request failed');
-  return body.data;
-}
 
 async function loadConfig(url, key) {
   const [locationsResponse, mappingsResponse] = await Promise.all([
@@ -145,13 +117,6 @@ async function preview(url, key, body) {
   };
 }
 
-const createNativeTransferMutation = `mutation CreateNativeTransfer($input: InventoryTransferCreateInput!, $idempotencyKey: String!) {
-  inventoryTransferCreate(input: $input) @idempotent(key: $idempotencyKey) {
-    inventoryTransfer { id name status referenceName }
-    userErrors { field message }
-  }
-}`;
-
 async function nextTransferReference(url, key) {
   const response = await fetch(url + '/rest/v1/rpc/next_bm_transfer_reference', { method: 'POST', headers: jsonHeaders(key), body: '{}' });
   const value = await response.json().catch(() => null);
@@ -203,25 +168,19 @@ async function createNativeTransfer(url, key, auth, body) {
   if (!link) throw new Error('Could not create the BM transfer audit link.');
 
   try {
-    const data = await graphql(store, createNativeTransferMutation, {
-      input: {
+    const transfer = await createShopifyNativeDraftTransfer({ store, input: {
         originLocationId: source.shopify_location_id,
         destinationLocationId: destination.shopify_location_id,
         lineItems: plan.lines.map(line => ({ inventoryItemId: line.sourceInventoryItemId, quantity: line.quantity })),
         referenceName: bmReference,
         note: 'Created by BM Warehouse V2. Draft only; Shopify remains inventory authority.',
         tags: ['BM Warehouse', 'BM Transfer']
-      },
-      idempotencyKey: crypto.randomUUID()
+      }, idempotencyKey: crypto.randomUUID()
     });
-    const payload = data.inventoryTransferCreate || {};
-    const errors = payload.userErrors || [];
-    if (errors.length) throw new Error(errors.map(item => item.message).join('; '));
-    if (!payload.inventoryTransfer?.id) throw new Error('Shopify did not return a transfer ID.');
 
     await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'PATCH', key, {
-      source_shopify_transfer_id: payload.inventoryTransfer.id,
-      metadata: { created_from: 'bm_warehouse_v2', write_mode: 'native_shopify_transfer', shopify_transfer_name: payload.inventoryTransfer.name }
+      source_shopify_transfer_id: transfer.id,
+      metadata: { created_from: 'bm_warehouse_v2', write_mode: 'native_shopify_transfer', shopify_transfer_name: transfer.name }
     });
     await postgrest(url, 'shopify_transfer_link_lines', 'POST', key, plan.lines.map(line => ({
       transfer_link_id: link.id,
@@ -232,8 +191,8 @@ async function createNativeTransfer(url, key, auth, body) {
     })));
     return {
       bmReference,
-      shopifyTransfer: payload.inventoryTransfer,
-      message: 'Draft Shopify transfer ' + (payload.inventoryTransfer.name || bmReference) + ' created. It has not moved stock; mark it Ready to ship in Shopify when material actually leaves.'
+      shopifyTransfer: transfer,
+      message: 'Draft Shopify transfer ' + (transfer.name || bmReference) + ' created. It has not moved stock; mark it Ready to ship in Shopify when material actually leaves.'
     };
   } catch (error) {
     await postgrest(url, 'shopify_transfer_links?id=eq.' + encodeURIComponent(link.id), 'PATCH', key, { status: 'failed', error: error.message || 'Shopify transfer creation failed' }).catch(() => {});

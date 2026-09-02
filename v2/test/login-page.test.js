@@ -19,9 +19,10 @@ test('login page does not expose Supabase credentials', () => {
 });
 
 test('login page renders role and assigned locations', () => {
+  assert.match(page, /id="sessionAccessSummary"/);
   assert.match(page, /session\.user\.role/);
   assert.match(page, /session\.locations/);
-  assert.match(page, /access\.can_manage/);
+  assert.match(page, /access\.locations\?\.name/);
 });
 
 test('authenticated shell provides a route back to BM OS', () => {
@@ -30,7 +31,9 @@ test('authenticated shell provides a route back to BM OS', () => {
 });
 
 test('mobile shell keeps navigation available and contains content', () => {
-  assert.match(page, /nav-group\[hidden\] \{ display: contents; \}/);
-  assert.match(page, /\.page \{ min-width: 0; width: 100%;/);
-  assert.doesNotMatch(page, /<\/script>\\n/);
+  assert.match(page, /id="mobileNavToggle"/);
+  assert.match(page, /shell\.nav-open>aside/);
+  assert.match(page, /classList\.toggle\('nav-open'\)/);
+  assert.match(page, /\.page\{min-width:0!important/);
+  assert.match(page, /<\/body>\s*<\/html>\s*$/);
 });

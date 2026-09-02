@@ -63,9 +63,26 @@ insert into public.manufacturing_pilot_gate(
   origin_location_id,destination_location_id,machine_code,approved_user_ids,
   configured_by_user_id,configured_at
 )
-select 'BM-MFG-PILOT-001',false,194,3523,id,7,'NIGHTHAWK',array[3::bigint,18::bigint],3,now()
-from public.locations where code='730' and name='730 Windham Rd' and active
+select 'BM-MFG-PILOT-001',false,b.id,p.id,origin.id,destination.id,'NIGHTHAWK',
+  array[greg.id,edwin.id]::bigint[],greg.id,now()
+from public.products p
+join public.product_boms b on b.finished_product_id=p.id and b.active
+join public.locations origin on origin.code='730' and origin.name='730 Windham Rd' and origin.active
+join public.locations destination on destination.name='Annex' and destination.active
+join public.app_users greg on lower(greg.email)='greg@bargainmoulding.com' and greg.active
+join public.app_users edwin on lower(edwin.email)='edwin@bargainmoulding.com' and edwin.active
+where p.sku='CD2680PHLHSN80'
 on conflict (pilot_identifier) do nothing;
+
+do $$ begin
+  if not exists (
+    select 1 from public.manufacturing_pilot_gate
+    where pilot_identifier='BM-MFG-PILOT-001' and enabled is false
+      and cardinality(approved_user_ids)=2
+  ) then
+    raise exception 'BM-MFG-PILOT-001 configuration did not resolve exactly';
+  end if;
+end $$;
 
 create or replace function public.create_manufacturing_pilot_draft(
   p_pilot_identifier text,p_user_id bigint
