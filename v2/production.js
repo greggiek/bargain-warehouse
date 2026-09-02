@@ -253,7 +253,7 @@
       if ($(id)) $(id).hidden = true;
     });
     view.hidden = false;
-    document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.id === 'productionNav'));
+    document.querySelectorAll('.nav-item').forEach(x => x.classList.toggle('active', x.id === 'specialOrderProductionNav'));
     const d = await get();
     locations = d.locations || [];
     boms = d.activeBoms || [];
@@ -275,7 +275,7 @@
   };
 
   document.addEventListener('DOMContentLoaded', () => {
-    view = $('productionView');
+    view = $('legacyProductionView');
     const legacyBomSelect = $('productionBom');
     legacyBomSelect.hidden = true;
     const picker = document.createElement('div');
@@ -292,8 +292,7 @@
     groups.hidden = true;
     picker.append(search, groups);
     legacyBomSelect.after(picker);
-    $('productionNav').addEventListener('click', () => open().catch(e => say(e.message, true)));
-    const overviewManufacturing = $('overviewManufacturing'); if (overviewManufacturing) overviewManufacturing.addEventListener('click', () => open().catch(e => say(e.message, true)));
+    $('specialOrderProductionNav').addEventListener('click', () => open().catch(e => say(e.message, true)));
     $('productionBomSearch').oninput = renderBomPicker;
     $('productionBomSearch').onfocus = renderBomPicker;
     $('productionAddLine').onclick = () => {
