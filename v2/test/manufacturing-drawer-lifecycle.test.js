@@ -2,7 +2,7 @@ const test=require('node:test');
 const assert=require('node:assert/strict');
 const fs=require('node:fs');
 const path=require('node:path');
-const createDrawerLifecycle=require('../manufacturing-drawer.js');
+const createDrawerLifecycle=require('../manufacturing-v3.js');
 
 class Classes{
   constructor(){this.values=new Set()}
