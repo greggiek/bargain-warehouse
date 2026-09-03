@@ -1,6 +1,7 @@
 const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
 const { graphql, createShopifyNativeDraftTransfer } = require('./_lib/shopify-native-transfer');
+const { resolveTransferRoute } = require('./_lib/shopify-transfer-router');
 const stores = () => [
   { key: 'store_1', label: 'Shopify NY', domain: process.env.SHOPIFY_STORE_1_DOMAIN, clientId: process.env.SHOPIFY_STORE_1_CLIENT_ID, clientSecret: process.env.SHOPIFY_STORE_1_CLIENT_SECRET },
   { key: 'store_2', label: 'Shopify CT', domain: process.env.SHOPIFY_STORE_2_DOMAIN, clientId: process.env.SHOPIFY_STORE_2_CLIENT_ID, clientSecret: process.env.SHOPIFY_STORE_2_CLIENT_SECRET }
@@ -102,7 +103,7 @@ async function preview(url, key, body) {
     });
   }
 
-  const routeType = source.store_key === destination.store_key ? 'same_store' : 'cross_store';
+  const routeType = resolveTransferRoute(source.store_key, destination.store_key);
   return {
     previewOnly: true,
     routeType,

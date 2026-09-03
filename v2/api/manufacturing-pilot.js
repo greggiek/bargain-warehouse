@@ -18,10 +18,10 @@ module.exports = async function manufacturingPilot(req, res) {
   if (req.method !== 'POST') return res.status(405).json({ok:false,error:'method_not_allowed'});
   const {url,serviceRoleKey}=configuration(); const body=req.body||{};
   try {
-    if (body.action==='create_draft') return res.status(201).json({ok:true,...await rpc(url,serviceRoleKey,'create_manufacturing_pilot_draft',{p_pilot_identifier:PILOT,p_user_id:auth.user.id})});
-    const allowed=new Set(['release','start','record_good_unit','confirm_shopify','close']);
+    if(body.action==='bind_draft') return res.status(200).json({ok:true,...await rpc(url,serviceRoleKey,'bind_manufacturing_pilot_draft',{p_actor_user_id:auth.user.id,p_work_order_id:Number(body.workOrderId)})});
+    const allowed=new Set(['release','start','record_good_unit','complete','close']);
     if (!allowed.has(body.action)) return res.status(403).json({ok:false,error:'pilot_action_rejected'});
-    const result=await rpc(url,serviceRoleKey,'advance_manufacturing_pilot',{p_pilot_order_id:Number(body.pilotOrderId),p_action:body.action,p_user_id:auth.user.id,p_external_reference:String(body.externalReference||'')});
+    const result=await rpc(url,serviceRoleKey,'run_manufacturing_pilot_action',{p_actor_user_id:auth.user.id,p_work_order_id:Number(body.workOrderId),p_action:body.action,p_idempotency_key:String(body.idempotencyKey||'')});
     return res.status(200).json({ok:true,...result});
   } catch(error) { return res.status(400).json({ok:false,error:error.message||'pilot_request_failed'}); }
 };

@@ -80,15 +80,12 @@ async function allowed(req) {
 module.exports = async function manufacturingInventorySync(req, res) {
   if (!(await allowed(req))) return res.status(req.method === 'GET' || req.method === 'POST' ? 403 : 405).json({ ok: false, error: 'manufacturing_inventory_sync_not_authorized' });
   const { url, serviceRoleKey } = configuration();
-  try {
-    await requireControl(url, serviceRoleKey, 'manufacturing_shopify_outbound_enabled');
-    await requireControl(url, serviceRoleKey, 'manufacturing_inventory_mutations_enabled');
-  } catch (error) {
-    return res.status(403).json({ ok: false, error: error.message });
-  }
+  // Authorization is performed atomically by the database claim. It admits either
+  // fully enabled normal production or the exact bound restricted-pilot record.
   const claim = await rpc(url, serviceRoleKey, 'claim_mfg_shopify_inventory_adjustment', { p_lease_seconds: 120 });
   if (!claim) return res.status(200).json({ ok: true, processed: false });
   try {
+    await rpc(url, serviceRoleKey, 'assert_mfg_worker_claim_eligible', { p_kind:'inventory',p_record_id:claim.id,p_lease_token:claim.leaseToken });
     const store = stores().find(item => item.key === claim.storeKey);
     if (!store) throw new Error('Shopify store route is unavailable.');
     const before = await graphql(store, levelQuery, { inventoryItemId: claim.shopifyInventoryItemId, locationId: claim.shopifyLocationId });

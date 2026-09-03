@@ -1,6 +1,7 @@
 const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
 const { createShopifyNativeDraftTransfer } = require('./_lib/shopify-native-transfer');
+const { resolveTransferRoute } = require('./_lib/shopify-transfer-router');
 const stores = () => [
   { key:'store_1',label:'Shopify NY',domain:process.env.SHOPIFY_STORE_1_DOMAIN,clientId:process.env.SHOPIFY_STORE_1_CLIENT_ID,clientSecret:process.env.SHOPIFY_STORE_1_CLIENT_SECRET },
   { key:'store_2',label:'Shopify CT',domain:process.env.SHOPIFY_STORE_2_DOMAIN,clientId:process.env.SHOPIFY_STORE_2_CLIENT_ID,clientSecret:process.env.SHOPIFY_STORE_2_CLIENT_SECRET }
@@ -25,12 +26,20 @@ async function authorized(req){
 module.exports=async function manufacturingTransferHandoff(req,res){
   if(!(await authorized(req))) return res.status(['GET','POST'].includes(req.method)?403:405).json({ok:false,error:'manufacturing_transfer_handoff_not_authorized'});
   const {url,serviceRoleKey}=configuration();
-  try{await requireControl(url,serviceRoleKey,'manufacturing_transfer_handoff_enabled');await requireControl(url,serviceRoleKey,'manufacturing_shopify_outbound_enabled');}
-  catch(error){return res.status(403).json({ok:false,error:error.message});}
+  // The database claim is the worker authorization boundary. Global production
+  // and the exact bound pilot use mutually exclusive, fail-closed eligibility.
   const claim=await rpc(url,serviceRoleKey,'claim_mfg_transfer_handoff',{p_lease_seconds:120});
   if(!claim) return res.status(200).json({ok:true,processed:false});
   try{
+    await rpc(url,serviceRoleKey,'assert_mfg_worker_claim_eligible',{p_kind:'transfer',p_record_id:claim.id,p_lease_token:claim.leaseToken});
     const link=await rpc(url,serviceRoleKey,'begin_mfg_transfer_handoff_link',{p_handoff_id:claim.id,p_lease_token:claim.leaseToken});
+    const routeType=resolveTransferRoute(link.sourceStoreKey,link.destinationStoreKey);
+    if(routeType==='cross_store'){
+      const result=await rpc(url,serviceRoleKey,'finish_mfg_cross_store_transfer_draft',{
+        p_handoff_id:claim.id,p_lease_token:claim.leaseToken
+      });
+      return res.status(200).json({ok:true,processed:true,routeType:'cross_store',inventoryEffect:false,result});
+    }
     if(link.existingShopifyTransferId){
       const result=await rpc(url,serviceRoleKey,'finish_mfg_transfer_handoff',{
         p_handoff_id:claim.id,p_lease_token:claim.leaseToken,p_shopify_transfer_id:link.existingShopifyTransferId,p_shopify_name:link.bmReference
@@ -50,7 +59,7 @@ module.exports=async function manufacturingTransferHandoff(req,res){
       p_handoff_id:claim.id,p_lease_token:claim.leaseToken,p_shopify_transfer_id:transfer.id,
       p_shopify_name:transfer.name||link.bmReference
     });
-    return res.status(200).json({ok:true,processed:true,reconciledExisting:false,result});
+    return res.status(200).json({ok:true,processed:true,routeType:'same_store',reconciledExisting:false,result});
   }catch(error){
     await rpc(url,serviceRoleKey,'fail_mfg_transfer_handoff',{p_handoff_id:claim.id,p_lease_token:claim.leaseToken,
       p_error:error.message||'manufacturing_transfer_handoff_failed',p_permanent:false}).catch(leaseError=>
