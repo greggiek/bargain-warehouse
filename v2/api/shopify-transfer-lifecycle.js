@@ -60,6 +60,13 @@ async function loadLink(url, key, id) {
   return link;
 }
 
+async function assertPilotTransferAction(url,key,auth,link,action){
+  if(!link.pilot_identifier&&!link.pilot_work_order_id)return;
+  await postgrest(url,'rpc/assert_manufacturing_pilot_transfer_action','POST',key,{
+    p_transfer_link_id:link.id,p_actor_user_id:auth.user.id,p_action:action
+  });
+}
+
 function storeFor(key) {
   const store = stores().find(item => item.key === key);
   if (!store) throw new Error('Shopify store mapping is unavailable.');
@@ -217,7 +224,7 @@ async function recordIntercompanyShipmentValue(url, key, link, adjustmentId) {
       transfer_link_id: link.id,
       transfer_line_id: line.id,
       bm_reference: link.bm_reference,
-      status: 'pending',
+      status: 'shipped',
       source_entity: link.metadata?.source_entity || link.source_store_key,
       destination_entity: link.metadata?.destination_entity || link.destination_store_key,
       source_location_id: link.source_location_id,
@@ -237,7 +244,7 @@ async function recordIntercompanyShipmentValue(url, key, link, adjustmentId) {
 
 async function recordIntercompanyReceiptValue(url, key, link, adjustmentId) {
   await postgrest(url, 'intercompany_transfer_ledger_lines?transfer_link_id=eq.' + encodeURIComponent(link.id), 'PATCH', key, {
-    status: 'received',
+    status: 'completed',
     destination_shopify_adjustment_id: adjustmentId,
     received_at: new Date().toISOString(),
     updated_at: new Date().toISOString()
@@ -432,6 +439,8 @@ module.exports = async function shopifyTransferLifecycle(req, res) {
     const linkId = String(req.body?.linkId || '');
     if (!linkId) return res.status(400).json({ ok: false, error: 'Shopify transfer link is required.' });
     const link = await loadLink(url, serviceRoleKey, linkId);
+
+    await assertPilotTransferAction(url,serviceRoleKey,auth,link,action);
 
     if (action === 'delete_draft') {
       if (!isAdmin || !managed.has(Number(link.source_location_id))) return res.status(403).json({ ok: false, error: 'Administrator manage access is required at the sending warehouse.' });
