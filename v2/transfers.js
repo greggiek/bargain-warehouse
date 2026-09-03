@@ -382,6 +382,7 @@
     if(!response.ok){show(data.error||'Could not load Shopify transfer links.',true);return;}
     shopifyTransferLinks=data.links||[];shopifyTransferCapabilities=data.capabilities||shopifyTransferCapabilities;renderShopifyTransfers();
   }
+  window.openShopifyTransferDetail=async linkId=>{await loadShopifyTransfers();const link=shopifyTransferLinks.find(item=>String(item.id)===String(linkId));if(!link)throw Error('Transfer detail could not be found.');openTransferDetails(link);return true};
 
   // Native Shopify transfers are deliberately separate from the legacy V2 ledger path.
   // The button is admin-only, creates a DRAFT in Shopify, and requires a second explicit
