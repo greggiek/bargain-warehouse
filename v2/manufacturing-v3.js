@@ -32,5 +32,5 @@
  function drawerError(error,retry){$('mfgDrawerBody').innerHTML=`<div class="mfg-card mfg-empty"><h2>Could not load detail</h2><p>${esc(error.message)}</p><button class="mfg-btn" data-detail-retry>Retry</button><button class="mfg-btn secondary" data-close>Close</button></div>`;bindDrawer();$('mfgDrawerBody [data-detail-retry]').onclick=retry}
  function openDrawer(html){$('mfgDrawerBody').innerHTML=html;if(!$('mfgDrawer').open)$('mfgDrawer').showModal();document.body.classList.add('mfg-drawer-open');bindDrawer()}
  function open(){document.querySelectorAll('.page>section').forEach(x=>x.hidden=x!==view);view.hidden=false;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.id==='productionNav'));if(!state.loaded){shell();state.loaded=true}load('planner');}
- $('productionNav').addEventListener('click',open);$('overviewManufacturing')?.addEventListener('click',open);
+ window.openProduction=open;$('productionNav').addEventListener('click',open);$('overviewManufacturing')?.addEventListener('click',open);
 })();
