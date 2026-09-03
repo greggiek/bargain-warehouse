@@ -52,7 +52,7 @@ module.exports=async function manufacturingUi(req,res){
   }
   if(view==='orders')return res.json({...common,total:rows.length,rows});
   if(view==='boms'){
-   const bomRows=boms.map(b=>({id:b.id,sku:b.products?.sku||'—',product:b.products?.name||'—',version:b.version_number||1,status:b.status,
+   const bomRows=boms.map(b=>({id:b.id,finishedProductId:b.finished_product_id,sku:b.products?.sku||'—',product:b.products?.name||'—',version:b.version_number||1,status:b.status,
     components:(b.mfg_bom_version_components||[]).length,validation:(b.mfg_bom_version_components||[]).length?'Ready':'Missing',source:b.source_type==='qoblex_import'?'Qoblex import':'BM manual',
     updated:String(b.activated_at||b.created_at||'').slice(0,10),componentHash:b.component_hash,componentRows:(b.mfg_bom_version_components||[]).map(c=>({sku:c.products?.sku||'—',name:c.products?.name||'—',quantity:c.quantity_per_yield,uom:'EA',status:'Active'}))}));
    return res.json({...common,total:bomRows.length,rows:bomRows});
