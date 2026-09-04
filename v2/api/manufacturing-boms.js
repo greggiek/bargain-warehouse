@@ -48,7 +48,14 @@ module.exports = async (req, res) => {
         return res.status(200).json({ template: source, components: (source.components || []).map(component => ({ sku: component.sku, quantity: component.quantity, product: bySku.get(String(component.sku || '').trim().toUpperCase()) || null })) });
       }
       const finishedId = Number(req.query?.bomForProductId);
+      const versionId = Number(req.query?.bomVersionId);
       const locationId = Number(req.query?.locationId);
+      if (versionId) {
+        const q = new URLSearchParams({ id:'eq.' + versionId, select:'id,source_bom_id,version_number,finished_product_id,yield_quantity,status,notes,component_hash,products!mfg_bom_versions_finished_product_id_fkey(id,sku,name),mfg_bom_version_components(component_product_id,quantity_per_yield,products(id,sku,name))', limit:'1' });
+        const response = await fetch(supabaseUrl + '/rest/v1/mfg_bom_versions?' + q, { headers:jsonHeaders(serviceRoleKey), signal:AbortSignal.timeout(8000) });
+        const rows = await response.json(); if (!response.ok) throw new Error(rows.message || 'BOM version lookup failed');
+        return res.status(rows[0] ? 200 : 404).json(rows[0] ? { bomVersion:rows[0] } : { error:'bom_version_not_found' });
+      }
       if (finishedId) {
         const q = new URLSearchParams({ finished_product_id: 'eq.' + finishedId, active: 'eq.true', select: 'id,yield_quantity,notes,products!product_boms_finished_product_id_fkey(id,sku,name),product_bom_components(id,component_product_id,quantity_per_yield,products(id,sku,name))', limit: '1' });
         const response = await fetch(supabaseUrl + '/rest/v1/product_boms?' + q, { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
@@ -65,45 +72,14 @@ module.exports = async (req, res) => {
         }
         return res.status(200).json({ bom, locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })) });
       }
-      const h = await fetch(supabaseUrl + '/rest/v1/activity_events?document_type=eq.production&order=created_at.desc&limit=20&select=document_number,description,status,created_at,user_name', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
-      const allHistory = await h.json(); if (!h.ok) throw new Error('production history lookup failed');
-      const permitted = new Set(access.map(x => Number(x.location_id)));
-      const history = allHistory.filter(x => permitted.has(Number(x.metadata?.locationId)));
-      const [w, b] = await Promise.all([
-        fetch(supabaseUrl + '/rest/v1/production_jobs?status=eq.allocated&order=started_at.desc&select=id,job_number,machine_code,reference,destination:locations!production_jobs_destination_location_id_fkey(name),production_job_lines(output_quantity,product_boms(yield_quantity,products!product_boms_finished_product_id_fkey(sku,name),product_bom_components(quantity_per_yield,component_product_id,products(id,sku,name))))', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) }),
-        fetch(supabaseUrl + '/rest/v1/product_boms?active=eq.true&select=id,yield_quantity,products!product_boms_finished_product_id_fkey(id,sku,name)', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) })
-      ]);
-      const [activeProductionJobs, activeBoms] = await Promise.all([w.json(), b.json()]);
-      if (!w.ok) throw new Error('active production job lookup failed');
-      if (!b.ok) throw new Error('active BOM lookup failed');
-      const productionLocation = access.find(x => x.locations?.code === '730' || x.locations?.name === '730 Windham Rd');
-      const componentIds = [...new Set(activeProductionJobs.flatMap(job => (job.production_job_lines || []).flatMap(line => (line.product_boms?.product_bom_components || []).map(component => Number(component.component_product_id)).filter(Boolean))))];
-      if (productionLocation && componentIds.length) {
-        const balanceResponse = await fetch(supabaseUrl + '/rest/v1/inventory_balances?location_id=eq.' + productionLocation.location_id + '&product_id=in.(' + componentIds.join(',') + ')&select=product_id,quantity,allocated_quantity', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
-        const balances = await balanceResponse.json();
-        if (!balanceResponse.ok) throw new Error('production reservation balance lookup failed');
-        const balanceByProduct = new Map(balances.map(row => [Number(row.product_id), row]));
-        activeProductionJobs.forEach(job => (job.production_job_lines || []).forEach(line => (line.product_boms?.product_bom_components || []).forEach(component => {
-          component.balance = balanceByProduct.get(Number(component.component_product_id)) || { quantity: 0, allocated_quantity: 0 };
-        })));
-      }
-      const finishedIds = activeBoms.map(row => Number(row.products?.id)).filter(Boolean);
-      if (finishedIds.length) {
-        const sourcesResponse = await fetch(supabaseUrl + '/rest/v1/v1_door_bom_sources?v2_finished_product_id=in.(' + finishedIds.join(',') + ')&match_status=eq.matched&select=v2_finished_product_id,finished_name', { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
-        const sources = await sourcesResponse.json();
-        if (!sourcesResponse.ok) throw new Error('finished door title lookup failed');
-        const titleByProductId = new Map(sources.map(row => [Number(row.v2_finished_product_id), row.finished_name]));
-        activeBoms.forEach(row => { row.finishedTitle = titleByProductId.get(Number(row.products?.id)) || row.products?.name || ''; });
-      }
-      activeBoms.sort((a, z) => String(a.products?.sku || '').localeCompare(String(z.products?.sku || '')));
-      return res.status(200).json({ locations: access.map(x => ({ id:x.location_id,name:x.locations.name,canManage:x.can_manage })), history, activeProductionJobs, activeBoms });
+      return res.status(400).json({ error: 'bom_query_required' });
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
     const body = req.body || {}; const action = body.action;
-    // Manufacturing is fail-closed. The only real mutation path is the dedicated
-    // BM-MFG-PILOT-001 endpoint, whose restrictions are rechecked in Postgres.
-    if (['startWorkOrder','startProductionJob','completeProductionJob','completeWorkOrder','complete'].includes(action)) {
-      return res.status(403).json({ error: 'manufacturing_restricted_pilot_only' });
+    if (action === 'saveBomDraft') {
+      if (auth.user.role !== 'admin') return res.status(403).json({ error:'admin_required_for_bom_changes' });
+      const data = await rpc(supabaseUrl, serviceRoleKey, 'save_mfg_bom_draft', { p_actor_user_id:auth.user.id, p_source_bom_version_id:Number(body.sourceBomVersionId), p_yield_quantity:Number(body.yieldQuantity), p_components:(body.components || []).map(x => ({ productId:x.component_product_id, quantity:x.quantity_per_yield })), p_notes:String(body.notes || ''), p_idempotency_key:String(body.idempotencyKey || '') });
+      return res.status(200).json(data);
     }
     if (action === 'saveBom') {
       if (auth.user.role !== 'admin') return res.status(403).json({ error: 'admin_required_for_bom_changes' });
@@ -120,35 +96,6 @@ module.exports = async (req, res) => {
       }
       return res.status(200).json(data);
     }
-    if (action === 'startWorkOrder') {
-      const destinationId = Number(body.destinationLocationId);
-      const productionLocation = access.find(x => x.locations?.code === '730' || x.locations?.name === '730 Windham Rd');
-      if (!productionLocation?.can_manage || !allowed.get(destinationId)) return res.status(403).json({ error: 'location_manage_required' });
-      const data = await rpc(supabaseUrl, serviceRoleKey, 'start_v2_production_work_order', { p_bom_id:Number(body.bomId), p_destination_location_id:destinationId, p_output_quantity:Number(body.quantity), p_reference:String(body.reference || ''), p_idempotency_key:String(body.idempotencyKey || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
-      return res.status(200).json(data);
-    }
-    if (action === 'startProductionJob') {
-      const destinationId = Number(body.destinationLocationId);
-      const productionLocation = access.find(x => x.locations?.code === '730' || x.locations?.name === '730 Windham Rd');
-      if (!productionLocation?.can_manage || !allowed.get(destinationId)) return res.status(403).json({ error: 'location_manage_required' });
-      const machineCode = String(body.machineCode || '').trim().toUpperCase();
-      const data = await rpc(supabaseUrl, serviceRoleKey, 'start_v2_stock_production_job', { p_destination_location_id:destinationId, p_lines:(body.lines || []).map(line => ({ bom_id:Number(line.bomId), quantity:Number(line.quantity) })), p_reference:String(body.reference || ''), p_idempotency_key:String(body.idempotencyKey || ''), p_machine_code:machineCode, p_user_id:auth.user.id, p_user_name:auth.user.display_name });
-      return res.status(200).json(data);
-    }
-    if (action === 'completeProductionJob') {
-      const data = await rpc(supabaseUrl, serviceRoleKey, 'complete_v2_production_job', { p_job_id:Number(body.jobId), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
-      return res.status(200).json(data);
-    }
-    if (action === 'completeWorkOrder') {
-      const data = await rpc(supabaseUrl, serviceRoleKey, 'complete_v2_production_work_order', { p_work_order_id:Number(body.workOrderId), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
-      return res.status(200).json(data);
-    }
-    if (action === 'complete') {
-      const locationId = Number(body.locationId);
-      if (!allowed.get(locationId)) return res.status(403).json({ error: 'location_manage_required' });
-      const data = await rpc(supabaseUrl, serviceRoleKey, 'complete_v2_production', { p_bom_id:Number(body.bomId), p_location_id:locationId, p_output_quantity:Number(body.quantity), p_reference:String(body.reference || ''), p_idempotency_key:String(body.idempotencyKey || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });
-      return res.status(200).json(data);
-    }
     return res.status(400).json({ error: 'unknown_action' });
-  } catch (error) { return res.status(400).json({ error: error.message || 'production_failed' }); }
+  } catch (error) { return res.status(400).json({ error: error.message || 'manufacturing_bom_failed' }); }
 };
