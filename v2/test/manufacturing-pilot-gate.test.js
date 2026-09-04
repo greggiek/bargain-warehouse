@@ -5,8 +5,7 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..', '..');
 const migration = fs.readFileSync(path.join(root, 'supabase/migrations/20260902170000_restricted_manufacturing_pilot.sql'), 'utf8');
-const productionApi = fs.readFileSync(path.join(root, 'v2/api/production.js'), 'utf8');
-const pilotApi = fs.readFileSync(path.join(root, 'v2/api/manufacturing-pilot.js'), 'utf8');
+const canonicalApi = fs.readFileSync(path.join(root, 'v2/api/manufacturing-v2.js'), 'utf8');
 
 test('restricted pilot is fail-closed until explicitly configured', () => {
   assert.match(migration, /enabled boolean not null default false/);
@@ -35,9 +34,9 @@ test('release and completion both reject component shortages', () => {
   assert.doesNotMatch(migration, /greatest\(0,allocated_quantity/);
 });
 
-test('legacy manufacturing mutations are blocked server-side', () => {
-  assert.match(productionApi, /manufacturing_restricted_pilot_only/);
-  assert.match(pilotApi, /BM-MFG-PILOT-001/);
-  assert.match(pilotApi, /greg@bargainmoulding\.com/);
-  assert.match(pilotApi, /edwin@bargainmoulding\.com/);
+test('standalone pilot and legacy production endpoints are retired', () => {
+  assert.equal(fs.existsSync(path.join(root, 'v2/api/production.js')), false);
+  assert.equal(fs.existsSync(path.join(root, 'v2/api/manufacturing-pilot.js')), false);
+  assert.match(canonicalApi, /manufacturing_release_enabled/);
+  assert.match(canonicalApi, /manufacturing_completion_enabled/);
 });

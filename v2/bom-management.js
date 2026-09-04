@@ -4,8 +4,8 @@
   const pageSize = 25;
   let good = [], needsSetup = [], mode = 'good', visible = pageSize, finished = null, components = [], sourceTemplateSku = null, timer;
   const set = (text, error = false) => { $('bomManagementStatus').textContent = text; $('bomManagementStatus').classList.toggle('error', error); };
-  async function get(path) { const response = await fetch('/api/production' + path, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Request failed'); return data; }
-  async function post(body) { const response = await fetch('/api/production', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Request failed'); return data; }
+  async function get(path) { const response = await fetch('/api/manufacturing-boms' + path, { credentials: 'same-origin', cache: 'no-store' }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Request failed'); return data; }
+  async function post(body) { const response = await fetch('/api/manufacturing-boms', { method: 'POST', headers: { 'Content-Type': 'application/json' }, credentials: 'same-origin', body: JSON.stringify(body) }); const data = await response.json(); if (!response.ok) throw new Error(data.error || 'Request failed'); return data; }
   function clearEditor() { finished = null; components = []; sourceTemplateSku = null; $('bomManagementFinished').value = ''; $('bomManagementYield').value = '1'; $('bomManagementNotes').value = ''; $('bomEditorTitle').textContent = 'Choose a BOM to edit'; $('bomEditorHelp').textContent = 'Select a working recipe, or open a V1 recipe that needs its finished SKU mapped.'; renderComponents(); }
   function matches(row, term) { return !term || [row.sku || row.finished_sku, row.name || row.finished_name].join(' ').toLowerCase().includes(term); }
   function renderList() {

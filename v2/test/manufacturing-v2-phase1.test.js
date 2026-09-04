@@ -48,8 +48,9 @@ test('costing foundation refuses to manufacture a zero-dollar cost', () => {
   assert.match(migration, /coalesce\(p\.moving_average_cost,0\)<=0/);
 });
 
-test('legacy production, Forecasting and Inventory source files are not replaced', () => {
-  assert.equal(fs.existsSync(path.join(__dirname, '..', 'production.js')), true);
+test('legacy production runtime is removed without replacing Forecasting or Inventory', () => {
+  assert.equal(fs.existsSync(path.join(__dirname, '..', 'production.js')), false);
+  assert.equal(fs.existsSync(path.join(__dirname, '..', 'manufacturing-v3.js')), true);
   assert.equal(fs.existsSync(path.join(__dirname, '..', 'forecasting.js')), true);
   assert.equal(fs.existsSync(path.join(__dirname, '..', 'inventory.js')), true);
 });

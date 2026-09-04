@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const page = fs.readFileSync(path.join(__dirname, '..', 'index.html'), 'utf8');
 const behavior = fs.readFileSync(path.join(__dirname, '..', 'bom-management.js'), 'utf8');
-const api = fs.readFileSync(path.join(__dirname, '..', 'api', 'production.js'), 'utf8');
+const api = fs.readFileSync(path.join(__dirname, '..', 'api', 'manufacturing-boms.js'), 'utf8');
 
 test('BOM management is a Production navigation roll-up', () => {
   assert.match(page, /id="bomManagementNav"/);
@@ -22,5 +22,11 @@ test('BOM management separates working recipes from V1 recipes needing setup', (
 
 test('BOM management reuses the V2-only BOM save flow', () => {
   assert.match(behavior, /action: 'saveBom'/);
+  assert.match(behavior, /\/api\/manufacturing-boms/);
   assert.match(page, /never Shopify, Qoblex, or inventory/);
+});
+
+test('dedicated BOM API contains no legacy production job transaction path', () => {
+  assert.doesNotMatch(api, /production_jobs|start_v2_stock_production_job|complete_v2_production/);
+  assert.match(api, /bom_query_required/);
 });

@@ -5,7 +5,7 @@ const path = require('node:path');
 
 const root = path.join(__dirname, '..', '..');
 const sql = fs.readFileSync(path.join(root, 'supabase/migrations/20260902193000_manufacturing_pilot_worker_isolation.sql'), 'utf8');
-const pilotApi = fs.readFileSync(path.join(root, 'v2/api/manufacturing-pilot.js'), 'utf8');
+const canonicalApi = fs.readFileSync(path.join(root, 'v2/api/manufacturing-v2.js'), 'utf8');
 const inventoryWorker = fs.readFileSync(path.join(root, 'v2/api/manufacturing-inventory-sync.js'), 'utf8');
 const transferWorker = fs.readFileSync(path.join(root, 'v2/api/manufacturing-transfer-handoff.js'), 'utf8');
 const nativeHandoff = fs.readFileSync(path.join(root, 'supabase/migrations/20260902160000_manufacturing_native_transfer_handoff.sql'), 'utf8');
@@ -54,8 +54,8 @@ test('all required pilot worker negatives fail closed', () => {
 });
 
 test('caller confirmation is removed and workers revalidate before Shopify', () => {
-  assert.doesNotMatch(pilotApi,/confirm_shopify|externalReference|advance_manufacturing_pilot/);
-  assert.match(pilotApi,/run_manufacturing_pilot_action/);
+  assert.equal(fs.existsSync(path.join(root,'v2/api/manufacturing-pilot.js')),false);
+  assert.doesNotMatch(canonicalApi,/confirm_shopify|externalReference|advance_manufacturing_pilot/);
   assert.match(inventoryWorker,/assert_mfg_worker_claim_eligible/);
   assert.match(transferWorker,/assert_mfg_worker_claim_eligible/);
   assert.match(transferWorker,/createShopifyNativeDraftTransfer/);
