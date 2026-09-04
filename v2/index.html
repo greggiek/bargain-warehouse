@@ -836,6 +836,20 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
       };
       window.BMManufacturingTrace?.('navigation_boundary', traceDetail);
       if (requestedRoute) sessionStorage.setItem(routeKey, requestedRoute);
+      if (requestedRoute === 'cycle-count-review') {
+        event.preventDefault();
+        event.stopPropagation();
+        const cycleView = document.getElementById('cycleCountReviewView');
+        document.querySelectorAll('.page > section, #overviewView, #atGlanceView').forEach(view => { view.hidden = view !== cycleView; });
+        if (cycleView) cycleView.hidden = false;
+        document.querySelectorAll('.nav-item').forEach(item => item.classList.toggle('active', item.id === 'cycleCountReviewNav'));
+        appView.classList.remove('nav-open');
+        document.getElementById('mobileNavToggle')?.setAttribute('aria-expanded', 'false');
+        Promise.resolve(window.BMWarehouseQuickCountReview?.()).catch(error => {
+          console.error('[cycle-count-review]', JSON.stringify({ event: 'entry_rejected', message: error?.message || String(error) }));
+        });
+        return;
+      }
       if (requestedRoute === 'manufacturing') {
         const group = document.getElementById('navManufacturing');
         const section = document.querySelector('.nav-section[aria-controls="navManufacturing"]');
