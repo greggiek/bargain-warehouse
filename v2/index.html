@@ -183,9 +183,9 @@
   <script src="/shopify-webhooks.js" defer></script>
   <script src="/inventory-snapshot.js" defer></script>
   <script src="/transfer-navigation.js" defer></script>
-  <script src="/transfers.js" defer></script>
+  <script src="/transfers.js?v=20260903-2" defer></script>
   <link rel="stylesheet" href="/manufacturing-v3.css">
-  <script src="/manufacturing-v3.js" defer></script>
+  <script src="/manufacturing-v3.js?v=20260903-2" defer></script>
   <script src="/bom-management.js" defer></script>
   <script src="/replenishment.js?v=20260831-4" defer></script>
   <script src="/purchase-orders.js?v=20260831-5" defer></script>
@@ -692,7 +692,8 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
       accessSummary.textContent = `${session.user.role} · ${assignedLocations.join(', ') || 'No assigned locations'}`;
       accessSummary.hidden = false;
       applyRoleNavigation(session.user.role);
-      if (['admin', 'developer'].includes(session.user.role)) setTimeout(() => window.openAtGlance?.(), 0);
+      const restoredView = window.BMWarehouseRestoreActiveView?.() === true;
+      if (['admin', 'developer'].includes(session.user.role) && !restoredView) setTimeout(() => window.openAtGlance?.(), 0);
       const adjustment = document.getElementById('overviewInventoryAdjustment');
       if (adjustment) adjustment.hidden = !['manager', 'admin', 'developer'].includes(session.user.role);
       const cycleCount = document.getElementById('overviewDailyCycleCount');
