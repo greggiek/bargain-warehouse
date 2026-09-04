@@ -48,7 +48,14 @@ module.exports = async (req, res) => {
         return res.status(200).json({ template: source, components: (source.components || []).map(component => ({ sku: component.sku, quantity: component.quantity, product: bySku.get(String(component.sku || '').trim().toUpperCase()) || null })) });
       }
       const finishedId = Number(req.query?.bomForProductId);
+      const versionId = Number(req.query?.bomVersionId);
       const locationId = Number(req.query?.locationId);
+      if (versionId) {
+        const q = new URLSearchParams({ id:'eq.' + versionId, select:'id,source_bom_id,version_number,finished_product_id,yield_quantity,status,notes,component_hash,products!mfg_bom_versions_finished_product_id_fkey(id,sku,name),mfg_bom_version_components(component_product_id,quantity_per_yield,products(id,sku,name))', limit:'1' });
+        const response = await fetch(supabaseUrl + '/rest/v1/mfg_bom_versions?' + q, { headers:jsonHeaders(serviceRoleKey), signal:AbortSignal.timeout(8000) });
+        const rows = await response.json(); if (!response.ok) throw new Error(rows.message || 'BOM version lookup failed');
+        return res.status(rows[0] ? 200 : 404).json(rows[0] ? { bomVersion:rows[0] } : { error:'bom_version_not_found' });
+      }
       if (finishedId) {
         const q = new URLSearchParams({ finished_product_id: 'eq.' + finishedId, active: 'eq.true', select: 'id,yield_quantity,notes,products!product_boms_finished_product_id_fkey(id,sku,name),product_bom_components(id,component_product_id,quantity_per_yield,products(id,sku,name))', limit: '1' });
         const response = await fetch(supabaseUrl + '/rest/v1/product_boms?' + q, { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
@@ -69,6 +76,11 @@ module.exports = async (req, res) => {
     }
     if (req.method !== 'POST') return res.status(405).json({ error: 'method_not_allowed' });
     const body = req.body || {}; const action = body.action;
+    if (action === 'saveBomDraft') {
+      if (auth.user.role !== 'admin') return res.status(403).json({ error:'admin_required_for_bom_changes' });
+      const data = await rpc(supabaseUrl, serviceRoleKey, 'save_mfg_bom_draft', { p_actor_user_id:auth.user.id, p_source_bom_version_id:Number(body.sourceBomVersionId), p_yield_quantity:Number(body.yieldQuantity), p_components:(body.components || []).map(x => ({ productId:x.component_product_id, quantity:x.quantity_per_yield })), p_notes:String(body.notes || ''), p_idempotency_key:String(body.idempotencyKey || '') });
+      return res.status(200).json(data);
+    }
     if (action === 'saveBom') {
       if (auth.user.role !== 'admin') return res.status(403).json({ error: 'admin_required_for_bom_changes' });
       const data = await rpc(supabaseUrl, serviceRoleKey, 'save_v2_product_bom', { p_finished_product_id:Number(body.finishedProductId), p_yield_quantity:Number(body.yieldQuantity), p_components:(body.components || []).map(x => ({ productId: x.component_product_id, quantity: x.quantity_per_yield })), p_notes:String(body.notes || ''), p_user_id:auth.user.id, p_user_name:auth.user.display_name });

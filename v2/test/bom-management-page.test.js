@@ -22,8 +22,21 @@ test('BOM management separates working recipes from V1 recipes needing setup', (
 
 test('BOM management reuses the V2-only BOM save flow', () => {
   assert.match(behavior, /action: 'saveBom'/);
+  assert.match(behavior, /action:'saveBomDraft'/);
+  assert.match(api, /save_mfg_bom_draft/);
   assert.match(behavior, /\/api\/manufacturing-boms/);
   assert.match(page, /never Shopify, Qoblex, or inventory/);
+});
+
+test('Phase 3 draft save is explicit, single-flight, and leaves activation separate', () => {
+  const migration = fs.readFileSync(path.join(__dirname, '..', '..', 'supabase', 'migrations', '20260904102000_manufacturing_bom_draft_versions.sql'), 'utf8');
+  assert.match(behavior, /Save draft version/);
+  assert.match(behavior, /button\.disabled=true/);
+  assert.match(behavior, /The active BOM remains unchanged/);
+  assert.match(migration, /status='draft'/);
+  assert.match(migration, /mfg_bom_versions_one_draft_idx/);
+  assert.doesNotMatch(migration, /status='active'/);
+  assert.doesNotMatch(migration, /update public\.product_boms/);
 });
 
 test('dedicated BOM API contains no legacy production job transaction path', () => {
