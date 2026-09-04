@@ -14,6 +14,23 @@ test('app shell is the sole owner of Manufacturing navigation', () => {
   assert.doesNotMatch(ui, /productionNav'\)\.addEventListener|overviewManufacturing'\)\?\.addEventListener|BMWarehouseRestoreActiveView|window\.openProduction|bmwarehouse:authenticated/);
 });
 
+test('visible Manufacturing group is a one-click route to Planner', () => {
+  assert.match(shell, /aria-controls="navManufacturing" data-route="manufacturing"/);
+  assert.match(shell, /id="productionNav"[^>]*data-route="manufacturing"/);
+  assert.match(shell, /rawTarget\.closest\?\.\('\[data-route\], \.nav-item'\)/);
+  assert.match(shell, /requestedRoute === 'manufacturing'[\s\S]*enterManufacturing\?\.\(\)/);
+  assert.match(shell, /if\(button\.dataset\.route\)[\s\S]*group\.hidden=false;return/);
+});
+
+test('Manufacturing navigation emits boundary diagnostics', () => {
+  assert.match(shell, /navigation_boundary/);
+  assert.match(shell, /rawTarget:/);
+  assert.match(shell, /resolvedNavigation:/);
+  assert.match(shell, /requestedRoute,/);
+  assert.match(shell, /currentRoute/);
+  assert.match(shell, /enter_manufacturing_invoked/);
+});
+
 test('authoritative entry activates Planner, renders loading, and awaits its request', () => {
   assert.match(ui, /enterImpl=async\(\)=>\{trace\('entry_start'\)[\s\S]*await load\('planner'\)[\s\S]*trace\('entry_finish'/);
   assert.match(ui, /state\.entryComplete=false;await load\('planner'\);state\.entryComplete=true/);
