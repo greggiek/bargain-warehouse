@@ -838,6 +838,9 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
       if (requestedRoute === 'manufacturing') {
         const group = document.getElementById('navManufacturing');
         const section = document.querySelector('.nav-section[aria-controls="navManufacturing"]');
+        const productionView = document.getElementById('productionView');
+        document.querySelectorAll('.page > section, #overviewView, #atGlanceView').forEach(view => { view.hidden = view !== productionView; });
+        if (productionView) productionView.hidden = false;
         if (group) group.hidden = false;
         section?.setAttribute('aria-expanded', 'true');
         window.BMManufacturingTrace?.('enter_manufacturing_invoked', { ...traceDetail, currentRoute: requestedRoute });
