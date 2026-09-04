@@ -9,9 +9,26 @@ const shell = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const dashboard = fs.readFileSync(path.join(root, 'dashboard.js'), 'utf8');
 
 test('app shell is the sole owner of Manufacturing navigation', () => {
-  assert.match(shell, /nav\.id === 'productionNav'[\s\S]*window\.enterManufacturing\?\.\(\)/);
+  assert.match(shell, /requestedRoute === 'manufacturing'[\s\S]*window\.enterManufacturing\?\.\(\)/);
   assert.match(dashboard, /overviewManufacturing:\(\)=>document\.getElementById\('productionNav'\)\?\.click\(\)/);
   assert.doesNotMatch(ui, /productionNav'\)\.addEventListener|overviewManufacturing'\)\?\.addEventListener|BMWarehouseRestoreActiveView|window\.openProduction|bmwarehouse:authenticated/);
+});
+
+test('visible Manufacturing group is a one-click route to Planner', () => {
+  assert.match(shell, /aria-controls="navManufacturing" data-route="manufacturing"/);
+  assert.match(shell, /id="productionNav"[^>]*data-route="manufacturing"/);
+  assert.match(shell, /rawTarget\.closest\?\.\('\[data-route\], \.nav-item'\)/);
+  assert.match(shell, /requestedRoute === 'manufacturing'[\s\S]*enterManufacturing\?\.\(\)/);
+  assert.match(shell, /if\(button\.dataset\.route\)[\s\S]*group\.hidden=false;return/);
+});
+
+test('Manufacturing navigation emits boundary diagnostics', () => {
+  assert.match(shell, /navigation_boundary/);
+  assert.match(shell, /rawTarget:/);
+  assert.match(shell, /resolvedNavigation:/);
+  assert.match(shell, /requestedRoute,/);
+  assert.match(shell, /currentRoute/);
+  assert.match(shell, /enter_manufacturing_invoked/);
 });
 
 test('authoritative entry activates Planner, renders loading, and awaits its request', () => {
