@@ -9,7 +9,7 @@ const shell = fs.readFileSync(path.join(root, 'index.html'), 'utf8');
 const dashboard = fs.readFileSync(path.join(root, 'dashboard.js'), 'utf8');
 
 test('app shell is the sole owner of Manufacturing navigation', () => {
-  assert.match(shell, /nav\.id === 'productionNav'[\s\S]*window\.enterManufacturing\?\.\(\)/);
+  assert.match(shell, /requestedRoute === 'manufacturing'[\s\S]*window\.enterManufacturing\?\.\(\)/);
   assert.match(dashboard, /overviewManufacturing:\(\)=>document\.getElementById\('productionNav'\)\?\.click\(\)/);
   assert.doesNotMatch(ui, /productionNav'\)\.addEventListener|overviewManufacturing'\)\?\.addEventListener|BMWarehouseRestoreActiveView|window\.openProduction|bmwarehouse:authenticated/);
 });
