@@ -1,7 +1,7 @@
 (() => {
   const $ = id => document.getElementById(id), number = value => new Intl.NumberFormat('en-US', { maximumFractionDigits: 0 }).format(Number(value || 0));
   const view = $('overviewView'); if (!view) return;
-  let started = false; const locationKey = 'bmWarehouse.activeLocationId';
+  const locationKey = 'bmWarehouse.activeLocationId';
   const activeLocationId = () => localStorage.getItem(locationKey) || '';
   const setActiveLocationId = value => value ? localStorage.setItem(locationKey, value) : localStorage.removeItem(locationKey);
   function show() {
