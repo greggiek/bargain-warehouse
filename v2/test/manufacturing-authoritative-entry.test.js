@@ -19,6 +19,8 @@ test('visible Manufacturing group is a one-click route to Planner', () => {
   assert.match(shell, /id="productionNav"[^>]*data-route="manufacturing"/);
   assert.match(shell, /rawTarget\.closest\?\.\('\[data-route\], \.nav-item'\)/);
   assert.match(shell, /requestedRoute === 'manufacturing'[\s\S]*enterManufacturing\?\.\(\)/);
+  assert.match(shell, /\.page > section, #overviewView, #atGlanceView/);
+  assert.match(shell, /view\.hidden = view !== productionView/);
   assert.match(shell, /if\(button\.dataset\.route\)[\s\S]*group\.hidden=false;return/);
 });
 
