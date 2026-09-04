@@ -38,6 +38,9 @@ test('logout expires Google and BM OS session cookies', () => {
   assert.match(capture.read().headers['Set-Cookie'][2], /bm_v2_bmos_session/);
   assert.match(capture.read().headers['Set-Cookie'][0], /HttpOnly/);
   assert.match(capture.read().headers['Set-Cookie'][0], /Max-Age=0/);
+  assert.match(capture.read().headers['Set-Cookie'][0], /Path=\//);
+  assert.match(capture.read().headers['Set-Cookie'][0], /Secure/);
+  assert.match(capture.read().headers['Set-Cookie'][0], /SameSite=Lax/);
 });
 
 test('me requires a session cookie', async () => {
