@@ -183,9 +183,9 @@
   <script src="/shopify-webhooks.js" defer></script>
   <script src="/inventory-snapshot.js" defer></script>
   <script src="/transfer-navigation.js" defer></script>
-  <script src="/transfers.js?v=20260904-1" defer></script>
+  <script src="/transfers.js?v=20260904-2" defer></script>
   <link rel="stylesheet" href="/manufacturing-v3.css">
-  <script src="/manufacturing-v3.js?v=20260904-1" defer></script>
+  <script src="/manufacturing-v3.js?v=20260904-2" defer></script>
   <script src="/bom-management.js" defer></script>
   <script src="/replenishment.js?v=20260831-4" defer></script>
   <script src="/purchase-orders.js?v=20260831-5" defer></script>
@@ -825,6 +825,12 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
       if (!bootstrap.authenticated || !nav) return;
       const selected = Object.entries(routeTargets).find(([, id]) => id === nav.id);
       if (selected) sessionStorage.setItem(routeKey, selected[0]);
+      if (nav.id === 'productionNav') {
+        window.BMManufacturingTrace?.('navigation_event', { source: event.isTrusted ? 'user' : 'app-shell' });
+        Promise.resolve(window.enterManufacturing?.()).catch(error => {
+          console.error('[bm-mfg]', JSON.stringify({ event: 'entry_rejected', message: error?.message || String(error) }));
+        });
+      }
     }, true);
 
     startBootstrap();
