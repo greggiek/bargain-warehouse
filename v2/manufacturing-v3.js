@@ -15,7 +15,11 @@ function bindMfgNewBomButton({document,selectedBomVersionId,openEditor,closeDraw
  button.addEventListener('click',async()=>{try{if(!selectedBomVersionId||typeof openEditor!=='function')throw Error('BOM editor is unavailable. Refresh and try again.');closeDrawer();await openEditor(selectedBomVersionId)}catch(error){onError(error)}});
  return true;
 }
-if(typeof module==='object'&&module.exports){module.exports=createMfgDrawerLifecycle;module.exports.createMfgProductionPacketPrinter=createMfgProductionPacketPrinter;module.exports.bindMfgNewBomButton=bindMfgNewBomButton}
+function createMfgEntryCoordinator(run){
+ let pending=null;
+ return {enter(){if(pending)return pending;pending=Promise.resolve().then(run).finally(()=>{pending=null});return pending}};
+}
+if(typeof module==='object'&&module.exports){module.exports=createMfgDrawerLifecycle;module.exports.createMfgProductionPacketPrinter=createMfgProductionPacketPrinter;module.exports.bindMfgNewBomButton=bindMfgNewBomButton;module.exports.createMfgEntryCoordinator=createMfgEntryCoordinator}
 (()=>{
  if(typeof document==='undefined')return;
  function initialize(){
@@ -56,8 +60,10 @@ if(typeof module==='object'&&module.exports){module.exports=createMfgDrawerLifec
  function bindDrawer(){}
  function drawerError(error,retry){$('mfgDrawerBody').innerHTML=`<div class="mfg-card mfg-empty"><h2>Could not load detail</h2><p>${esc(error.message)}</p><button class="mfg-btn" data-detail-retry>Retry</button><button class="mfg-btn secondary" data-close>Close</button></div>`;bindDrawer();$('mfgDrawerBody [data-detail-retry]').onclick=retry}
  function openDrawer(html){state.drawer.open(html)}
- function open(){sessionStorage.setItem('bm-active-view','manufacturing');document.querySelectorAll('.page>section').forEach(x=>x.hidden=x!==view);view.hidden=false;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.id==='productionNav'));if(!state.loaded){shell();state.loaded=true}load('planner');}
+ const entry=createMfgEntryCoordinator(()=>load('planner'));
+ function open(){sessionStorage.setItem('bm-active-view','manufacturing');document.querySelectorAll('.page>section').forEach(x=>x.hidden=x!==view);view.hidden=false;document.querySelectorAll('.nav-item').forEach(x=>x.classList.toggle('active',x.id==='productionNav'));if(!state.loaded){shell();state.loaded=true}return entry.enter();}
  window.openProduction=open;window.BMWarehouseRestoreActiveView=()=>{if(sessionStorage.getItem('bm-active-view')!=='manufacturing')return false;setTimeout(open,0);return true};$('productionNav').addEventListener('click',open);$('overviewManufacturing')?.addEventListener('click',open);document.addEventListener('click',event=>{const nav=event.target.closest?.('.nav-item');if(nav&&nav.id!=='productionNav')sessionStorage.removeItem('bm-active-view')},true);
+ document.addEventListener('bmwarehouse:authenticated',()=>{if(sessionStorage.getItem('bm-active-view')==='manufacturing')open()});
  }
  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',initialize,{once:true});else initialize();
 })();
