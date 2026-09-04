@@ -368,7 +368,7 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
       <nav aria-label="Primary">
 <button class="nav-section" type="button" aria-expanded="true" aria-controls="navOperations">Operations</button><div id="navOperations" class="nav-group"><button id="overviewNav" class="nav-item active" type="button">Dashboard</button></div>
 <button class="nav-section" type="button" aria-expanded="true" aria-controls="navInventory">Inventory control</button><div id="navInventory" class="nav-group"><button id="inventoryNav" class="nav-item" type="button">Inventory</button><button id="cycleCountReviewNav" class="nav-item" type="button">Cycle Count Review</button><button id="transfersNav" class="nav-item" type="button">Transfers</button></div><button class="nav-section" type="button" aria-expanded="true" aria-controls="navPurchasing">Purchasing</button><div id="navPurchasing" class="nav-group"><button id="purchaseOrdersNav" class="nav-item" type="button">Purchase Orders</button><button id="poArrivalsNav" class="nav-item" type="button">Container arrivals</button><button id="replenishmentNav" class="nav-item" type="button">Low Stock</button><button id="forecastNav" class="nav-item" type="button">Forecasting</button></div>
-<button class="nav-section" type="button" aria-expanded="false" aria-controls="navManufacturing">Manufacturing</button><div id="navManufacturing" class="nav-group" hidden><button id="productionNav" class="nav-item" type="button">Production</button></div>
+<button class="nav-section" type="button" aria-expanded="false" aria-controls="navManufacturing" data-route="manufacturing">Manufacturing</button><div id="navManufacturing" class="nav-group" hidden><button id="productionNav" class="nav-item" type="button" data-route="manufacturing">Production</button></div>
 <button class="nav-section" type="button" aria-expanded="false" aria-controls="navSystem">System</button><div id="navSystem" class="nav-group" hidden><button id="inventoryLedgerNav" class="nav-item" type="button">Inventory Ledger</button><button id="bomManagementNav" class="nav-item" type="button">BOM management</button><button id="vendorDirectoryNav" class="nav-item" type="button">Suppliers</button><button id="binLocationsNav" class="nav-item" type="button">Bin Locations</button><button id="parLevelsNav" class="nav-item" type="button">Par Levels</button><button id="productSyncNav" class="nav-item" type="button">Shopify Catalog</button><button id="shopifyWebhooksNav" class="nav-item" type="button">Shopify Webhooks</button><button id="snapshotNav" class="nav-item" type="button">Opening Snapshot</button><button id="skuFixNav" class="nav-item" type="button">SKU Fix Queue</button></div>
       </nav>
       <div class="mobile-nav-utility"><a class="bm-os-link" href="https://bm-time.vercel.app/">Back to BM OS</a><button id="mobileLogoutButton" class="button secondary" type="button">Sign out</button></div>
@@ -821,12 +821,26 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
     window.BMWarehouseSignOut = signOut;
     document.getElementById('logoutButton').addEventListener('click', signOut);
     document.addEventListener('click', event => {
-      const nav = event.target.closest?.('.nav-item');
+      const rawTarget = event.target;
+      const nav = rawTarget.closest?.('[data-route], .nav-item');
       if (!bootstrap.authenticated || !nav) return;
       const selected = Object.entries(routeTargets).find(([, id]) => id === nav.id);
-      if (selected) sessionStorage.setItem(routeKey, selected[0]);
-      if (nav.id === 'productionNav') {
-        window.BMManufacturingTrace?.('navigation_event', { source: event.isTrusted ? 'user' : 'app-shell' });
+      const requestedRoute = nav.dataset.route || selected?.[0] || '';
+      const currentRoute = sessionStorage.getItem(routeKey) || 'dashboard';
+      const traceDetail = {
+        rawTarget: { tag: rawTarget.tagName || '', id: rawTarget.id || '', className: String(rawTarget.className || '') },
+        resolvedNavigation: { tag: nav.tagName || '', id: nav.id || '', className: String(nav.className || '') },
+        requestedRoute,
+        currentRoute
+      };
+      window.BMManufacturingTrace?.('navigation_boundary', traceDetail);
+      if (requestedRoute) sessionStorage.setItem(routeKey, requestedRoute);
+      if (requestedRoute === 'manufacturing') {
+        const group = document.getElementById('navManufacturing');
+        const section = document.querySelector('.nav-section[aria-controls="navManufacturing"]');
+        if (group) group.hidden = false;
+        section?.setAttribute('aria-expanded', 'true');
+        window.BMManufacturingTrace?.('enter_manufacturing_invoked', { ...traceDetail, currentRoute: requestedRoute });
         Promise.resolve(window.enterManufacturing?.()).catch(error => {
           console.error('[bm-mfg]', JSON.stringify({ event: 'entry_rejected', message: error?.message || String(error) }));
         });
@@ -835,7 +849,7 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
 
     startBootstrap();
   </script>
-<script>document.querySelectorAll('.nav-section[aria-controls]').forEach(button=>button.addEventListener('click',()=>{const group=document.getElementById(button.getAttribute('aria-controls'));const open=button.getAttribute('aria-expanded')==='true';button.setAttribute('aria-expanded',String(!open));group.hidden=open;}));</script><script>
+<script>document.querySelectorAll('.nav-section[aria-controls]').forEach(button=>button.addEventListener('click',()=>{const group=document.getElementById(button.getAttribute('aria-controls'));if(button.dataset.route){button.setAttribute('aria-expanded','true');group.hidden=false;return;}const open=button.getAttribute('aria-expanded')==='true';button.setAttribute('aria-expanded',String(!open));group.hidden=open;}));</script><script>
 (() => {
   const shell=document.getElementById('appView'),toggle=document.getElementById('mobileNavToggle'),backdrop=document.getElementById('mobileNavBackdrop'),mobileLocation=document.getElementById('mobileCurrentLocation'),locationLabel=document.getElementById('dashboardLocation'),logout=document.getElementById('logoutButton'),mobileLogout=document.getElementById('mobileLogoutButton'),mobileLogo=document.querySelector('.mobile-brand-logo'),desktopLogo=document.querySelector('.brand-logo');
   if(mobileLogo&&desktopLogo) mobileLogo.src=desktopLogo.currentSrc||desktopLogo.src;
