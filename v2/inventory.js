@@ -106,7 +106,6 @@
     document.querySelectorAll('.nav-item').forEach(item=>item.classList.toggle('active',(inventory&&item.id==='inventoryNav')||(!inventory&&item.id==='overviewNav')));
     if(inventory) load();
   }
-  $('overviewNav').addEventListener('click',()=>show('overview'));
   $('inventoryNav').addEventListener('click',()=>show('inventory'));
   $('inventoryRefresh').addEventListener('click',load);
   const exportButton = document.createElement('button'); exportButton.id='inventoryExport'; exportButton.type='button'; exportButton.className='button secondary'; exportButton.textContent='Export CSV'; exportButton.addEventListener('click',exportCsv); $('inventoryRefresh').after(exportButton);
