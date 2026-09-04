@@ -43,6 +43,10 @@ function accessToken(req) {
   return parseCookies(req.headers?.cookie)[ACCESS_COOKIE];
 }
 
+function refreshToken(req) {
+  return parseCookies(req.headers?.cookie)[REFRESH_COOKIE];
+}
+
 function hasBmOsSessionCookie(req) {
   return Boolean(parseCookies(req.headers?.cookie)[BMOS_COOKIE]);
 }
@@ -86,5 +90,6 @@ module.exports = {
   configuration,
   hasBmOsSessionCookie,
   jsonHeaders,
+  refreshToken,
   sessionCookies
 };

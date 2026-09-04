@@ -183,9 +183,9 @@
   <script src="/shopify-webhooks.js" defer></script>
   <script src="/inventory-snapshot.js" defer></script>
   <script src="/transfer-navigation.js" defer></script>
-  <script src="/transfers.js?v=20260903-2" defer></script>
+  <script src="/transfers.js?v=20260904-2" defer></script>
   <link rel="stylesheet" href="/manufacturing-v3.css">
-  <script src="/manufacturing-v3.js?v=20260903-2" defer></script>
+  <script src="/manufacturing-v3.js?v=20260904-2" defer></script>
   <script src="/bom-management.js" defer></script>
   <script src="/replenishment.js?v=20260831-4" defer></script>
   <script src="/purchase-orders.js?v=20260831-5" defer></script>
@@ -677,7 +677,27 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
     const loginError = document.getElementById('loginError');
     const supabaseUrl = 'https://fvzaewmyobgznncbkagh.supabase.co';
 
+    const bootstrap = { sequence: 0, controller: null, authenticated: false };
+    const routeKey = 'bm-active-view';
+    const routeTargets = {
+      dashboard: 'overviewNav',
+      manufacturing: 'productionNav',
+      transfers: 'transfersNav',
+      inventory: 'inventoryNav'
+    };
+
+    function closeTransientUi() {
+      document.querySelectorAll('dialog[open]').forEach(dialog => dialog.close());
+      document.querySelectorAll('[class*="backdrop"]').forEach(backdrop => { if ('hidden' in backdrop) backdrop.hidden = true; });
+      document.body.classList.remove('mfg-drawer-open');
+      appView.classList.remove('nav-open');
+      document.getElementById('mobileNavToggle')?.setAttribute('aria-expanded', 'false');
+      document.getElementById('mfgDrawerBackdrop')?.remove();
+    }
+
     function showLogin(message = '') {
+      bootstrap.authenticated = false;
+      closeTransientUi();
       appView.hidden = true;
       loginView.hidden = false;
       loginError.textContent = message;
@@ -686,13 +706,18 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
     function showApp(session) {
       loginView.hidden = true;
       appView.hidden = false;
+      bootstrap.authenticated = true;
       document.getElementById('welcome').textContent = `Welcome, ${session.user.displayName}`;
       const accessSummary = document.getElementById('sessionAccessSummary');
       const assignedLocations = (session.locations || []).map(access => access.locations?.name).filter(Boolean);
       accessSummary.textContent = `${session.user.role} · ${assignedLocations.join(', ') || 'No assigned locations'}`;
       accessSummary.hidden = false;
       applyRoleNavigation(session.user.role);
-      const restoredView = window.BMWarehouseRestoreActiveView?.() === true;
+      const selectedRoute = sessionStorage.getItem(routeKey);
+      const selectedTarget = routeTargets[selectedRoute];
+      const restoredView = selectedTarget && !document.getElementById(selectedTarget)?.hidden
+        ? (setTimeout(() => document.getElementById(selectedTarget)?.click(), 0), true)
+        : false;
       if (['admin', 'developer'].includes(session.user.role) && !restoredView) setTimeout(() => window.openAtGlance?.(), 0);
       const adjustment = document.getElementById('overviewInventoryAdjustment');
       if (adjustment) adjustment.hidden = !['manager', 'admin', 'developer'].includes(session.user.role);
@@ -700,6 +725,7 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
       if (cycleCount) cycleCount.hidden = !['manager', 'admin', 'developer'].includes(session.user.role);
       const bins = document.getElementById('overviewBinLocations');
       if (bins) bins.hidden = !['manager', 'admin', 'developer'].includes(session.user.role);
+      document.dispatchEvent(new CustomEvent('bmwarehouse:authenticated', { detail: session }));
     }
 
     function applyRoleNavigation(role) {
@@ -714,12 +740,17 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
       });
     }
 
-    async function loadSession() {
+    async function loadSession(sequence, signal) {
       try {
-        const response = await fetch('/api/auth/me', { credentials: 'same-origin' });
-        if (!response.ok) return showLogin();
-        showApp(await response.json());
-      } catch {
+        const response = await fetch('/api/auth/me', { credentials: 'same-origin', cache: 'no-store', signal });
+        if (sequence !== bootstrap.sequence) return;
+        if (response.status === 401) return showLogin();
+        if (!response.ok) throw new Error('session_lookup_failed');
+        const session = await response.json();
+        if (sequence !== bootstrap.sequence) return;
+        showApp(session);
+      } catch (error) {
+        if (error.name === 'AbortError' || sequence !== bootstrap.sequence) return;
         showLogin('Unable to reach BM Warehouse. Please try again.');
       }
     }
@@ -766,12 +797,43 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
       );
     });
 
-    document.getElementById('logoutButton').addEventListener('click', async () => {
-      await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' });
-      showLogin();
-    });
+    async function startBootstrap() {
+      bootstrap.controller?.abort();
+      const controller = new AbortController();
+      bootstrap.controller = controller;
+      const sequence = ++bootstrap.sequence;
+      await exchangeGoogleSession();
+      if (sequence !== bootstrap.sequence || controller.signal.aborted) return;
+      await loadSession(sequence, controller.signal);
+    }
 
-    exchangeGoogleSession().then(loadSession);
+    async function signOut() {
+      bootstrap.controller?.abort();
+      bootstrap.sequence += 1;
+      closeTransientUi();
+      try { await fetch('/api/auth/logout', { method: 'POST', credentials: 'same-origin' }); }
+      finally {
+        sessionStorage.removeItem(routeKey);
+        showLogin();
+      }
+    }
+
+    window.BMWarehouseSignOut = signOut;
+    document.getElementById('logoutButton').addEventListener('click', signOut);
+    document.addEventListener('click', event => {
+      const nav = event.target.closest?.('.nav-item');
+      if (!bootstrap.authenticated || !nav) return;
+      const selected = Object.entries(routeTargets).find(([, id]) => id === nav.id);
+      if (selected) sessionStorage.setItem(routeKey, selected[0]);
+      if (nav.id === 'productionNav') {
+        window.BMManufacturingTrace?.('navigation_event', { source: event.isTrusted ? 'user' : 'app-shell' });
+        Promise.resolve(window.enterManufacturing?.()).catch(error => {
+          console.error('[bm-mfg]', JSON.stringify({ event: 'entry_rejected', message: error?.message || String(error) }));
+        });
+      }
+    }, true);
+
+    startBootstrap();
   </script>
 <script>document.querySelectorAll('.nav-section[aria-controls]').forEach(button=>button.addEventListener('click',()=>{const group=document.getElementById(button.getAttribute('aria-controls'));const open=button.getAttribute('aria-expanded')==='true';button.setAttribute('aria-expanded',String(!open));group.hidden=open;}));</script><script>
 (() => {
@@ -781,7 +843,7 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
   toggle?.addEventListener('click',()=>{const open=shell.classList.toggle('nav-open');toggle.setAttribute('aria-expanded',String(open));});
   backdrop?.addEventListener('click',close);
   document.querySelectorAll('aside .nav-item').forEach(item=>item.addEventListener('click',close));
-  mobileLogout?.addEventListener('click',()=>logout?.click());
+  mobileLogout?.addEventListener('click',()=>window.BMWarehouseSignOut?.());
   const syncLocation=()=>{if(mobileLocation&&locationLabel?.textContent.trim())mobileLocation.textContent=locationLabel.textContent.trim();};
   syncLocation(); if(locationLabel)new MutationObserver(syncLocation).observe(locationLabel,{childList:true,subtree:true,characterData:true});
 })();

@@ -1,9 +1,10 @@
-const { accessToken, bmOsSession, configuration, hasBmOsSessionCookie, jsonHeaders } = require('../_lib/auth');
+const { accessToken, bmOsSession, clearSessionCookies, configuration, hasBmOsSessionCookie, jsonHeaders, refreshToken, sessionCookies } = require('../_lib/auth');
 
 module.exports = async function me(req, res) {
   if (req.method !== 'GET') { res.setHeader('Allow', 'GET'); return res.status(405).json({ ok: false, error: 'method_not_allowed' }); }
-  const token = accessToken(req);
-  if (!token && !hasBmOsSessionCookie(req)) return res.status(401).json({ ok: false, error: 'not_authenticated' });
+  let token = accessToken(req);
+  const storedRefreshToken = refreshToken(req);
+  if (!token && !storedRefreshToken && !hasBmOsSessionCookie(req)) return res.status(401).json({ ok: false, error: 'not_authenticated' });
   const { url, publishableKey, serviceRoleKey } = configuration();
   if (!url || !publishableKey || !serviceRoleKey) return res.status(503).json({ ok: false, error: 'authentication_not_configured' });
   try {
@@ -14,9 +15,27 @@ module.exports = async function me(req, res) {
       if (!users.length) return res.status(403).json({ ok: false, error: 'warehouse_access_not_assigned' });
       return respondWithUser(res, url, serviceRoleKey, users[0]);
     }
-    if (!token) return res.status(401).json({ ok: false, error: 'not_authenticated' });
-    const authResponse = await fetch(`${url}/auth/v1/user`, { headers: jsonHeaders(publishableKey, token), signal: AbortSignal.timeout(8000) });
-    if (!authResponse.ok) return res.status(401).json({ ok: false, error: 'session_expired' });
+    let authResponse = token
+      ? await fetch(`${url}/auth/v1/user`, { headers: jsonHeaders(publishableKey, token), signal: AbortSignal.timeout(8000) })
+      : null;
+    if ((!authResponse || !authResponse.ok) && storedRefreshToken) {
+      const refreshResponse = await fetch(`${url}/auth/v1/token?grant_type=refresh_token`, {
+        method: 'POST',
+        headers: jsonHeaders(publishableKey),
+        body: JSON.stringify({ refresh_token: storedRefreshToken }),
+        signal: AbortSignal.timeout(8000)
+      });
+      if (refreshResponse.ok) {
+        const refreshed = await refreshResponse.json();
+        token = refreshed.access_token;
+        res.setHeader('Set-Cookie', sessionCookies(refreshed));
+        authResponse = await fetch(`${url}/auth/v1/user`, { headers: jsonHeaders(publishableKey, token), signal: AbortSignal.timeout(8000) });
+      }
+    }
+    if (!authResponse || !authResponse.ok) {
+      res.setHeader('Set-Cookie', clearSessionCookies());
+      return res.status(401).json({ ok: false, error: 'session_expired' });
+    }
     const authUser = await authResponse.json();
     const userResponse = await fetch(`${url}/rest/v1/app_users?auth_user_id=eq.${encodeURIComponent(authUser.id)}&active=eq.true&select=id,display_name,email,role&limit=1`, { headers: jsonHeaders(serviceRoleKey), signal: AbortSignal.timeout(8000) });
     const users = userResponse.ok ? await userResponse.json() : [];
