@@ -23,7 +23,7 @@ module.exports = async function bmosSession(req, res) {
     }
     const user = users[0];
     if (role === 'admin') await ensureAllLocationAccess(url, serviceRoleKey, user.id);
-    else if (identity.locationName) await ensureLocationAccess(url, serviceRoleKey, user.id, identity.locationName, role);
+    else await synchronizeLocationAccess(url, serviceRoleKey, user.id, identity, role);
     res.setHeader('Set-Cookie', bmOsSessionCookie({ userId: user.id, identityId: identity.identityId }, serviceRoleKey));
     return res.redirect('/');
   } catch (_error) { return res.redirect('/?error=bmos_handoff_failed'); }
@@ -41,10 +41,44 @@ async function ensureAllLocationAccess(url, key, userId) {
   await Promise.all(locations.map(location => upsertLocationAccess(url, key, userId, location.id, true)));
 }
 
-async function ensureLocationAccess(url, key, userId, locationName, role) {
-  const response = await fetch(`${url}/rest/v1/locations?name=ilike.${encodeURIComponent(`*${locationName}*`)}&active=eq.true&select=id`, { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
-  const locations = response.ok ? await response.json() : [];
-  await Promise.all(locations.map(location => upsertLocationAccess(url, key, userId, location.id, role === 'manager')));
+async function synchronizeLocationAccess(url, key, userId, identity, role) {
+  const requestedScopes = Array.isArray(identity.locationScopes) && identity.locationScopes.length
+    ? identity.locationScopes
+    : identity.primaryLocationId && identity.locationName
+      ? [{ id: identity.primaryLocationId, name: identity.locationName }]
+      : [];
+  if (!requestedScopes.length) throw new Error('BM OS did not provide an authorized warehouse location.');
+
+  const desiredIds = [];
+  for (const scope of requestedScopes) {
+    const location = await resolveLocation(url, key, scope);
+    desiredIds.push(location.id);
+    await upsertLocationAccess(url, key, userId, location.id, role === 'manager');
+  }
+
+  const currentResponse = await fetch(`${url}/rest/v1/user_location_access?user_id=eq.${userId}&select=location_id`, { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
+  if (!currentResponse.ok) throw new Error('Unable to verify Warehouse location access.');
+  const current = await currentResponse.json();
+  const stale = current.filter((row) => !desiredIds.includes(row.location_id));
+  await Promise.all(stale.map((row) => fetch(`${url}/rest/v1/user_location_access?user_id=eq.${userId}&location_id=eq.${row.location_id}`, {
+    method: 'DELETE', headers: jsonHeaders(key), signal: AbortSignal.timeout(8000),
+  })));
+}
+
+async function resolveLocation(url, key, scope) {
+  let response = await fetch(`${url}/rest/v1/locations?bm_os_location_id=eq.${encodeURIComponent(scope.id)}&active=eq.true&select=id,bm_os_location_id`, { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
+  let locations = response.ok ? await response.json() : [];
+  if (locations.length === 1) return locations[0];
+
+  response = await fetch(`${url}/rest/v1/locations?name=ilike.${encodeURIComponent(`*${scope.name}*`)}&active=eq.true&select=id,bm_os_location_id`, { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
+  locations = response.ok ? await response.json() : [];
+  if (locations.length !== 1) throw new Error(`BM OS location mapping is missing or ambiguous for ${scope.name}.`);
+  const location = locations[0];
+  const patchResponse = await fetch(`${url}/rest/v1/locations?id=eq.${location.id}&bm_os_location_id=is.null`, {
+    method: 'PATCH', headers: jsonHeaders(key), body: JSON.stringify({ bm_os_location_id: scope.id }), signal: AbortSignal.timeout(8000),
+  });
+  if (!patchResponse.ok) throw new Error(`Unable to bind Warehouse location ${scope.name} to BM OS.`);
+  return location;
 }
 
 async function upsertLocationAccess(url, key, userId, locationId, canManage) {
