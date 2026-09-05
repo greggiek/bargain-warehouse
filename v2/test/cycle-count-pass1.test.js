@@ -74,3 +74,11 @@ test('Review has sequence-safe loading, action locking and explicit total', () =
   assert.match(page, /id="cycleReviewTotal"/);
   assert.match(reviewUi, /!\$\('cycleCountReviewView'\)\.hidden && sessionStorage\.getItem\('bm-active-view'\) === 'cycle-count-review'/);
 });
+
+test('OAuth redirects only to Production or the exact approved PR Preview origin', () => {
+  assert.match(page, /'https:\/\/bargain-warehouse-v2\.vercel\.app'/);
+  assert.match(page, /'https:\/\/bargain-warehouse-v2-git-codex-v2-clea-ca4192-bargain-moulding1\.vercel\.app'/);
+  assert.match(page, /approvedAuthOrigins\.has\(location\.origin\)/);
+  assert.match(page, /return location\.origin \+ location\.pathname/);
+  assert.doesNotMatch(page, /document\.cookie.*domain=/i);
+});
