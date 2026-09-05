@@ -791,11 +791,27 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
       }
     }
 
+    const approvedAuthOrigins = new Set([
+      'https://bargain-warehouse-v2.vercel.app',
+      'https://bargain-warehouse-v2-git-codex-v2-clea-ca4192-bargain-moulding1.vercel.app'
+    ]);
+
+    function currentAuthRedirect() {
+      if (!approvedAuthOrigins.has(location.origin)) {
+        throw new Error('This BM Warehouse deployment is not approved for Google sign in.');
+      }
+      return location.origin + location.pathname;
+    }
+
     googleSignIn.addEventListener('click', () => {
-      const redirectTo = location.origin + location.pathname;
-      location.assign(
-        supabaseUrl + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(redirectTo)
-      );
+      try {
+        const redirectTo = currentAuthRedirect();
+        location.assign(
+          supabaseUrl + '/auth/v1/authorize?provider=google&redirect_to=' + encodeURIComponent(redirectTo)
+        );
+      } catch (error) {
+        loginError.textContent = error.message;
+      }
     });
 
     async function startBootstrap() {
