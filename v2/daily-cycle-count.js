@@ -4,10 +4,8 @@
   const setStatus = (text, error = false) => { $('cycleCountStatus').textContent = text; $('cycleCountStatus').classList.toggle('error', error); };
   const dirtyCount = () => [...state.drafts.values()].filter(draft => draft.dirty).length;
   function setView(name) {
-    ['Loading', 'NoRun', 'Empty', 'Rows', 'Error', 'Complete'].forEach(view => {
-      const element = $('cycleCount' + view);
-      if (element) element.hidden = view.toLowerCase() !== name;
-    });
+    const views = { loading: 'cycleCountLoading', norun: 'cycleCountNoRun', empty: 'cycleCountEmpty', rows: 'cycleCountRowsHost', error: 'cycleCountError', complete: 'cycleCountComplete' };
+    Object.entries(views).forEach(([key, id]) => { $(id).hidden = key !== name; });
   }
   function setBusy(busy) {
     $('dailyCycleCountDialog').setAttribute('aria-busy', String(busy));
