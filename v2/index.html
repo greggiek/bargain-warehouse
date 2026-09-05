@@ -816,14 +816,22 @@ html,body{max-width:100%;overflow-x:hidden}.mobile-app-header,.mobile-nav-backdr
       }
     }
 
-    const approvedAuthOrigins = new Set([
-      'https://bargain-warehouse-v2.vercel.app',
-      'https://bargain-warehouse-v2-git-codex-v2-clea-ca4192-bargain-moulding1.vercel.app',
-        'https://bargain-warehouse-v2-git-codex-v2-clea-55aab5-bargain-moulding1.vercel.app'
-    ]);
+    const productionAuthOrigin = 'https://bargain-warehouse-v2.vercel.app';
+    const previewAuthHostname = /^bargain-warehouse-v2-git-[a-z0-9](?:[a-z0-9-]*[a-z0-9])?-bargain-moulding1\.vercel\.app$/;
+
+    function isApprovedAuthOrigin(origin) {
+      try {
+        const candidate = new URL(origin);
+        if (candidate.origin !== origin || candidate.protocol !== 'https:' || candidate.port) return false;
+        if (candidate.origin === productionAuthOrigin) return true;
+        return previewAuthHostname.test(candidate.hostname);
+      } catch (_) {
+        return false;
+      }
+    }
 
     function currentAuthRedirect() {
-      if (!approvedAuthOrigins.has(location.origin)) {
+      if (!isApprovedAuthOrigin(location.origin)) {
         throw new Error('This BM Warehouse deployment is not approved for Google sign in.');
       }
       return location.origin + location.pathname;
