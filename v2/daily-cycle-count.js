@@ -1,4 +1,18 @@
-(() => {
+async function bmSaveChangedRows(changes, saveOne, onSaved, onFailed) {
+  let lastData = null;
+  for (const change of changes) {
+    try {
+      lastData = await saveOne(change);
+      onSaved(change, lastData);
+    } catch (error) {
+      onFailed(change, error);
+      return { lastData, error, failed: change };
+    }
+  }
+  return { lastData, error: null, failed: null };
+}
+if (typeof module !== 'undefined' && module.exports) module.exports = { bmSaveChangedRows };
+if (typeof window !== 'undefined' && typeof document !== 'undefined') (() => {
   const $ = id => document.getElementById(id), TIMEOUT = 12000;
   const state = { locationsLoaded: false, request: null, sequence: 0, saving: false, run: null, drafts: new Map() };
   const setStatus = (text, error = false) => { $('cycleCountStatus').textContent = text; $('cycleCountStatus').classList.toggle('error', error); };
@@ -215,20 +229,45 @@
     setBusy(true);
     setStatus('Saving ' + changes.length + ' count' + (changes.length === 1 ? '' : 's') + '…');
     try {
-      let data;
-      for (const [lineId, draft] of changes) {
-        data = await request('/api/daily-cycle-count', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ action: 'save', locationId: Number($('cycleCountLocation').value), lineId, countedQuantity: Number(draft.value) }),
-          signal: controller.signal
-        });
-        if (sequence !== state.sequence || controller.signal.aborted) return;
-      }
-      render(data);
+      const result = await bmSaveChangedRows(
+        changes.map(([lineId, draft]) => ({ lineId, draft })),
+        async ({ lineId, draft }) => {
+          const data = await request('/api/daily-cycle-count', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ action: 'save', locationId: Number($('cycleCountLocation').value), lineId, countedQuantity: Number(draft.value) }),
+            signal: controller.signal
+          });
+          if (sequence !== state.sequence || controller.signal.aborted) throw new DOMException('Request cancelled', 'AbortError');
+          return data;
+        },
+        ({ lineId, draft }, data) => {
+          const savedLine = data.run?.lines?.find(line => Number(line.id) === Number(lineId));
+          if (savedLine && state.run?.lines) {
+            const index = state.run.lines.findIndex(line => Number(line.id) === Number(lineId));
+            if (index >= 0) state.run.lines[index] = savedLine;
+          }
+          draft.original = draft.value;
+          draft.dirty = false;
+          draft.saved.textContent = 'Saved';
+          draft.saved.classList.remove('unsaved', 'error');
+          progress();
+        },
+        ({ draft }, error) => {
+          draft.saved.textContent = 'Error — retry';
+          draft.saved.classList.add('unsaved', 'error');
+          setView('rows');
+          setStatus(error?.message || 'Could not save this count. Correct it or retry Save counts.', true);
+        }
+      );
+      if (result.error) return;
+      render(result.lastData);
       setStatus(changes.length + ' count' + (changes.length === 1 ? '' : 's') + ' saved.');
     } catch (error) {
-      if (sequence === state.sequence) showError(error);
+      if (sequence === state.sequence && error?.name !== 'AbortError') {
+        setView('rows');
+        setStatus(error?.message || 'Could not save counts. Retry the remaining unsaved rows.', true);
+      }
     } finally {
       if (sequence === state.sequence) {
         state.request = null;
