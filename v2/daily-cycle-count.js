@@ -255,12 +255,7 @@
   $('cycleCountRetry').addEventListener('click', load);
   $('cycleCountSave').addEventListener('click', saveAll);
   $('cycleCountClose').addEventListener('click', close);
-  $('dailyCycleCountDialog').addEventListener('close', () => {
-    cancelActive('dialog_closed');
-    state.saving = false;
-    state.drafts.clear();
-    setBusy(false);
-  });
+  $('dailyCycleCountDialog').addEventListener('close', close);
   $('dailyCycleCountDialog').addEventListener('cancel', event => {
     event.preventDefault();
     close();
