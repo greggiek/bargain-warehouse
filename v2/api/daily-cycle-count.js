@@ -1,12 +1,12 @@
 const { configuration, jsonHeaders } = require('./_lib/auth');
 const { requireUser } = require('./_lib/require-user');
 
-const MANAGERS = new Set(['manager', 'admin', 'developer']);
+const DAILY_COUNT_ROLES = new Set(['warehouse', 'manager', 'admin', 'developer']);
 const clean = (value, max = 500) => String(value || '').trim().slice(0, max);
 const today = () => new Intl.DateTimeFormat('en-CA', { timeZone: 'America/New_York' }).format(new Date());
 
-async function managedLocations(url, key, userId) {
-  const response = await fetch(url + '/rest/v1/user_location_access?user_id=eq.' + encodeURIComponent(userId) + '&can_manage=eq.true&select=location_id,locations(id,name,active)', { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
+async function authorizedLocations(url, key, userId) {
+  const response = await fetch(url + '/rest/v1/user_location_access?user_id=eq.' + encodeURIComponent(userId) + '&select=location_id,locations(id,name,active)', { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
   if (!response.ok) throw Error('location access lookup failed');
   return (await response.json()).filter(row => row.locations?.active).map(row => ({ id: Number(row.location_id), name: row.locations.name })).sort((a, b) => a.name.localeCompare(b.name) || a.id - b.id);
 }
@@ -38,13 +38,13 @@ async function runPayload(url, key, runId) {
 module.exports = async (req, res) => {
   const auth = await requireUser(req);
   if (!auth.ok) return res.status(auth.status).json({ ok: false, error: auth.error });
-  if (!MANAGERS.has(auth.user.role)) return res.status(403).json({ ok: false, error: 'warehouse_manager_access_required' });
+  if (!DAILY_COUNT_ROLES.has(auth.user.role)) return res.status(403).json({ ok: false, error: 'daily_count_access_required' });
   try {
     const { url, serviceRoleKey: key } = configuration();
-    const locations = await managedLocations(url, key, auth.user.id);
-    if (!locations.length) return res.status(403).json({ ok: false, error: 'No managed warehouse location is assigned to you.' });
+    const locations = await authorizedLocations(url, key, auth.user.id);
+    if (!locations.length) return res.status(403).json({ ok: false, error: 'No active warehouse location is assigned to you.' });
     const requested = Number(req.query?.locationId || req.body?.locationId || locations[0].id);
-    if (!locations.some(location => location.id === requested)) return res.status(403).json({ ok: false, error: 'You can count only at your assigned warehouse.' });
+    if (!locations.some(location => location.id === requested)) return res.status(403).json({ ok: false, error: 'You can count only at an assigned active warehouse.' });
     const businessDate = today();
     const existingRunId = await findRun(url, key, requested, businessDate);
     if (req.method === 'GET') return res.json({ ok: true, locations, businessDate, run: existingRunId ? await runPayload(url, key, existingRunId) : null });
