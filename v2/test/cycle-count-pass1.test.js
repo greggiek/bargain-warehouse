@@ -75,10 +75,26 @@ test('Review has sequence-safe loading, action locking and explicit total', () =
   assert.match(reviewUi, /!\$\('cycleCountReviewView'\)\.hidden && sessionStorage\.getItem\('bm-active-view'\) === 'cycle-count-review'/);
 });
 
-test('OAuth redirects only to Production or the exact approved PR Preview origin', () => {
+test('OAuth redirect validation allows only Production and owned HTTPS Preview origins', () => {
   assert.match(page, /'https:\/\/bargain-warehouse-v2\.vercel\.app'/);
-  assert.match(page, /'https:\/\/bargain-warehouse-v2-git-codex-v2-clea-ca4192-bargain-moulding1\.vercel\.app'/);
-  assert.match(page, /approvedAuthOrigins\.has\(location\.origin\)/);
+  const functionSource = page.match(/function isApprovedAuthOrigin\(origin\) \{[\s\S]*?\n    \}/)?.[0];
+  const productionSource = page.match(/const productionAuthOrigin = .*?;/)?.[0];
+  const previewSource = page.match(/const previewAuthHostname = .*?;/)?.[0];
+  assert.ok(functionSource && productionSource && previewSource);
+  const isApprovedAuthOrigin = Function(
+    `${productionSource}\n${previewSource}\n${functionSource}\nreturn isApprovedAuthOrigin;`
+  )();
+
+  assert.equal(isApprovedAuthOrigin('https://bargain-warehouse-v2.vercel.app'), true);
+  assert.equal(isApprovedAuthOrigin('https://bargain-warehouse-v2-git-codex-cycle-c-a78cfa-bargain-moulding1.vercel.app'), true);
+  assert.equal(isApprovedAuthOrigin('http://bargain-warehouse-v2-git-codex-cycle-c-a78cfa-bargain-moulding1.vercel.app'), false);
+  assert.equal(isApprovedAuthOrigin('https://bargain-warehouse-v2-git-codex-cycle-c-a78cfa-bargain-moulding1.vercel.app.evil.example'), false);
+  assert.equal(isApprovedAuthOrigin('https://bargain-warehouse-v2-git-codex-cycle-c-a78cfa-bargain-moulding1.vercel.app@evil.example'), false);
+  assert.equal(isApprovedAuthOrigin('https://unrelated-git-main-bargain-moulding1.vercel.app'), false);
+  assert.equal(isApprovedAuthOrigin('https://bargain-warehouse-v2-git-codex-cycle-c-a78cfa-another-team.vercel.app'), false);
+  assert.equal(isApprovedAuthOrigin('https://bargain-warehouse-v2-git-codex-cycle-c-a78cfa-bargain-moulding1.vercel.app:444'), false);
+  assert.equal(isApprovedAuthOrigin('https://bargain-warehouse-v2-git-codex-cycle-c-a78cfa-bargain-moulding1.vercel.app/path'), false);
+  assert.match(page, /isApprovedAuthOrigin\(location\.origin\)/);
   assert.match(page, /return location\.origin \+ location\.pathname/);
   assert.doesNotMatch(page, /document\.cookie.*domain=/i);
 });
