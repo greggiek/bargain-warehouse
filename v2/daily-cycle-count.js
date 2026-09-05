@@ -9,10 +9,11 @@
   }
   function setBusy(busy) {
     $('dailyCycleCountDialog').setAttribute('aria-busy', String(busy));
-    ['cycleCountLocation', 'cycleCountStart', 'cycleCountRetry', 'cycleCountSave'].forEach(id => {
+    ['cycleCountLocation', 'cycleCountStart', 'cycleCountRetry'].forEach(id => {
       const element = $(id);
       if (element) element.disabled = busy || state.saving;
     });
+    $('cycleCountSave').disabled = busy || state.saving || dirtyCount() === 0;
   }
   function cancelActive(reason = 'cancelled') {
     state.sequence += 1;
