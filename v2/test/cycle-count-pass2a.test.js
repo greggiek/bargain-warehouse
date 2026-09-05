@@ -102,12 +102,12 @@ test('Review actions use an accessible structured dialog instead of prompt', () 
   assert.doesNotMatch(reviewUi, /\bprompt\(/);
 });
 
-test('Pass 2A does not alter Recount, Dismiss or run completion semantics', () => {
-  assert.match(reviewApi, /\['recount', 'dismiss'\]/);
-  assert.match(reviewApi, /review_status: 'dismissed'/);
-  assert.match(reviewApi, /status: 'pending', counted_quantity: null/);
-  assert.match(dailyApi, /status: 'ready_for_review'/);
-  assert.doesNotMatch(dailyApi + reviewApi, /status: 'reviewed'/);
+test('Pass 2B replaces direct line patches with transactional RPCs', () => {
+  assert.match(reviewApi, /request_v2_cycle_count_recount/);
+  assert.match(reviewApi, /dismiss_v2_cycle_count_variance/);
+  assert.match(reviewApi, /approve_v2_cycle_count_variance/);
+  assert.match(dailyApi, /submit_v2_cycle_count_attempt/);
+  assert.doesNotMatch(dailyApi + reviewApi, /method: 'PATCH'/);
 });
 
 test('partial save preserves success, retains failure, and retries only remaining rows', async () => {

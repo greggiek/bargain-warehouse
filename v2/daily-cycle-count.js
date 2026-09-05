@@ -96,11 +96,12 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (() => {
       const saved = document.createElement('span');
       saved.className = 'daily-count-save-state';
       saved.textContent = done ? 'Saved' : 'Not counted';
-      state.drafts.set(Number(line.id), { value: input.value, original: input.value, dirty: false, input, saved });
+      state.drafts.set(Number(line.id), { value: input.value, original: input.value, dirty: false, input, saved, idempotencyKey: null });
       input.addEventListener('input', () => {
         const draft = state.drafts.get(Number(line.id));
         draft.value = input.value;
         draft.dirty = input.value !== draft.original;
+        if (draft.dirty) draft.idempotencyKey = null;
         saved.textContent = draft.dirty ? 'Unsaved' : (done ? 'Saved' : 'Not counted');
         saved.classList.toggle('unsaved', draft.dirty);
         progress();
@@ -235,7 +236,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (() => {
           const data = await request('/api/daily-cycle-count', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ action: 'save', locationId: Number($('cycleCountLocation').value), lineId, countedQuantity: Number(draft.value) }),
+            body: JSON.stringify({ action: 'save', locationId: Number($('cycleCountLocation').value), lineId, countedQuantity: Number(draft.value), idempotencyKey: draft.idempotencyKey ||= 'count-' + lineId + '-' + crypto.randomUUID() }),
             signal: controller.signal
           });
           if (sequence !== state.sequence || controller.signal.aborted) throw new DOMException('Request cancelled', 'AbortError');
@@ -249,6 +250,7 @@ if (typeof window !== 'undefined' && typeof document !== 'undefined') (() => {
           }
           draft.original = draft.value;
           draft.dirty = false;
+          draft.idempotencyKey = null;
           draft.saved.textContent = 'Saved';
           draft.saved.classList.remove('unsaved', 'error');
           progress();

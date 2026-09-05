@@ -26,7 +26,7 @@ async function openRun(url, key, locationId, user, businessDate) {
 }
 
 async function runPayload(url, key, runId) {
-  const response = await fetch(url + '/rest/v1/cycle_count_runs?id=eq.' + runId + '&select=id,location_id,business_date,status,target_count,submitted_at,locations(name),cycle_count_lines(id,product_id,counted_quantity,status,counted_at,note,products(sku,name,barcode))&limit=1', { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
+  const response = await fetch(url + '/rest/v1/cycle_count_runs?id=eq.' + runId + '&select=id,location_id,business_date,status,target_count,submitted_at,reviewed_at,reviewed_by_name,locations(name),cycle_count_lines(id,product_id,expected_quantity,counted_quantity,status,review_status,counted_by_name,counted_at,note,current_attempt_id,products(sku,name,barcode))&limit=1', { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
   const rows = await response.json().catch(() => []);
   if (!response.ok || !rows.length) throw Error(rows.message || 'Cycle count not found.');
   const run = rows[0];
@@ -56,17 +56,19 @@ module.exports = async (req, res) => {
     }
     if (action !== 'save') return res.status(400).json({ ok: false, error: 'Choose start or save.' });
     if (!existingRunId) return res.status(409).json({ ok: false, error: 'Start today’s count before saving.' });
-    const lineId = Number(req.body?.lineId), counted = Number(req.body?.countedQuantity), note = clean(req.body?.note);
+    const lineId = Number(req.body?.lineId), counted = Number(req.body?.countedQuantity), note = clean(req.body?.note), idempotencyKey = clean(req.body?.idempotencyKey, 160);
     if (!Number.isInteger(lineId) || !Number.isFinite(counted) || counted < 0) return res.status(400).json({ ok: false, error: 'Enter a physical count of zero or more.' });
-    const lineResponse = await fetch(url + '/rest/v1/cycle_count_lines?id=eq.' + lineId + '&run_id=eq.' + existingRunId + '&select=id,expected_quantity', { headers: jsonHeaders(key), signal: AbortSignal.timeout(8000) });
-    const lines = await lineResponse.json().catch(() => []);
-    if (!lineResponse.ok || !lines.length) return res.status(404).json({ ok: false, error: 'Count item not found.' });
-    const expected = Number(lines[0].expected_quantity), variance = counted - expected, status = variance === 0 ? 'counted' : 'variance';
-    const update = await fetch(url + '/rest/v1/cycle_count_lines?id=eq.' + lineId, { method: 'PATCH', headers: { ...jsonHeaders(key), 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ counted_quantity: counted, status, counted_by_user_id: auth.user.id, counted_by_name: auth.user.display_name, counted_at: new Date().toISOString(), note: note || null, review_status: 'pending' }), signal: AbortSignal.timeout(8000) });
-    if (!update.ok) throw Error('Could not save physical count.');
-    const all = await runPayload(url, key, existingRunId);
-    if (all.lines.every(line => line.status !== 'pending') && all.status === 'open') await fetch(url + '/rest/v1/cycle_count_runs?id=eq.' + existingRunId, { method: 'PATCH', headers: { ...jsonHeaders(key), 'Content-Type': 'application/json', Prefer: 'return=minimal' }, body: JSON.stringify({ status: 'ready_for_review', submitted_at: new Date().toISOString() }), signal: AbortSignal.timeout(8000) });
-    return res.json({ ok: true, locations, businessDate, run: await runPayload(url, key, existingRunId), result: { countedQuantity: counted, variance } });
+    if (!idempotencyKey) return res.status(400).json({ ok: false, error: 'Save request identity is required.' });
+    const response = await fetch(url + '/rest/v1/rpc/submit_v2_cycle_count_attempt', {
+      method: 'POST',
+      headers: { ...jsonHeaders(key), 'Content-Type': 'application/json' },
+      body: JSON.stringify({ p_line_id: lineId, p_counted_quantity: counted, p_note: note || null, p_actor_user_id: auth.user.id, p_idempotency_key: idempotencyKey }),
+      signal: AbortSignal.timeout(10000)
+    });
+    const result = await response.json().catch(() => ({}));
+    if (!response.ok) throw Error(result.message || result.error || 'Could not save physical count.');
+    if (Number(result.runId) !== existingRunId) throw Error('Saved count belongs to a different run.');
+    return res.json({ ok: true, locations, businessDate, run: await runPayload(url, key, existingRunId), result });
   } catch (error) {
     return res.status(500).json({ ok: false, error: error.message || 'daily_cycle_count_failed' });
   }
