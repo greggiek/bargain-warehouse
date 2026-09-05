@@ -109,3 +109,46 @@ test('Pass 2A does not alter Recount, Dismiss or run completion semantics', () =
   assert.match(dailyApi, /status: 'ready_for_review'/);
   assert.doesNotMatch(dailyApi + reviewApi, /status: 'reviewed'/);
 });
+
+test('partial save preserves success, retains failure, and retries only remaining rows', async () => {
+  const modulePath = path.join(root, 'daily-cycle-count.js');
+  delete require.cache[require.resolve(modulePath)];
+  const { bmSaveChangedRows } = require(modulePath);
+  const rows = [
+    { lineId: 101, value: '7', dirty: true, state: 'Unsaved' },
+    { lineId: 102, value: '9', dirty: true, state: 'Unsaved' }
+  ];
+  const firstCalls = [];
+  const first = await bmSaveChangedRows(
+    rows.filter(row => row.dirty),
+    async row => {
+      firstCalls.push(row.lineId);
+      if (row.lineId === 102) throw Error('simulated row failure');
+      return { run: { lines: [{ id: row.lineId, status: 'counted', counted_quantity: Number(row.value) }] } };
+    },
+    row => { row.dirty = false; row.state = 'Saved'; },
+    row => { row.state = 'Error — retry'; }
+  );
+  assert.deepEqual(firstCalls, [101, 102]);
+  assert.equal(first.error.message, 'simulated row failure');
+  assert.deepEqual(rows.map(row => ({ lineId: row.lineId, value: row.value, dirty: row.dirty, state: row.state })), [
+    { lineId: 101, value: '7', dirty: false, state: 'Saved' },
+    { lineId: 102, value: '9', dirty: true, state: 'Error — retry' }
+  ]);
+  assert.equal(rows.every(row => !row.dirty), false, 'UI must not report completion while a row remains unsaved');
+
+  const retryCalls = [];
+  const retry = await bmSaveChangedRows(
+    rows.filter(row => row.dirty),
+    async row => {
+      retryCalls.push(row.lineId);
+      return { run: { lines: [{ id: row.lineId, status: 'counted', counted_quantity: Number(row.value) }] } };
+    },
+    row => { row.dirty = false; row.state = 'Saved'; },
+    row => { row.state = 'Error — retry'; }
+  );
+  assert.equal(retry.error, null);
+  assert.deepEqual(retryCalls, [102], 'Retry must not write row 101 again');
+  assert.deepEqual(rows.map(row => row.value), ['7', '9'], 'Entered values remain intact');
+  assert.deepEqual(rows.map(row => row.state), ['Saved', 'Saved']);
+});
