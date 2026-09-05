@@ -24,8 +24,37 @@
     catch (error) { if (sequence === state.sequence) fail(error); }
     finally { if (sequence === state.sequence) { state.request = null; setBusy(false); } }
   }
+  function resolutionNote(action) {
+    return new Promise(resolve => {
+      const dialog = $('cycleReviewActionDialog'), form = $('cycleReviewActionForm'), title = $('cycleReviewActionTitle'), help = $('cycleReviewActionHelp'), note = $('cycleReviewActionNote'), submit = $('cycleReviewActionSubmit'), cancel = $('cycleReviewActionCancel');
+      title.textContent = action === 'approve' ? 'Approve inventory adjustment' : 'Request recount';
+      help.textContent = action === 'approve' ? 'Confirm the physical count. A manager note is optional.' : 'Explain why this item should be counted again.';
+      submit.textContent = action === 'approve' ? 'Approve adjustment' : 'Request recount';
+      note.value = '';
+      note.required = false;
+      let settled = false;
+      const finish = value => {
+        if (settled) return;
+        settled = true;
+        form.removeEventListener('submit', onSubmit);
+        cancel.removeEventListener('click', onCancel);
+        dialog.removeEventListener('cancel', onCancel);
+        if (dialog.open) dialog.close();
+        resolve(value);
+      };
+      const onSubmit = event => { event.preventDefault(); finish(note.value.trim()); };
+      const onCancel = event => { event.preventDefault(); finish(null); };
+      form.addEventListener('submit', onSubmit);
+      cancel.addEventListener('click', onCancel);
+      dialog.addEventListener('cancel', onCancel);
+      dialog.showModal();
+      note.focus();
+    });
+  }
   async function act(lineId, action, buttons) {
-    if (state.action) return; const note = action === 'approve' ? prompt('Optional manager note:') ?? null : prompt('Why should this be recounted?') ?? null; if (note === null) return;
+    if (state.action) return;
+    const note = await resolutionNote(action);
+    if (note === null) return;
     state.action = true; buttons.forEach(button => { button.disabled = true; }); $('cycleReviewRefresh').disabled = true;
     try { await request({ method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ lineId, action, note }) }); await load(); setStatus(action === 'approve' ? 'Adjustment approved and recorded in the Inventory Ledger.' : 'Item sent back for a new blind count.'); }
     catch (error) { fail(error); }
@@ -33,7 +62,7 @@
   }
   function initialize() {
     if (state.ready) return; if (!$('cycleCountReviewNav') || !$('cycleReviewRefresh') || !$('cycleCountReviewView') || !$('cycleReviewRows') || !$('cycleReviewStatus') || !$('cycleReviewTotal')) return console.error('[cycle-count-review] required DOM is not ready');
-    state.ready = true; window.BMWarehouseQuickCountReview = load; window.BMWarehouseLeaveCountReview = cancelLoad; $('overviewCycleReview')?.addEventListener('click', () => $('cycleCountReviewNav').click()); $('cycleReviewRefresh').addEventListener('click', load);
+    state.ready = true; window.BMWarehouseQuickCountReview = load; window.BMWarehouseLeaveCountReview = () => { cancelLoad(); if ($('cycleReviewActionDialog')?.open) $('cycleReviewActionDialog').close(); }; $('overviewCycleReview')?.addEventListener('click', () => $('cycleCountReviewNav').click()); $('cycleReviewRefresh').addEventListener('click', load);
     if (!$('cycleCountReviewView').hidden && sessionStorage.getItem('bm-active-view') === 'cycle-count-review') load();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize, { once: true }); else initialize();
