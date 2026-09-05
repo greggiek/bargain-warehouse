@@ -34,6 +34,7 @@
   function initialize() {
     if (state.ready) return; if (!$('cycleCountReviewNav') || !$('cycleReviewRefresh') || !$('cycleCountReviewView') || !$('cycleReviewRows') || !$('cycleReviewStatus') || !$('cycleReviewTotal')) return console.error('[cycle-count-review] required DOM is not ready');
     state.ready = true; window.BMWarehouseQuickCountReview = load; window.BMWarehouseLeaveCountReview = cancelLoad; $('overviewCycleReview')?.addEventListener('click', () => $('cycleCountReviewNav').click()); $('cycleReviewRefresh').addEventListener('click', load);
+    if (!$('cycleCountReviewView').hidden && sessionStorage.getItem('bm-active-view') === 'cycle-count-review') load();
   }
   if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', initialize, { once: true }); else initialize();
 })();

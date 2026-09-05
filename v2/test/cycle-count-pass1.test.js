@@ -72,4 +72,5 @@ test('Review has sequence-safe loading, action locking and explicit total', () =
   assert.match(reviewUi, /state\.action/);
   assert.match(reviewUi, /buttons\.forEach\(button => \{ button\.disabled = true/);
   assert.match(page, /id="cycleReviewTotal"/);
+  assert.match(reviewUi, /!\$\('cycleCountReviewView'\)\.hidden && sessionStorage\.getItem\('bm-active-view'\) === 'cycle-count-review'/);
 });
